@@ -1,26 +1,86 @@
 @import "tailwindcss";
 
+/* Element Plus theme variables */
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
-}
-
-@theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
-}
-
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+  --el-color-primary: #1663c4;
+  --el-color-primary-light-3: #3880d0;
+  --el-color-primary-light-5: #5e9ad4;
+  --el-color-primary-light-7: #a8c8e8;
+  --el-color-primary-light-8: #c4ddf2;
+  --el-color-primary-light-9: #dceefb;
+  --el-color-primary-dark-2: #1054b4;
+  --el-border-radius-base: 4px;
+  --el-font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, 'PingFang SC', 'Microsoft YaHei', sans-serif;
 }
 
 body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  margin: 0;
+  font-family: var(--el-font-family);
+  -webkit-font-smoothing: antialiased;
+  background: #eff2f5;
+  overflow: hidden;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+a {
+  text-decoration: none;
+}
+
+input:focus,
+select:focus,
+textarea:focus {
+  outline: none;
+}
+
+button {
+  font-family: inherit;
+}
+
+table {
+  border-collapse: collapse;
+}
+
+/* Element Plus button primary */
+.el-button--primary,
+button:not([disabled])[style*="background: #1663c4"] {
+  box-shadow: 0 2px 0 rgba(22, 99, 196, 0.1);
+}
+button:not([disabled])[style*="background: #1663c4"]:active {
+  box-shadow: 0 1px 0 rgba(22, 99, 196, 0.2);
+}
+
+/* Pagination */
+.pagination-btn {
+  height: 28px;
+  min-width: 28px;
+  padding: 0 8px;
+  border: 1px solid #d9d9d9;
+  border-radius: 4px;
+  background: #fff;
+  cursor: pointer;
+  font-size: 13px;
+  color: #595959;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.2s;
+}
+
+.pagination-btn:hover:not(:disabled) {
+  border-color: #1663c4;
+  color: #1663c4;
+}
+
+.pagination-btn.active {
+  background: #1663c4;
+  border-color: #1663c4;
+  color: #fff;
+}
+
+.pagination-btn:disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
 }
