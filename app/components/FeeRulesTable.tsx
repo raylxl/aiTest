@@ -2,6 +2,7 @@
 
 import React, { useState, useCallback, useEffect } from 'react';
 import type { FeeRuleItem, FeeRuleFormData, FeeRuleQueryForm } from './types';
+import Tooltip from './Tooltip';
 
 // ============ 常量定义 ============
 const SETTLEMENT_SUBJECTS = ['寄方', '派方', '中转'];
@@ -58,8 +59,8 @@ export default function FeeRulesTable({ currentUserNickname, onMessage }: FeeRul
 
   // 显示消息
   const showMsg = (text: string, type: 'success' | 'error') => {
-    showMsg(text, type);
     setMsg({ text, type });
+    onMessage(text, type);
     setTimeout(() => setMsg(null), 3000);
   };
 
@@ -440,7 +441,7 @@ export default function FeeRulesTable({ currentUserNickname, onMessage }: FeeRul
       )}
 
       {/* 查询表单 */}
-      <div style={{ marginBottom: 16, padding: 16, background: '#fafafa', borderRadius: 4, border: '1px solid #e8e8e8' }}>
+      <div style={{ padding: '12px 16px', background: '#fafafa', borderBottom: '1px solid #f0f0f0' }}>
         <div style={{ display: 'flex', flexWrap: 'wrap', gap: 12 }}>
           {/* 费用名称 */}
           <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
@@ -448,7 +449,7 @@ export default function FeeRulesTable({ currentUserNickname, onMessage }: FeeRul
             <select value={query.feeName} onChange={e => setQuery(q => ({ ...q, feeName: e.target.value }))}
               style={{ height: 32, padding: '0 12px', borderRadius: 4, border: '1px solid #d9d9d9', fontSize: 13, minWidth: 140, outline: 'none' }}>
               <option value="">全部</option>
-              {feeTypes.map(v => <option key={v.id} value={v.feeName}>{v.feeCode} - {v.feeName}</option>)}
+              {feeTypes.map(v => <option key={v.id} value={v.feeName}>{v.feeName} - {v.feeCode}</option>)}
             </select>
           </div>
           {/* 结算主体 */}
@@ -558,69 +559,82 @@ export default function FeeRulesTable({ currentUserNickname, onMessage }: FeeRul
       </div>
 
       {/* 数据表格 */}
-      <div style={{ border: '1px solid #e8e8e8', borderRadius: 4, overflow: 'hidden' }}>
-        <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
+      <div style={{ overflowX: 'auto', flex: 1, minHeight: 0 }}>
+        <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13, minWidth: 1100 }}>
           <thead>
             <tr style={{ background: '#fafafa' }}>
-              <th style={{ padding: '12px 8px', textAlign: 'left', borderBottom: '1px solid #e8e8e8', width: 40 }}>
+              <th style={{ padding: '10px 8px', borderBottom: '1px solid #f0f0f0', textAlign: 'center', width: 48 }}>
                 <input type="checkbox" checked={data.length > 0 && selectedRows.length === data.length}
                   onChange={e => handleSelectAll(e.target.checked)} style={{ cursor: 'pointer' }} />
               </th>
-              <th style={{ padding: '12px 8px', textAlign: 'left', borderBottom: '1px solid #e8e8e8', width: 50 }}>序号</th>
-              <th style={{ padding: '12px 8px', textAlign: 'left', borderBottom: '1px solid #e8e8e8' }}>费用名称</th>
-              <th style={{ padding: '12px 8px', textAlign: 'left', borderBottom: '1px solid #e8e8e8' }}>结算主体</th>
-              <th style={{ padding: '12px 8px', textAlign: 'left', borderBottom: '1px solid #e8e8e8' }}>结算流向</th>
-              <th style={{ padding: '12px 8px', textAlign: 'left', borderBottom: '1px solid #e8e8e8' }}>收入机构</th>
-              <th style={{ padding: '12px 8px', textAlign: 'left', borderBottom: '1px solid #e8e8e8' }}>支出机构</th>
-              <th style={{ padding: '12px 8px', textAlign: 'left', borderBottom: '1px solid #e8e8e8' }}>账单节点</th>
-              <th style={{ padding: '12px 8px', textAlign: 'left', borderBottom: '1px solid #e8e8e8' }}>结算节点</th>
-              <th style={{ padding: '12px 8px', textAlign: 'left', borderBottom: '1px solid #e8e8e8' }}>生效日期</th>
-              <th style={{ padding: '12px 8px', textAlign: 'left', borderBottom: '1px solid #e8e8e8' }}>失效日期</th>
-              <th style={{ padding: '12px 8px', textAlign: 'left', borderBottom: '1px solid #e8e8e8' }}>备注</th>
-              <th style={{ padding: '12px 8px', textAlign: 'left', borderBottom: '1px solid #e8e8e8' }}>审核状态</th>
-              <th style={{ padding: '12px 8px', textAlign: 'left', borderBottom: '1px solid #e8e8e8' }}>创建人</th>
-              <th style={{ padding: '12px 8px', textAlign: 'left', borderBottom: '1px solid #e8e8e8' }}>创建时间</th>
-              <th style={{ padding: '12px 8px', textAlign: 'left', borderBottom: '1px solid #e8e8e8' }}>修改人</th>
-              <th style={{ padding: '12px 8px', textAlign: 'left', borderBottom: '1px solid #e8e8e8' }}>修改时间</th>
-              <th style={{ padding: '12px 8px', textAlign: 'left', borderBottom: '1px solid #e8e8e8' }}>审核人</th>
-              <th style={{ padding: '12px 8px', textAlign: 'left', borderBottom: '1px solid #e8e8e8' }}>审核时间</th>
-              <th style={{ padding: '12px 8px', textAlign: 'left', borderBottom: '1px solid #e8e8e8' }}>操作</th>
+              <th style={{ padding: '10px 8px', borderBottom: '1px solid #f0f0f0', textAlign: 'center', color: '#595959', fontWeight: 600, width: 56, whiteSpace: 'nowrap' }}>序号</th>
+              <th style={{ padding: '10px 8px', borderBottom: '1px solid #f0f0f0', textAlign: 'left', color: '#595959', fontWeight: 600, whiteSpace: 'nowrap' }}>费用名称</th>
+              <th style={{ padding: '10px 8px', borderBottom: '1px solid #f0f0f0', textAlign: 'left', color: '#595959', fontWeight: 600, whiteSpace: 'nowrap' }}>结算主体</th>
+              <th style={{ padding: '10px 8px', borderBottom: '1px solid #f0f0f0', textAlign: 'left', color: '#595959', fontWeight: 600, whiteSpace: 'nowrap' }}>结算流向</th>
+              <th style={{ padding: '10px 8px', borderBottom: '1px solid #f0f0f0', textAlign: 'left', color: '#595959', fontWeight: 600, whiteSpace: 'nowrap' }}>收入机构</th>
+              <th style={{ padding: '10px 8px', borderBottom: '1px solid #f0f0f0', textAlign: 'left', color: '#595959', fontWeight: 600, whiteSpace: 'nowrap' }}>支出机构</th>
+              <th style={{ padding: '10px 8px', borderBottom: '1px solid #f0f0f0', textAlign: 'left', color: '#595959', fontWeight: 600, whiteSpace: 'nowrap' }}>账单节点</th>
+              <th style={{ padding: '10px 8px', borderBottom: '1px solid #f0f0f0', textAlign: 'left', color: '#595959', fontWeight: 600, whiteSpace: 'nowrap' }}>结算节点</th>
+              <th style={{ padding: '10px 8px', borderBottom: '1px solid #f0f0f0', textAlign: 'left', color: '#595959', fontWeight: 600, whiteSpace: 'nowrap' }}>生效日期</th>
+              <th style={{ padding: '10px 8px', borderBottom: '1px solid #f0f0f0', textAlign: 'left', color: '#595959', fontWeight: 600, whiteSpace: 'nowrap' }}>失效日期</th>
+              <th style={{ padding: '10px 8px', borderBottom: '1px solid #f0f0f0', textAlign: 'left', color: '#595959', fontWeight: 600, whiteSpace: 'nowrap' }}>备注</th>
+              <th style={{ padding: '10px 8px', borderBottom: '1px solid #f0f0f0', textAlign: 'center', color: '#595959', fontWeight: 600, whiteSpace: 'nowrap' }}>审核状态</th>
+              <th style={{ padding: '10px 8px', borderBottom: '1px solid #f0f0f0', textAlign: 'center', color: '#595959', fontWeight: 600, whiteSpace: 'nowrap' }}>创建人</th>
+              <th style={{ padding: '10px 8px', borderBottom: '1px solid #f0f0f0', textAlign: 'center', color: '#595959', fontWeight: 600, whiteSpace: 'nowrap' }}>创建时间</th>
+              <th style={{ padding: '10px 8px', borderBottom: '1px solid #f0f0f0', textAlign: 'center', color: '#595959', fontWeight: 600, whiteSpace: 'nowrap' }}>修改人</th>
+              <th style={{ padding: '10px 8px', borderBottom: '1px solid #f0f0f0', textAlign: 'center', color: '#595959', fontWeight: 600, whiteSpace: 'nowrap' }}>修改时间</th>
+              <th style={{ padding: '10px 8px', borderBottom: '1px solid #f0f0f0', textAlign: 'center', color: '#595959', fontWeight: 600, whiteSpace: 'nowrap' }}>审核人</th>
+              <th style={{ padding: '10px 8px', borderBottom: '1px solid #f0f0f0', textAlign: 'center', color: '#595959', fontWeight: 600, whiteSpace: 'nowrap' }}>审核时间</th>
+              <th style={{ padding: '10px 8px', borderBottom: '1px solid #f0f0f0', textAlign: 'center', color: '#595959', fontWeight: 600, whiteSpace: 'nowrap' }}>操作</th>
             </tr>
           </thead>
           <tbody>
             {loading ? (
-              <tr><td colSpan={16} style={{ padding: 40, textAlign: 'center', color: '#8c8c8c' }}>加载中...</td></tr>
+              <tr><td colSpan={19} style={{ padding: 48, textAlign: 'center', color: '#bfbfbf', fontSize: 14 }}>加载中...</td></tr>
             ) : data.length === 0 ? (
-              <tr><td colSpan={16} style={{ padding: 40, textAlign: 'center', color: '#8c8c8c' }}>暂无数据</td></tr>
+              <tr><td colSpan={19} style={{ padding: 48, textAlign: 'center', color: '#bfbfbf', fontSize: 14 }}>暂无数据</td></tr>
             ) : data.map((row, index) => (
-              <tr key={row.id} style={{ background: selectedRows.some(r => r.id === row.id) ? '#e6f4ff' : '#fff' }}>
-                <td style={{ padding: '12px 8px', borderBottom: '1px solid #e8e8e8' }}>
+              <tr key={row.id}
+                style={{ background: index % 2 === 1 ? '#fafafa' : '#fff', cursor: 'pointer' }}
+                onMouseEnter={e => (e.currentTarget.style.background = '#f5f5f5')}
+                onMouseLeave={e => (e.currentTarget.style.background = index % 2 === 1 ? '#fafafa' : '#fff')}>
+                <td style={{ padding: '10px 8px', borderBottom: '1px solid #f0f0f0', textAlign: 'center' }}>
                   <input type="checkbox" checked={selectedRows.some(r => r.id === row.id)}
                     onChange={e => handleSelectRow(row, e.target.checked)} style={{ cursor: 'pointer' }} />
                 </td>
-                <td style={{ padding: '12px 8px', borderBottom: '1px solid #e8e8e8' }}>{index + 1 + (page - 1) * pageSize}</td>
-                <td style={{ padding: '12px 8px', borderBottom: '1px solid #e8e8e8' }}>
+                <td style={{ padding: '10px 8px', borderBottom: '1px solid #f0f0f0', textAlign: 'center', color: '#8c8c8c', maxWidth: 56, overflow: 'hidden' }}><Tooltip content={String(index + 1 + (page - 1) * pageSize)}>{index + 1 + (page - 1) * pageSize}</Tooltip></td>
+                <td style={{ padding: '10px 8px', borderBottom: '1px solid #f0f0f0', textAlign: 'left', fontWeight: 500, color: '#262626', maxWidth: 200, overflow: 'hidden' }}><Tooltip content={row.fee_code ? `${row.fee_code} - ${row.fee_name}` : row.fee_name}>
                 {row.fee_code ? `${row.fee_code} - ${row.fee_name}` : row.fee_name}
-              </td>
-                <td style={{ padding: '12px 8px', borderBottom: '1px solid #e8e8e8' }}>{row.settlement_subject}</td>
-                <td style={{ padding: '12px 8px', borderBottom: '1px solid #e8e8e8' }}>{row.settlement_flow}</td>
-                <td style={{ padding: '12px 8px', borderBottom: '1px solid #e8e8e8' }}>{row.income_org}</td>
-                <td style={{ padding: '12px 8px', borderBottom: '1px solid #e8e8e8' }}>{row.expense_org}</td>
-                <td style={{ padding: '12px 8px', borderBottom: '1px solid #e8e8e8' }}>{row.bill_node}</td>
-                <td style={{ padding: '12px 8px', borderBottom: '1px solid #e8e8e8' }}>{row.settlement_node}</td>
-                <td style={{ padding: '12px 8px', borderBottom: '1px solid #e8e8e8' }}>{row.start_date ? row.start_date.split('T')[0] : '-'}</td>
-                <td style={{ padding: '12px 8px', borderBottom: '1px solid #e8e8e8' }}>{row.end_date ? row.end_date.split('T')[0] : '-'}</td>
-                <td style={{ padding: '12px 8px', borderBottom: '1px solid #e8e8e8', maxWidth: 120, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{row.remark || '-'}</td>
-                <td style={{ padding: '12px 8px', borderBottom: '1px solid #e8e8e8' }}>{renderStatus(row.status)}</td>
-                <td style={{ padding: '12px 8px', borderBottom: '1px solid #e8e8e8' }}>{row.creator}</td>
-                <td style={{ padding: '12px 8px', borderBottom: '1px solid #e8e8e8' }}>{formatDateTime(row.create_time)}</td>
-                <td style={{ padding: '12px 8px', borderBottom: '1px solid #e8e8e8' }}>{row.updater && row.updater !== row.creator ? row.updater : '-'}</td>
-                <td style={{ padding: '12px 8px', borderBottom: '1px solid #e8e8e8' }}>{row.updater && row.updater !== row.creator && row.update_time ? formatDateTime(row.update_time) : '-'}</td>
-                <td style={{ padding: '12px 8px', borderBottom: '1px solid #e8e8e8' }}>{row.audit_person || '-'}</td>
-                <td style={{ padding: '12px 8px', borderBottom: '1px solid #e8e8e8' }}>{row.audit_time ? formatDateTime(row.audit_time) : '-'}</td>
-                <td style={{ padding: '12px 8px', borderBottom: '1px solid #e8e8e8' }}>
-                  <button onClick={() => handleEdit(row)} style={{ padding: '4px 8px', border: '1px solid #1663c4', borderRadius: 4, background: '#fff', color: '#1663c4', fontSize: 12, cursor: 'pointer', marginRight: 4 }}>编辑</button>
-                  <button onClick={() => handleDelete(row)} style={{ padding: '4px 8px', border: '1px solid #ff4d4f', borderRadius: 4, background: '#fff', color: '#ff4d4f', fontSize: 12, cursor: 'pointer' }}>删除</button>
+              </Tooltip></td>
+                <td style={{ padding: '10px 8px', borderBottom: '1px solid #f0f0f0', textAlign: 'left', maxWidth: 150, overflow: 'hidden' }}><Tooltip content={row.settlement_subject}>{row.settlement_subject}</Tooltip></td>
+                <td style={{ padding: '10px 8px', borderBottom: '1px solid #f0f0f0', textAlign: 'left', maxWidth: 100, overflow: 'hidden' }}><Tooltip content={row.settlement_flow}>{row.settlement_flow}</Tooltip></td>
+                <td style={{ padding: '10px 8px', borderBottom: '1px solid #f0f0f0', textAlign: 'left', maxWidth: 120, overflow: 'hidden' }}><Tooltip content={row.income_org}>{row.income_org}</Tooltip></td>
+                <td style={{ padding: '10px 8px', borderBottom: '1px solid #f0f0f0', textAlign: 'left', maxWidth: 120, overflow: 'hidden' }}><Tooltip content={row.expense_org}>{row.expense_org}</Tooltip></td>
+                <td style={{ padding: '10px 8px', borderBottom: '1px solid #f0f0f0', textAlign: 'left', maxWidth: 100, overflow: 'hidden' }}><Tooltip content={row.bill_node}>{row.bill_node}</Tooltip></td>
+                <td style={{ padding: '10px 8px', borderBottom: '1px solid #f0f0f0', textAlign: 'left', maxWidth: 100, overflow: 'hidden' }}><Tooltip content={row.settlement_node}>{row.settlement_node}</Tooltip></td>
+                <td style={{ padding: '10px 8px', borderBottom: '1px solid #f0f0f0', textAlign: 'left', maxWidth: 100, overflow: 'hidden' }}><Tooltip content={row.start_date ? row.start_date.split('T')[0] : '-'}>{row.start_date ? row.start_date.split('T')[0] : '-'}</Tooltip></td>
+                <td style={{ padding: '10px 8px', borderBottom: '1px solid #f0f0f0', textAlign: 'left', maxWidth: 100, overflow: 'hidden' }}><Tooltip content={row.end_date ? row.end_date.split('T')[0] : '-'}>{row.end_date ? row.end_date.split('T')[0] : '-'}</Tooltip></td>
+                <td style={{ padding: '10px 8px', borderBottom: '1px solid #f0f0f0', textAlign: 'left', color: row.remark ? '#595959' : '#c0c0c0', maxWidth: 200, overflow: 'hidden' }}><Tooltip content={row.remark || ''}>{row.remark || '-'}</Tooltip></td>
+                <td style={{ padding: '10px 8px', borderBottom: '1px solid #f0f0f0', textAlign: 'center', maxWidth: 80, overflow: 'hidden' }}><Tooltip content={row.status === 'approved' ? '已审核' : '未审核'}>{renderStatus(row.status)}</Tooltip></td>
+                <td style={{ padding: '10px 8px', borderBottom: '1px solid #f0f0f0', textAlign: 'center', color: '#595959', maxWidth: 90, overflow: 'hidden' }}><Tooltip content={row.creator}>{row.creator}</Tooltip></td>
+                <td style={{ padding: '10px 8px', borderBottom: '1px solid #f0f0f0', textAlign: 'center', color: '#8c8c8c', fontSize: 12, maxWidth: 150, overflow: 'hidden' }}><Tooltip content={formatDateTime(row.create_time)}>{formatDateTime(row.create_time)}</Tooltip></td>
+                <td style={{ padding: '10px 8px', borderBottom: '1px solid #f0f0f0', textAlign: 'center', color: row.updater && row.updater !== row.creator ? '#595959' : '#c0c0c0', maxWidth: 90, overflow: 'hidden' }}><Tooltip content={row.updater && row.updater !== row.creator ? row.updater : ''}>{row.updater && row.updater !== row.creator ? row.updater : '-'}</Tooltip></td>
+                <td style={{ padding: '10px 8px', borderBottom: '1px solid #f0f0f0', textAlign: 'center', color: '#8c8c8c', fontSize: 12, maxWidth: 150, overflow: 'hidden' }}><Tooltip content={row.updater && row.updater !== row.creator && row.update_time ? formatDateTime(row.update_time) : ''}>{row.updater && row.updater !== row.creator && row.update_time ? formatDateTime(row.update_time) : '-'}</Tooltip></td>
+                <td style={{ padding: '10px 8px', borderBottom: '1px solid #f0f0f0', textAlign: 'center', color: '#595959', maxWidth: 90, overflow: 'hidden' }}><Tooltip content={row.audit_person || ''}>{row.audit_person || '-'}</Tooltip></td>
+                <td style={{ padding: '10px 8px', borderBottom: '1px solid #f0f0f0', textAlign: 'center', color: '#8c8c8c', fontSize: 12, maxWidth: 150, overflow: 'hidden' }}><Tooltip content={row.audit_time ? formatDateTime(row.audit_time) : ''}>{row.audit_time ? formatDateTime(row.audit_time) : '-'}</Tooltip></td>
+                <td style={{ padding: '10px 8px', borderBottom: '1px solid #f0f0f0', textAlign: 'center', whiteSpace: 'nowrap' }}>
+                  <div style={{ display: 'flex', gap: 4, justifyContent: 'center' }}>
+                    <button onClick={() => handleEdit(row)} style={{ border: 'none', background: 'none', color: '#1663c4', cursor: 'pointer', fontSize: 13, display: 'flex', alignItems: 'center', gap: 2, fontFamily: 'inherit', padding: '2px 4px', transition: 'background 0.15s', borderRadius: 3 }}
+                      onMouseEnter={e => (e.currentTarget.style.background = '#e6f4ff')}
+                      onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}>
+                      <Icon name="edit" size={12} />编辑
+                    </button>
+                    <button onClick={() => handleDelete(row)} style={{ border: 'none', background: 'none', color: '#ff4d4f', cursor: 'pointer', fontSize: 13, display: 'flex', alignItems: 'center', gap: 2, fontFamily: 'inherit', padding: '2px 4px', transition: 'background 0.15s', borderRadius: 3 }}
+                      onMouseEnter={e => (e.currentTarget.style.background = '#fff1f0')}
+                      onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}>
+                      <Icon name="delete" size={12} />删除
+                    </button>
+                  </div>
                 </td>
               </tr>
             ))}
@@ -629,23 +643,40 @@ export default function FeeRulesTable({ currentUserNickname, onMessage }: FeeRul
       </div>
 
       {/* 分页 */}
-      <div style={{ marginTop: 16, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-        <div style={{ fontSize: 13, color: '#595959' }}>
-          共 {total} 条记录，每页
+      <div style={{ padding: '10px 16px', borderTop: '1px solid #f0f0f0', display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: '#fafafa', flexShrink: 0, flexWrap: 'wrap', gap: 8 }}>
+        <span style={{ fontSize: 13, color: '#8c8c8c' }}>共 <strong style={{ color: '#262626' }}>{total}</strong> 条{selectedRows.length > 0 && <>, 已选中 <strong style={{ color: '#1663c4' }}>{selectedRows.length}</strong> 项</>}</span>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
           <select value={pageSize} onChange={e => { setPageSize(Number(e.target.value)); setPage(1); }}
-            style={{ margin: '0 8px', height: 28, padding: '0 8px', borderRadius: 4, border: '1px solid #d9d9d9', fontSize: 13 }}>
-            <option value={10}>10</option>
-            <option value={20}>20</option>
-            <option value={50}>50</option>
+            style={{ height: 26, padding: '0 20px 0 8px', border: '1px solid #d9d9d9', borderRadius: 4, fontSize: 13, outline: 'none', background: '#fff', fontFamily: 'inherit', cursor: 'pointer', appearance: 'none', backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 1024 1024'%3E%3Cpath fill='%23bfbfbf' d='M192 320l320 320 320-320z'/%3E%3C/svg%3E")`, backgroundRepeat: 'no-repeat', backgroundPosition: 'right 6px center', backgroundSize: 8, boxSizing: 'border-box' }}>
+            <option value={10}>10 条/页</option>
+            <option value={20}>20 条/页</option>
+            <option value={50}>50 条/页</option>
+            <option value={100}>100 条/页</option>
           </select>
-          条
-        </div>
-        <div style={{ display: 'flex', gap: 4 }}>
-          <button onClick={() => setPage(p => Math.max(1, p - 1))} disabled={page === 1}
-            style={{ padding: '4px 12px', borderRadius: 4, border: '1px solid #d9d9d9', background: '#fff', fontSize: 13, cursor: page === 1 ? 'not-allowed' : 'pointer', color: page === 1 ? '#d9d9d9' : '#595959' }}>上一页</button>
-          <span style={{ padding: '4px 12px', fontSize: 13 }}>第 {page} / {Math.ceil(total / pageSize) || 1} 页</span>
-          <button onClick={() => setPage(p => Math.min(Math.ceil(total / pageSize) || 1, p + 1))} disabled={page >= Math.ceil(total / pageSize) || total === 0}
-            style={{ padding: '4px 12px', borderRadius: 4, border: '1px solid #d9d9d9', background: '#fff', fontSize: 13, cursor: page >= Math.ceil(total / pageSize) || total === 0 ? 'not-allowed' : 'pointer', color: page >= Math.ceil(total / pageSize) || total === 0 ? '#d9d9d9' : '#595959' }}>下一页</button>
+          <button onClick={() => setPage(p => Math.max(1, p - 1))} disabled={page <= 1} style={{ height: 26, width: 26, border: '1px solid #d9d9d9', borderRadius: 4, background: '#fff', cursor: page <= 1 ? 'not-allowed' : 'pointer', color: page <= 1 ? '#d9d9d9' : '#595959', display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: 'inherit', transition: 'all 0.15s', transform: 'rotate(180deg)' }}
+            onMouseEnter={e => { if (page > 1) { (e.currentTarget as HTMLButtonElement).style.borderColor = '#1663c4'; (e.currentTarget as HTMLButtonElement).style.color = '#1663c4'; } }}
+            onMouseLeave={e => { if (page > 1) { (e.currentTarget as HTMLButtonElement).style.borderColor = '#d9d9d9'; (e.currentTarget as HTMLButtonElement).style.color = '#595959'; } }}>
+            <Icon name="right" size={10} />
+          </button>
+          {Array.from({ length: Math.min(5, Math.max(1, Math.ceil(total / pageSize))) }, (_, i) => {
+            const totalPages = Math.max(1, Math.ceil(total / pageSize));
+            const start = Math.max(1, Math.min(totalPages - 4, page - 2));
+            const p = start + i;
+            return p <= totalPages ? (
+              <button key={p} onClick={() => setPage(p)} style={{
+                height: 26, width: 26, border: `1px solid ${p === page ? '#1663c4' : '#d9d9d9'}`,
+                borderRadius: 4, background: p === page ? '#1663c4' : '#fff',
+                color: p === page ? '#fff' : '#595959', fontSize: 12,
+                cursor: 'pointer', fontFamily: 'inherit', transition: 'all 0.15s'
+              }}>{p}</button>
+            ) : null;
+          })}
+          <button onClick={() => setPage(p => Math.min(Math.max(1, Math.ceil(total / pageSize)), p + 1))} disabled={page >= Math.max(1, Math.ceil(total / pageSize))} style={{ height: 26, width: 26, border: '1px solid #d9d9d9', borderRadius: 4, background: '#fff', cursor: page >= Math.max(1, Math.ceil(total / pageSize)) ? 'not-allowed' : 'pointer', color: page >= Math.max(1, Math.ceil(total / pageSize)) ? '#d9d9d9' : '#595959', display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: 'inherit', transition: 'all 0.15s' }}
+            onMouseEnter={e => { if (page < Math.max(1, Math.ceil(total / pageSize))) { (e.currentTarget as HTMLButtonElement).style.borderColor = '#1663c4'; (e.currentTarget as HTMLButtonElement).style.color = '#1663c4'; } }}
+            onMouseLeave={e => { if (page < Math.max(1, Math.ceil(total / pageSize))) { (e.currentTarget as HTMLButtonElement).style.borderColor = '#d9d9d9'; (e.currentTarget as HTMLButtonElement).style.color = '#595959'; } }}>
+            <Icon name="right" size={10} />
+          </button>
+          <span style={{ fontSize: 12, color: '#8c8c8c', marginLeft: 4 }}>跳至<input type="text" onKeyDown={e => { if (e.key === 'Enter') { const v = parseInt((e.target as HTMLInputElement).value); if (v >= 1 && v <= Math.max(1, Math.ceil(total / pageSize))) setPage(v); (e.target as HTMLInputElement).value = ''; } }} onBlur={e => { const v = parseInt((e.target as HTMLInputElement).value); if (v >= 1 && v <= Math.max(1, Math.ceil(total / pageSize))) setPage(v); (e.target as HTMLInputElement).value = ''; }} style={{ width: 38, height: 26, padding: '0 4px', border: '1px solid #d9d9d9', borderRadius: 4, fontSize: 12, textAlign: 'center', outline: 'none', marginLeft: 4 }} />页</span>
         </div>
       </div>
 
@@ -669,7 +700,7 @@ export default function FeeRulesTable({ currentUserNickname, onMessage }: FeeRul
                   <select value={form.feeName} onChange={e => setForm(f => ({ ...f, feeName: e.target.value }))}
                     style={{ width: '100%', height: 32, padding: '0 12px', borderRadius: 4, border: `1px solid ${errors.feeName ? '#ff4d4f' : '#d9d9d9'}`, fontSize: 13, outline: 'none' }}>
                     <option value="">请选择</option>
-                    {feeTypes.map(v => <option key={v.id} value={v.feeName}>{v.feeCode} - {v.feeName}</option>)}
+                    {feeTypes.map(v => <option key={v.id} value={v.feeName}>{v.feeName} - {v.feeCode}</option>)}
                   </select>
                   {errors.feeName && <div style={{ fontSize: 12, color: '#ff4d4f', marginTop: 4 }}>{errors.feeName}</div>}
                 </div>

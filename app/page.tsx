@@ -476,7 +476,7 @@ export default function FeeManager() {
       </header>
 
       {/* 主体 */}
-      <div style={{ display: 'flex', flex: 1, overflow: 'hidden' }}>
+      <div style={{ display: 'flex', flex: 1, overflowX: 'auto', overflowY: 'hidden' }}>
         {/* 侧边栏 */}
         <aside style={{ background: '#fff', borderRight: '1px solid #f0f0f0', width: collapsed ? 60 : 200, overflowY: 'auto', overflowX: 'hidden', flexShrink: 0, transition: 'width 0.2s ease', display: 'flex', flexDirection: 'column' }}>
           {collapsed ? (
@@ -511,7 +511,7 @@ export default function FeeManager() {
           </div>
 
           {/* 内容卡片 */}
-          <div style={{ background: '#fff', borderRadius: 4, flex: 1, border: '1px solid #e8e8e8', overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
+          <div style={{ background: '#fff', borderRadius: 4, flex: 1, border: '1px solid #e8e8e8', overflow: 'auto', display: 'flex', flexDirection: 'column' }}>
             {activeMenu === 'fee-type-cc' ? (
               <FeeTable
                 data={data} setData={setData} selectedRows={selectedRows} setSelectedRows={setSelectedRows}

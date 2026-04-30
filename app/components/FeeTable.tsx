@@ -1,7 +1,8 @@
 'use client';
 
-import React, { useMemo } from 'react';
+import React, { useMemo, useState } from 'react';
 import type { FeeItem, QueryForm } from './types';
+import Tooltip from './Tooltip';
 
 interface FeeTableProps {
   data: FeeItem[];
@@ -100,6 +101,10 @@ export default function FeeTable({
     setErrors({}); setDialogVisible(true);
   };
 
+  const [detailVisible, setDetailVisible] = useState(false);
+  const [detailRow, setDetailRow] = useState<FeeItem | null>(null);
+  const openDetail = (row: FeeItem) => { setDetailRow(row); setDetailVisible(true); };
+
   const togglePriceType = (pt: string) => {
     setForm(f => ({ ...f, priceTypes: f.priceTypes.includes(pt) ? f.priceTypes.filter(p => p !== pt) : [...f.priceTypes, pt] }));
   };
@@ -160,7 +165,7 @@ export default function FeeTable({
   };
 
   return (
-    <>
+    <div style={{ padding: 16, flex: 1, overflow: 'auto' }}>
       {/* 标题栏 */}
       <div style={{ padding: '14px 16px 12px', borderBottom: '1px solid #f0f0f0', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexShrink: 0 }}>
         <div>
@@ -276,17 +281,17 @@ export default function FeeTable({
             <thead>
               <tr style={{ background: '#fafafa' }}>
                 <th style={{ padding: '10px 8px', borderBottom: '1px solid #f0f0f0', textAlign: 'center', width: 48 }}><input type="checkbox" checked={paginatedData.length > 0 && selectedRows.length === paginatedData.length} onChange={handleSelectAll} style={{ width: 15, height: 15, accentColor: '#1663c4', cursor: 'pointer' }} /></th>
-                <th style={{ padding: '10px 8px', borderBottom: '1px solid #f0f0f0', textAlign: 'center', color: '#595959', fontWeight: 600, width: 56 }}>序号</th>
-                <th style={{ padding: '10px 8px', borderBottom: '1px solid #f0f0f0', textAlign: 'left', color: '#595959', fontWeight: 600, width: 110 }}>费用编号</th>
-                <th style={{ padding: '10px 8px', borderBottom: '1px solid #f0f0f0', textAlign: 'left', color: '#595959', fontWeight: 600, width: 140 }}>费用名称</th>
-                <th style={{ padding: '10px 8px', borderBottom: '1px solid #f0f0f0', textAlign: 'center', color: '#595959', fontWeight: 600, width: 100 }}>所属业务域</th>
-                <th style={{ padding: '10px 8px', borderBottom: '1px solid #f0f0f0', textAlign: 'left', color: '#595959', fontWeight: 600, width: 240 }}>所属报价</th>
-                <th style={{ padding: '10px 8px', borderBottom: '1px solid #f0f0f0', textAlign: 'left', color: '#595959', fontWeight: 600 }}>备注</th>
-                <th style={{ padding: '10px 8px', borderBottom: '1px solid #f0f0f0', textAlign: 'center', color: '#595959', fontWeight: 600, width: 90 }}>创建人</th>
-                <th style={{ padding: '10px 8px', borderBottom: '1px solid #f0f0f0', textAlign: 'center', color: '#595959', fontWeight: 600, width: 150 }}>创建时间</th>
-                <th style={{ padding: '10px 8px', borderBottom: '1px solid #f0f0f0', textAlign: 'center', color: '#595959', fontWeight: 600, width: 90 }}>修改人</th>
-                <th style={{ padding: '10px 8px', borderBottom: '1px solid #f0f0f0', textAlign: 'center', color: '#595959', fontWeight: 600, width: 150 }}>修改时间</th>
-                <th style={{ padding: '10px 8px', borderBottom: '1px solid #f0f0f0', textAlign: 'center', color: '#595959', fontWeight: 600, width: 120 }}>操作</th>
+                <th style={{ padding: '10px 8px', borderBottom: '1px solid #f0f0f0', textAlign: 'center', color: '#595959', fontWeight: 600, width: 56, whiteSpace: 'nowrap' }}>序号</th>
+                <th style={{ padding: '10px 8px', borderBottom: '1px solid #f0f0f0', textAlign: 'left', color: '#595959', fontWeight: 600, width: 110, whiteSpace: 'nowrap' }}>费用编号</th>
+                <th style={{ padding: '10px 8px', borderBottom: '1px solid #f0f0f0', textAlign: 'left', color: '#595959', fontWeight: 600, width: 140, whiteSpace: 'nowrap' }}>费用名称</th>
+                <th style={{ padding: '10px 8px', borderBottom: '1px solid #f0f0f0', textAlign: 'center', color: '#595959', fontWeight: 600, width: 100, whiteSpace: 'nowrap' }}>所属业务域</th>
+                <th style={{ padding: '10px 8px', borderBottom: '1px solid #f0f0f0', textAlign: 'left', color: '#595959', fontWeight: 600, width: 240, whiteSpace: 'nowrap' }}>所属报价</th>
+                <th style={{ padding: '10px 8px', borderBottom: '1px solid #f0f0f0', textAlign: 'left', color: '#595959', fontWeight: 600, whiteSpace: 'nowrap' }}>备注</th>
+                <th style={{ padding: '10px 8px', borderBottom: '1px solid #f0f0f0', textAlign: 'center', color: '#595959', fontWeight: 600, width: 90, whiteSpace: 'nowrap' }}>创建人</th>
+                <th style={{ padding: '10px 8px', borderBottom: '1px solid #f0f0f0', textAlign: 'center', color: '#595959', fontWeight: 600, width: 150, whiteSpace: 'nowrap' }}>创建时间</th>
+                <th style={{ padding: '10px 8px', borderBottom: '1px solid #f0f0f0', textAlign: 'center', color: '#595959', fontWeight: 600, width: 90, whiteSpace: 'nowrap' }}>修改人</th>
+                <th style={{ padding: '10px 8px', borderBottom: '1px solid #f0f0f0', textAlign: 'center', color: '#595959', fontWeight: 600, width: 150, whiteSpace: 'nowrap' }}>修改时间</th>
+                <th style={{ padding: '10px 8px', borderBottom: '1px solid #f0f0f0', textAlign: 'center', color: '#595959', fontWeight: 600, width: 120, whiteSpace: 'nowrap' }}>操作</th>
               </tr>
             </thead>
             <tbody>
@@ -296,25 +301,26 @@ export default function FeeTable({
                 paginatedData.map((row, idx) => (
                   <tr key={row.id} style={{ background: idx % 2 === 1 ? '#fafafa' : '#fff', cursor: 'pointer', transition: 'background 0.1s' }}
                     onMouseEnter={e => (e.currentTarget.style.background = '#f5f5f5')}
-                    onMouseLeave={e => (e.currentTarget.style.background = idx % 2 === 1 ? '#fafafa' : '#fff')}>
+                    onMouseLeave={e => (e.currentTarget.style.background = idx % 2 === 1 ? '#fafafa' : '#fff')}
+                    onDoubleClick={() => openDetail(row)}>
                     <td style={{ padding: '10px 8px', borderBottom: '1px solid #f0f0f0', textAlign: 'center' }}><input type="checkbox" checked={selectedRows.some(r => r.id === row.id)} onChange={e => handleSelectChange(e, row)} style={{ width: 15, height: 15, accentColor: '#1663c4', cursor: 'pointer' }} /></td>
                     <td style={{ padding: '10px 8px', borderBottom: '1px solid #f0f0f0', textAlign: 'center', color: '#8c8c8c' }}>{(page - 1) * pageSize + idx + 1}</td>
-                    <td style={{ padding: '10px 8px', borderBottom: '1px solid #f0f0f0', textAlign: 'left' }}><code style={{ color: '#1663c4', fontFamily: 'monospace', fontSize: 12 }}>{row.feeCode}</code></td>
-                    <td style={{ padding: '10px 8px', borderBottom: '1px solid #f0f0f0', textAlign: 'left', fontWeight: 500, color: '#262626' }}>{row.feeName}</td>
-                    <td style={{ padding: '10px 8px', borderBottom: '1px solid #f0f0f0', textAlign: 'center' }}><span style={{ display: 'inline-block', padding: '1px 8px', borderRadius: 2, fontSize: 12, color: domainColor[row.businessDomain] || '#1663c4', background: (domainColor[row.businessDomain] || '#1663c4') + '1a' }}>{row.businessDomain}</span></td>
-                    <td style={{ padding: '10px 8px', borderBottom: '1px solid #f0f0f0', textAlign: 'left' }}>
+                    <td style={{ padding: '10px 8px', borderBottom: '1px solid #f0f0f0', textAlign: 'left', maxWidth: 110, overflow: 'hidden' }}><Tooltip content={row.feeCode}><code style={{ color: '#1663c4', fontFamily: 'monospace', fontSize: 12 }}>{row.feeCode}</code></Tooltip></td>
+                    <td style={{ padding: '10px 8px', borderBottom: '1px solid #f0f0f0', textAlign: 'left', fontWeight: 500, color: '#262626', maxWidth: 140, overflow: 'hidden' }}><Tooltip content={row.feeName}>{row.feeName}</Tooltip></td>
+                    <td style={{ padding: '10px 8px', borderBottom: '1px solid #f0f0f0', textAlign: 'center', maxWidth: 100, overflow: 'hidden' }}><Tooltip content={row.businessDomain}><span style={{ display: 'inline-block', padding: '1px 8px', borderRadius: 2, fontSize: 12, color: domainColor[row.businessDomain] || '#1663c4', background: (domainColor[row.businessDomain] || '#1663c4') + '1a' }}>{row.businessDomain}</span></Tooltip></td>
+                    <td style={{ padding: '10px 8px', borderBottom: '1px solid #f0f0f0', textAlign: 'left', maxWidth: 240, overflow: 'hidden' }}>
                       {row.priceTypes.length === 0 ? <span style={{ color: '#c0c0c0' }}>-</span> : (
-                        <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
-                          {row.priceTypes.map(pt => <span key={pt} style={{ display: 'inline-block', padding: '1px 6px', borderRadius: 2, fontSize: 11, background: '#f5f5f5', color: '#595959' }}>{pt}</span>)}
-                        </div>
+                        <Tooltip content={row.priceTypes.join('、')} maxWidth={280}>
+                          {row.priceTypes.map(pt => <span key={pt} style={{ display: 'inline-block', padding: '1px 6px', borderRadius: 2, fontSize: 11, background: '#f5f5f5', color: '#595959', marginRight: 4 }}>{pt}</span>)}
+                        </Tooltip>
                       )}
                     </td>
-                    <td style={{ padding: '10px 8px', borderBottom: '1px solid #f0f0f0', textAlign: 'left', color: row.remark ? '#595959' : '#c0c0c0', maxWidth: 140, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={row.remark}>{row.remark || '-'}</td>
-                    <td style={{ padding: '10px 8px', borderBottom: '1px solid #f0f0f0', textAlign: 'center', color: '#595959' }}>{row.creator}</td>
-                    <td style={{ padding: '10px 8px', borderBottom: '1px solid #f0f0f0', textAlign: 'center', color: '#8c8c8c', fontSize: 12 }}>{row.createTime}</td>
-                    <td style={{ padding: '10px 8px', borderBottom: '1px solid #f0f0f0', textAlign: 'center', color: row.updater ? '#595959' : '#c0c0c0' }}>{row.updater || '-'}</td>
-                    <td style={{ padding: '10px 8px', borderBottom: '1px solid #f0f0f0', textAlign: 'center', color: '#8c8c8c', fontSize: 12 }}>{row.updateTime || '-'}</td>
-                    <td style={{ padding: '10px 8px', borderBottom: '1px solid #f0f0f0', textAlign: 'center' }}>
+                    <td style={{ padding: '10px 8px', borderBottom: '1px solid #f0f0f0', textAlign: 'left', color: row.remark ? '#595959' : '#c0c0c0', maxWidth: 200, overflow: 'hidden' }}><Tooltip content={row.remark || ''}>{row.remark || '-'}</Tooltip></td>
+                    <td style={{ padding: '10px 8px', borderBottom: '1px solid #f0f0f0', textAlign: 'center', color: '#595959', maxWidth: 90, overflow: 'hidden' }}><Tooltip content={row.creator}>{row.creator}</Tooltip></td>
+                    <td style={{ padding: '10px 8px', borderBottom: '1px solid #f0f0f0', textAlign: 'center', color: '#8c8c8c', fontSize: 12, maxWidth: 150, overflow: 'hidden' }}><Tooltip content={row.createTime}>{row.createTime}</Tooltip></td>
+                    <td style={{ padding: '10px 8px', borderBottom: '1px solid #f0f0f0', textAlign: 'center', color: row.updater ? '#595959' : '#c0c0c0', maxWidth: 90, overflow: 'hidden' }}><Tooltip content={row.updater || ''}>{row.updater || '-'}</Tooltip></td>
+                    <td style={{ padding: '10px 8px', borderBottom: '1px solid #f0f0f0', textAlign: 'center', color: '#8c8c8c', fontSize: 12, maxWidth: 150, overflow: 'hidden' }}><Tooltip content={row.updateTime || ''}>{row.updateTime || '-'}</Tooltip></td>
+                    <td style={{ padding: '10px 8px', borderBottom: '1px solid #f0f0f0', textAlign: 'center', whiteSpace: 'nowrap' }}>
                       <div style={{ display: 'flex', gap: 4, justifyContent: 'center' }}>
                         <button onClick={() => openEdit(row)} style={{ border: 'none', background: 'none', color: '#1663c4', cursor: 'pointer', fontSize: 13, display: 'flex', alignItems: 'center', gap: 2, fontFamily: 'inherit', padding: '2px 4px', transition: 'background 0.15s', borderRadius: 3 }}
                           onMouseEnter={e => (e.currentTarget.style.background = '#e6f4ff')}
@@ -367,10 +373,79 @@ export default function FeeTable({
             onMouseLeave={e => { if (page < Math.ceil(filtered.length / pageSize)) { (e.currentTarget as HTMLButtonElement).style.borderColor = '#d9d9d9'; (e.currentTarget as HTMLButtonElement).style.color = '#595959'; } }}>
             <IconCat name="right" size={10} />
           </button>
-          <span style={{ fontSize: 13, color: '#8c8c8c' }}>跳至<input value={page} onChange={e => { const v = parseInt(e.target.value); if (!isNaN(v) && v >= 1 && v <= Math.ceil(filtered.length / pageSize)) setPage(v); }}
-            style={{ width: 38, height: 26, margin: '0 4px', padding: '0 4px', border: '1px solid #d9d9d9', borderRadius: 4, textAlign: 'center', fontSize: 13, outline: 'none', fontFamily: 'inherit', boxSizing: 'border-box' }} />页</span>
+          <span style={{ fontSize: 12, color: '#8c8c8c' }}>跳至<input value={page} onChange={e => { const v = parseInt(e.target.value); if (!isNaN(v) && v >= 1 && v <= Math.ceil(filtered.length / pageSize)) setPage(v); }}
+            style={{ width: 38, height: 26, margin: '0 4px', padding: '0 4px', border: '1px solid #d9d9d9', borderRadius: 4, textAlign: 'center', fontSize: 12, outline: 'none', fontFamily: 'inherit', boxSizing: 'border-box' }} />页</span>
         </div>
       </div>
+
+      {/* 详情弹框 */}
+      {detailVisible && detailRow && (
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.45)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000 }}>
+          <div style={{ background: '#fff', borderRadius: 4, width: 520, maxHeight: '85vh', display: 'flex', flexDirection: 'column', boxShadow: '0 6px 16px rgba(0,0,0,0.15)', overflow: 'hidden' }}>
+            <div style={{ padding: '14px 16px', borderBottom: '1px solid #f0f0f0', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexShrink: 0 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 15, fontWeight: 600, color: '#262626' }}>
+                <span style={{ color: '#1663c4', display: 'flex' }}><IconCat name="search" size={15} /></span>
+                费用类型详情
+              </div>
+              <button onClick={() => setDetailVisible(false)} style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 4, display: 'flex' }}>
+                <IconCat name="close" size={15} />
+              </button>
+            </div>
+            <div style={{ padding: 20, overflowY: 'auto', flex: 1 }}>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
+                <div style={{ padding: '10px 12px', background: '#fafafa', borderRadius: 4, border: '1px solid #f0f0f0' }}>
+                  <div style={{ fontSize: 12, color: '#8c8c8c', marginBottom: 4 }}>费用编号</div>
+                  <div style={{ fontSize: 13, color: '#262626', fontFamily: 'monospace' }}>{detailRow.feeCode || '-'}</div>
+                </div>
+                <div style={{ padding: '10px 12px', background: '#fafafa', borderRadius: 4, border: '1px solid #f0f0f0' }}>
+                  <div style={{ fontSize: 12, color: '#8c8c8c', marginBottom: 4 }}>所属业务域</div>
+                  <div style={{ display: 'inline-block', padding: '1px 8px', borderRadius: 2, fontSize: 12, color: domainColor[detailRow.businessDomain] || '#1663c4', background: (domainColor[detailRow.businessDomain] || '#1663c4') + '1a' }}>{detailRow.businessDomain || '-'}</div>
+                </div>
+                <div style={{ gridColumn: '1 / -1', padding: '10px 12px', background: '#fafafa', borderRadius: 4, border: '1px solid #f0f0f0' }}>
+                  <div style={{ fontSize: 12, color: '#8c8c8c', marginBottom: 4 }}>费用名称</div>
+                  <div style={{ fontSize: 13, color: '#262626', fontWeight: 500 }}>{detailRow.feeName || '-'}</div>
+                </div>
+                <div style={{ gridColumn: '1 / -1', padding: '10px 12px', background: '#fafafa', borderRadius: 4, border: '1px solid #f0f0f0' }}>
+                  <div style={{ fontSize: 12, color: '#8c8c8c', marginBottom: 6 }}>所属报价</div>
+                  <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                    {detailRow.priceTypes.length === 0
+                      ? <span style={{ fontSize: 13, color: '#c0c0c0' }}>-</span>
+                      : detailRow.priceTypes.map(pt => (
+                        <span key={pt} style={{ display: 'inline-block', padding: '2px 8px', borderRadius: 2, fontSize: 12, background: '#e6f4ff', color: '#1663c4', border: '1px solid #91caff' }}>{pt}</span>
+                      ))
+                    }
+                  </div>
+                </div>
+                <div style={{ gridColumn: '1 / -1', padding: '10px 12px', background: '#fafafa', borderRadius: 4, border: '1px solid #f0f0f0' }}>
+                  <div style={{ fontSize: 12, color: '#8c8c8c', marginBottom: 4 }}>备注</div>
+                  <div style={{ fontSize: 13, color: '#595959', lineHeight: 1.6, whiteSpace: 'pre-wrap', wordBreak: 'break-all' }}>{detailRow.remark || '-'}</div>
+                </div>
+                <div style={{ padding: '10px 12px', background: '#fafafa', borderRadius: 4, border: '1px solid #f0f0f0' }}>
+                  <div style={{ fontSize: 12, color: '#8c8c8c', marginBottom: 4 }}>创建人</div>
+                  <div style={{ fontSize: 13, color: '#595959' }}>{detailRow.creator || '-'}</div>
+                </div>
+                <div style={{ padding: '10px 12px', background: '#fafafa', borderRadius: 4, border: '1px solid #f0f0f0' }}>
+                  <div style={{ fontSize: 12, color: '#8c8c8c', marginBottom: 4 }}>创建时间</div>
+                  <div style={{ fontSize: 13, color: '#8c8c8c' }}>{detailRow.createTime || '-'}</div>
+                </div>
+                <div style={{ padding: '10px 12px', background: '#fafafa', borderRadius: 4, border: '1px solid #f0f0f0' }}>
+                  <div style={{ fontSize: 12, color: '#8c8c8c', marginBottom: 4 }}>修改人</div>
+                  <div style={{ fontSize: 13, color: '#595959' }}>{detailRow.updater || '-'}</div>
+                </div>
+                <div style={{ padding: '10px 12px', background: '#fafafa', borderRadius: 4, border: '1px solid #f0f0f0' }}>
+                  <div style={{ fontSize: 12, color: '#8c8c8c', marginBottom: 4 }}>修改时间</div>
+                  <div style={{ fontSize: 13, color: '#8c8c8c' }}>{detailRow.updateTime || '-'}</div>
+                </div>
+              </div>
+            </div>
+            <div style={{ padding: '10px 16px', borderTop: '1px solid #f0f0f0', display: 'flex', justifyContent: 'center', flexShrink: 0 }}>
+              <button onClick={() => { setDetailVisible(false); openEdit(detailRow); }} style={{ height: 30, padding: '0 24px', border: 'none', borderRadius: 4, background: '#1663c4', color: '#fff', cursor: 'pointer', fontSize: 13, fontFamily: 'inherit', transition: 'background 0.15s', boxShadow: '0 2px 0 rgba(22,99,196,0.1)' }}
+                onMouseEnter={e => (e.currentTarget.style.background = '#3880d0')}
+                onMouseLeave={e => (e.currentTarget.style.background = '#1663c4')}>编辑</button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* 新增/编辑弹框 */}
       {dialogVisible && (
@@ -453,6 +528,6 @@ export default function FeeTable({
           </div>
         </div>
       )}
-    </>
+    </div>
   );
 }
