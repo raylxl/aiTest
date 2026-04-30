@@ -4,6 +4,7 @@ import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { getSession, setSession, clearSession, validateUsername, validatePassword, validateNickname, getAvatarColor, type Session } from '@/lib/auth';
 import type { FeeItem, QueryForm, MenuItem } from './components/types';
 import FeeTable from './components/FeeTable';
+import FeeRulesTable from './components/FeeRulesTable';
 
 // ============ 招财猫占位页 ============
 function MenuPlaceholder({ title, subtitle }: { title: string; subtitle?: string }) {
@@ -93,6 +94,7 @@ const MENU_ITEM_MAP: Record<string, { title: string; subtitle?: string }> = {
   warehouse: { title: '仓储中心' }, project: { title: '项目管理' }, 'finance-platform': { title: '财务中台' }, 'more-tenant': { title: '更多租户' }, 'data-alert': { title: '数据预警' },
   'user-center': { title: '用户中心' }, 'app-set': { title: '应用设置' }, 'app-btn': { title: '应用按钮' }, 'menu-ctrl': { title: '菜单管理' }, tenant: { title: '租户管理' }, 'tenant-id': { title: '租户身份' }, org: { title: '组织管理' }, role: { title: '角色管理' }, staff: { title: '员工管理' }, 'user-ctrl': { title: '用户管理' }, post: { title: '岗位管理' }, 'post-role': { title: '岗位角色权限管理' }, 'task-center': { title: '任务中心' }, 'export-tpl': { title: '导出模板设置' }, 'export-task': { title: '导出任务' }, 'ext-test': { title: '外链测试' },
   base: { title: '基础管理' }, 'net-freight': { title: '网络货运' }, 'freight-finance': { title: '货运财务管理' }, waybill: { title: '运单管理' }, 'cl-price': { title: '仓链报价管理' }, 'smart-office': { title: '智能办公' }, 'biz-center': { title: '经营管理中心' }, 'cl-workbench': { title: '仓链重构' }, 'freight-net': { title: '网络货运' }, system: { title: '系统管理' },
+  'fee-rules': { title: '费用规则维护' },
 };
 
 // ============ SVG 图标 ============
@@ -181,7 +183,10 @@ const MENU_DATA: MenuItem[] = [
   ]},
   { key: 'warehouse', label: '仓储中心', icon: 'warehouse' },
   { key: 'cl-finance', label: '冷链财务管理', icon: 'wallet', children: [
-    { key: 'cl-finance-base', label: '基础数据', icon: 'office', children: [{ key: 'fee-type-cc', label: '费用类型维护', icon: 'priceTag' }] },
+    { key: 'cl-finance-base', label: '基础数据', icon: 'office', children: [
+      { key: 'fee-type-cc', label: '费用类型维护', icon: 'priceTag' },
+      { key: 'fee-rules', label: '费用规则维护', icon: 'priceTag' },
+    ]},
   ]},
   { key: 'cl-bill', label: '仓链账单管理', icon: 'clipboardText' },
   { key: 'freight-net', label: '网络货运', icon: 'truck', children: [
@@ -273,7 +278,7 @@ function MenuItemEl({ item, activeMenu, collapsed, expandedKeys, depth = 0, onSe
 // ============ 主组件 ============
 export default function FeeManager() {
   const [collapsed, setCollapsed] = useState(false);
-  const [activeMenu, setActiveMenu] = useState('fee-type-cc');
+  const [activeMenu, setActiveMenu] = useState('fee-rules');
   const [expandedKeys, setExpandedKeys] = useState<Set<string>>(new Set(['cl-finance', 'cl-finance-base']));
   const [data, setData] = useState<FeeItem[]>([]);
   const [selectedRows, setSelectedRows] = useState<FeeItem[]>([]);
@@ -500,6 +505,8 @@ export default function FeeManager() {
             <span style={{ color: '#d9d9d9', fontSize: 12 }}>/</span>
             {activeMenu === 'fee-type-cc' ? (
               <><a href="#" style={{ color: '#8c8c8c', textDecoration: 'none' }}>冷链财务管理</a><span style={{ color: '#d9d9d9', fontSize: 12 }}>/</span><a href="#" style={{ color: '#8c8c8c', textDecoration: 'none' }}>基础数据</a><span style={{ color: '#d9d9d9', fontSize: 12 }}>/</span><span style={{ color: '#262626' }}>费用类型维护</span></>
+            ) : activeMenu === 'fee-rules' ? (
+              <><a href="#" style={{ color: '#8c8c8c', textDecoration: 'none' }}>冷链财务管理</a><span style={{ color: '#d9d9d9', fontSize: 12 }}>/</span><a href="#" style={{ color: '#8c8c8c', textDecoration: 'none' }}>基础数据</a><span style={{ color: '#d9d9d9', fontSize: 12 }}>/</span><span style={{ color: '#262626' }}>费用规则维护</span></>
             ) : <span style={{ color: '#262626' }}>{MENU_ITEM_MAP[activeMenu]?.title || activeMenu}</span>}
           </div>
 
@@ -515,6 +522,11 @@ export default function FeeManager() {
                 msg={msg} setMsg={setMsg} page={page} setPage={setPage} pageSize={pageSize} setPageSize={setPageSize}
                 currentUserNickname={currentNickname} onMessage={(t, y) => { setMsg({ text: t, type: y }); setTimeout(() => setMsg(null), 3000); }}
                 fetchData={fetchData}
+              />
+            ) : activeMenu === 'fee-rules' ? (
+              <FeeRulesTable
+                currentUserNickname={currentNickname}
+                onMessage={(t, y) => { setMsg({ text: t, type: y }); setTimeout(() => setMsg(null), 3000); }}
               />
             ) : (
               <MenuPlaceholder title={MENU_ITEM_MAP[activeMenu]?.title || activeMenu} subtitle={MENU_ITEM_MAP[activeMenu]?.subtitle} />
