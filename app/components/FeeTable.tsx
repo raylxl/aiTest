@@ -3,6 +3,7 @@
 import React, { useMemo, useState } from 'react';
 import type { FeeItem, QueryForm } from './types';
 import Tooltip from './Tooltip';
+import ConfirmDialog from './ConfirmDialog';
 
 interface FeeTableProps {
   data: FeeItem[];
@@ -53,6 +54,8 @@ function IconCat({ name, size = 14 }: { name: string; size?: number }) {
     search: 'M772.188 672.172L579.558 479.586C605.586 442.688 620 398.766 620 352c0-141.16-114.84-256-256-256S108 210.84 108 352s114.84 256 256 256c46.766 0 90.688-14.414 127.586-40.442L672.172 772.188a16 16 0 0 0 22.628 0l77.388-77.388a16 16 0 0 0 0-22.628zM364 352c0-79.4 64.6-144 144-144s144 64.6 144 144-64.6 144-144 144-144-64.6-144-144z',
     right: 'M384 160l320 352-320 352z',
     info: 'M448 768a64 64 0 1 0 128 0 64 64 0 0 0-128 0zm0-224a64 64 0 1 0 0-128 64 64 0 0 0 0 128zM512-64h256v64H512v-64z',
+    upload: 'M864 256H672v-64c0-35.2-28.8-64-64-64H480c-35.2 0-64 28.8-64 64v64H160c-44.2 0-80 35.8-80 80v416c0 35.2 28.8 64 64 64h640c35.2 0 64-28.8 64-64V336c0-44.2-35.8-80-80-80zm-80 560H240V416h544v400zm64-488H672v-64c0-17.7-14.3-32-32-32H384c-17.7 0-32 14.3-32 32v64H160v-80c0-17.7 14.3-32 32-32h544c17.7 0 32 14.3 32 32v80z',
+    download: 'M864 256H672v-64c0-35.2-28.8-64-64-64H416c-35.2 0-64 28.8-64 64v64H160c-44.2 0-80 35.8-80 80v416c0 35.2 28.8 64 64 64h640c35.2 0 64-28.8 64-64V336c0-44.2-35.8-80-80-80zm-80 560H240V336h544v400zm64-520H672v-64c0-17.7-14.3-32-32-32H384c-17.7 0-32 14.3-32 32v64H160v-80c0-17.7 14.3-32 32-32h544c17.7 0 32 14.3 32 32v80zM490.3 613.7L608 732l117.7-118.3a32 32 0 0 0-45.3-45.3l-72.4 72.4-72.4-72.4a32 32 0 0 0-45.3 45.3z',
   };
   return (
     <svg width={size} height={size} viewBox="0 0 1024 1024" style={{ display: 'inline-block', flexShrink: 0 }}>
@@ -87,7 +90,7 @@ export default function FeeTable({
 
   const paginatedData = useMemo(() => filtered.slice((page - 1) * pageSize, page * pageSize), [filtered, page, pageSize]);
 
-  const handleReset = () => { setQuery({ feeCode: '', feeName: '', businessDomain: '', priceType: '' }); setPage(1); };
+  const handleReset = () => { setQuery({ feeCode: '', feeName: '', businessDomain: '', priceType: '' }); setPage(1); fetchData(); };
 
   const openAdd = () => {
     setEditRow(null); setDialogTitle('新增费用类型');
@@ -102,8 +105,87 @@ export default function FeeTable({
   };
 
   const [detailVisible, setDetailVisible] = useState(false);
+
+  // 确认删除弹窗
+  const [confirmVisible, setConfirmVisible] = useState(false);
+  const [confirmTarget, setConfirmTarget] = useState<{ type: 'single' | 'batch'; item?: FeeItem }>({ type: 'single' });
+  const openConfirm = (type: 'single' | 'batch', item?: FeeItem) => { setConfirmTarget({ type, item }); setConfirmVisible(true); };
+
   const [detailRow, setDetailRow] = useState<FeeItem | null>(null);
   const openDetail = (row: FeeItem) => { setDetailRow(row); setDetailVisible(true); };
+
+  // Import/Export state
+  const [importModalVisible, setImportModalVisible] = useState(false);
+  const [importPreview, setImportPreview] = useState<{
+    total: number;
+    validCount: number;
+    errorCount: number;
+    preview: Array<{ row: number; fee_code: string; fee_name: string; business_domain: string; price_types: string[]; remark: string; creator: string; errors: string[] }>;
+    allRows: Array<{ fee_code: string; fee_name: string; business_domain: string; price_types: string[]; remark: string; creator: string }>;
+  } | null>(null);
+  const [importLoading, setImportLoading] = useState(false);
+  const [importing, setImporting] = useState(false);
+  const [importResult, setImportResult] = useState<{ inserted: number; skipped: number; errors: string[] } | null>(null);
+  const fileInputRef = React.useRef<HTMLInputElement>(null);
+
+  const handleExport = () => {
+    showMsg('正在导出...', 'info');
+    window.open('/api/fees/export', '_blank');
+    setTimeout(() => setMsg(null), 2000);
+  };
+
+  const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setImportLoading(true);
+    setImportResult(null);
+    try {
+      const fd = new FormData();
+      fd.append('file', file);
+      const res = await fetch('/api/fees/import', { method: 'POST', body: fd });
+      const json = await res.json();
+      if (!res.ok) {
+        showMsg(json.error || '解析失败', 'error');
+        return;
+      }
+      setImportPreview(json);
+      setImportModalVisible(true);
+    } catch {
+      showMsg('文件解析失败', 'error');
+    } finally {
+      setImportLoading(false);
+      if (fileInputRef.current) fileInputRef.current.value = '';
+    }
+  };
+
+  const handleImportConfirm = async (action: 'insert' | 'skip') => {
+    if (!importPreview) return;
+    setImporting(true);
+    try {
+      const validRows = importPreview.allRows
+        .filter(r => r.fee_code && r.fee_name && r.business_domain)
+        .map(r => ({ fee_code: r.fee_code, fee_name: r.fee_name, business_domain: r.business_domain, price_types: r.price_types, remark: r.remark, creator: r.creator || currentUserNickname }));
+      const res = await fetch('/api/fees/import', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ rows: validRows, action, creator: currentUserNickname }),
+      });
+      const json = await res.json();
+      if (!res.ok) {
+        showMsg(json.error || '导入失败', 'error');
+        return;
+      }
+      setImportResult(json);
+      if (json.inserted > 0) {
+        fetchData();
+        setTimeout(() => setImportModalVisible(false), 2000);
+      }
+    } catch {
+      showMsg('导入失败', 'error');
+    } finally {
+      setImporting(false);
+    }
+  };
 
   const togglePriceType = (pt: string) => {
     setForm(f => ({ ...f, priceTypes: f.priceTypes.includes(pt) ? f.priceTypes.filter(p => p !== pt) : [...f.priceTypes, pt] }));
@@ -138,20 +220,27 @@ export default function FeeTable({
   };
 
   const handleDelete = (row: FeeItem) => {
-    if (!confirm(`确定删除「${row.feeName}」吗？`)) return;
-    fetch(`/api/fees/${row.id}`, { method: 'DELETE' }).then(res => {
-      if (res.ok) { showMsg('删除成功', 'success'); fetchData(); }
-      else showMsg('删除失败', 'error');
-    });
+    openConfirm('single', row);
+  };
+
+  const doConfirmDelete = () => {
+    if (confirmTarget.type === 'single' && confirmTarget.item) {
+      fetch(`/api/fees/${confirmTarget.item.id}`, { method: 'DELETE' }).then(res => {
+        if (res.ok) { showMsg('删除成功', 'success'); fetchData(); }
+        else showMsg('删除失败', 'error');
+      });
+    } else if (confirmTarget.type === 'batch') {
+      Promise.all(selectedRows.map(r => fetch(`/api/fees/${r.id}`, { method: 'DELETE' }))).then(() => {
+        showMsg(`成功删除 ${selectedRows.length} 条数据`, 'success');
+        setSelectedRows([]); fetchData();
+      });
+    }
+    setConfirmVisible(false);
   };
 
   const handleBatchDelete = () => {
     if (selectedRows.length === 0) { showMsg('请先选择数据', 'warning'); return; }
-    if (!confirm(`确定删除选中的 ${selectedRows.length} 条数据吗？`)) return;
-    Promise.all(selectedRows.map(r => fetch(`/api/fees/${r.id}`, { method: 'DELETE' }))).then(() => {
-      showMsg(`成功删除 ${selectedRows.length} 条数据`, 'success');
-      setSelectedRows([]); fetchData();
-    });
+    openConfirm('batch');
   };
 
   const handleSelectChange = (e: React.ChangeEvent<HTMLInputElement>, row: FeeItem) => {
@@ -172,26 +261,6 @@ export default function FeeTable({
           <div style={{ fontSize: 15, fontWeight: 600, color: '#262626', marginBottom: 2 }}>费用类型维护</div>
           <div style={{ fontSize: 12, color: '#8c8c8c' }}>管理系统中的费用类型配置，支持新增、编辑、删除及批量操作</div>
         </div>
-        <div style={{ display: 'flex', gap: 8, flexShrink: 0 }}>
-          <button onClick={fetchData} style={{ height: 30, padding: '0 14px', border: '1px solid #d9d9d9', borderRadius: 4, background: '#fff', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 5, fontSize: 13, color: '#595959', transition: 'all 0.15s', fontFamily: 'inherit' }}
-            onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.borderColor = '#1663c4'; (e.currentTarget as HTMLButtonElement).style.color = '#1663c4'; }}
-            onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.borderColor = '#d9d9d9'; (e.currentTarget as HTMLButtonElement).style.color = '#595959'; }}>
-            <IconCat name="refresh" size={13} /><span>刷新</span>
-          </button>
-          <button onClick={handleBatchDelete} disabled={selectedRows.length === 0} style={{
-            height: 30, padding: '0 14px', border: `1px solid ${selectedRows.length > 0 ? '#ff4d4f' : '#d9d9d9'}`,
-            borderRadius: 4, background: selectedRows.length > 0 ? '#ff4d4f' : '#fff',
-            color: selectedRows.length > 0 ? '#fff' : '#d0d0d0', cursor: selectedRows.length > 0 ? 'pointer' : 'not-allowed',
-            display: 'flex', alignItems: 'center', gap: 5, fontSize: 13, fontFamily: 'inherit', transition: 'all 0.15s',
-          }}>
-            <IconCat name="delete" size={13} /><span>批量删除{selectedRows.length > 0 ? ` (${selectedRows.length})` : ''}</span>
-          </button>
-          <button onClick={openAdd} style={{ height: 30, padding: '0 14px', border: 'none', borderRadius: 4, background: '#1663c4', color: '#fff', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 5, fontSize: 13, fontWeight: 500, fontFamily: 'inherit', transition: 'all 0.15s', boxShadow: '0 2px 0 rgba(22,99,196,0.1)' }}
-            onMouseEnter={e => (e.currentTarget as HTMLButtonElement).style.background = '#3880d0'}
-            onMouseLeave={e => (e.currentTarget as HTMLButtonElement).style.background = '#1663c4'}>
-            <IconCat name="plus" size={13} /><span>新增</span>
-          </button>
-        </div>
       </div>
 
       {/* 消息提示 */}
@@ -209,7 +278,7 @@ export default function FeeTable({
           <div style={{ fontSize: 12, color: '#8c8c8c', marginBottom: 4 }}>费用编号</div>
           <div style={{ position: 'relative' }}>
             <span style={{ position: 'absolute', left: 8, top: '50%', transform: 'translateY(-50%)', color: '#bfbfbf', pointerEvents: 'none' }}><IconCat name="search" size={13} /></span>
-            <input value={query.feeCode} onChange={e => { setQuery(q => ({ ...q, feeCode: e.target.value })); setPage(1); }} placeholder="模糊匹配"
+            <input value={query.feeCode} onChange={e => { setQuery(q => ({ ...q, feeCode: e.target.value })); }} placeholder="模糊匹配"
               style={{ width: 140, height: 30, padding: '0 8px 0 28px', border: '1px solid #d9d9d9', borderRadius: 4, fontSize: 13, outline: 'none', color: '#595959', background: '#fff', fontFamily: 'inherit', transition: 'border-color 0.15s', boxSizing: 'border-box' }}
               onFocus={e => (e.target.style.borderColor = '#1663c4')}
               onBlur={e => (e.target.style.borderColor = '#d9d9d9')} />
@@ -219,7 +288,7 @@ export default function FeeTable({
           <div style={{ fontSize: 12, color: '#8c8c8c', marginBottom: 4 }}>费用名称</div>
           <div style={{ position: 'relative' }}>
             <span style={{ position: 'absolute', left: 8, top: '50%', transform: 'translateY(-50%)', color: '#bfbfbf', pointerEvents: 'none' }}><IconCat name="search" size={13} /></span>
-            <input value={query.feeName} onChange={e => { setQuery(q => ({ ...q, feeName: e.target.value })); setPage(1); }} placeholder="模糊匹配"
+            <input value={query.feeName} onChange={e => { setQuery(q => ({ ...q, feeName: e.target.value })); }} placeholder="模糊匹配"
               style={{ width: 140, height: 30, padding: '0 8px 0 28px', border: '1px solid #d9d9d9', borderRadius: 4, fontSize: 13, outline: 'none', color: '#595959', background: '#fff', fontFamily: 'inherit', transition: 'border-color 0.15s', boxSizing: 'border-box' }}
               onFocus={e => (e.target.style.borderColor = '#1663c4')}
               onBlur={e => (e.target.style.borderColor = '#d9d9d9')} />
@@ -227,7 +296,7 @@ export default function FeeTable({
         </div>
         <div>
           <div style={{ fontSize: 12, color: '#8c8c8c', marginBottom: 4 }}>所属业务域</div>
-          <select value={query.businessDomain} onChange={e => { setQuery(q => ({ ...q, businessDomain: e.target.value })); setPage(1); }}
+          <select value={query.businessDomain} onChange={e => { setQuery(q => ({ ...q, businessDomain: e.target.value })); }}
             style={{ height: 30, padding: '0 24px 0 10px', border: '1px solid #d9d9d9', borderRadius: 4, fontSize: 13, outline: 'none', color: '#595959', background: '#fff', fontFamily: 'inherit', cursor: 'pointer', appearance: 'none', backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 1024 1024'%3E%3Cpath fill='%23bfbfbf' d='M192 320l320 320 320-320z'/%3E%3C/svg%3E")`, backgroundRepeat: 'no-repeat', backgroundPosition: 'right 8px center', backgroundSize: 9, transition: 'border-color 0.15s', boxSizing: 'border-box' }}
             onFocus={e => (e.target.style.borderColor = '#1663c4')}
             onBlur={e => (e.target.style.borderColor = '#d9d9d9')}>
@@ -237,7 +306,7 @@ export default function FeeTable({
         </div>
         <div>
           <div style={{ fontSize: 12, color: '#8c8c8c', marginBottom: 4 }}>所属报价</div>
-          <select value={query.priceType} onChange={e => { setQuery(q => ({ ...q, priceType: e.target.value })); setPage(1); }}
+          <select value={query.priceType} onChange={e => { setQuery(q => ({ ...q, priceType: e.target.value })); }}
             style={{ height: 30, padding: '0 24px 0 10px', border: '1px solid #d9d9d9', borderRadius: 4, fontSize: 13, outline: 'none', color: '#595959', background: '#fff', fontFamily: 'inherit', cursor: 'pointer', appearance: 'none', backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 1024 1024'%3E%3Cpath fill='%23bfbfbf' d='M192 320l320 320 320-320z'/%3E%3C/svg%3E")`, backgroundRepeat: 'no-repeat', backgroundPosition: 'right 8px center', backgroundSize: 9, transition: 'border-color 0.15s', boxSizing: 'border-box' }}
             onFocus={e => (e.target.style.borderColor = '#1663c4')}
             onBlur={e => (e.target.style.borderColor = '#d9d9d9')}>
@@ -246,27 +315,43 @@ export default function FeeTable({
           </select>
         </div>
         <div style={{ display: 'flex', gap: 8 }}>
-          <button onClick={() => setPage(1)} style={{ height: 30, padding: '0 14px', border: 'none', borderRadius: 4, background: '#1663c4', color: '#fff', cursor: 'pointer', fontSize: 13, display: 'flex', alignItems: 'center', gap: 5, fontFamily: 'inherit', transition: 'background 0.15s' }}
-            onMouseEnter={e => (e.currentTarget as HTMLButtonElement).style.background = '#3880d0'}
-            onMouseLeave={e => (e.currentTarget as HTMLButtonElement).style.background = '#1663c4'}>
-            <IconCat name="search" size={13} /><span>查询</span>
+          <button onClick={() => { setPage(1); fetchData(); }} style={{ height: 32, padding: '0 16px', borderRadius: 4, border: 'none', background: '#1663c4', color: '#fff', fontSize: 13, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 6 }}>
+            <IconCat name="search" size={13} /> 查询
           </button>
-          <button onClick={handleReset} style={{ height: 30, padding: '0 14px', border: '1px solid #d9d9d9', borderRadius: 4, background: '#fff', cursor: 'pointer', fontSize: 13, color: '#595959', display: 'flex', alignItems: 'center', gap: 5, fontFamily: 'inherit', transition: 'all 0.15s' }}
-            onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.borderColor = '#1663c4'; (e.currentTarget as HTMLButtonElement).style.color = '#1663c4'; }}
-            onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.borderColor = '#d9d9d9'; (e.currentTarget as HTMLButtonElement).style.color = '#595959'; }}>
-            <IconCat name="refresh" size={13} /><span>重置</span>
+          <button onClick={handleReset} style={{ height: 32, padding: '0 16px', border: '1px solid #d9d9d9', borderRadius: 4, background: '#fff', color: '#595959', fontSize: 13, cursor: 'pointer' }}>
+            重置
           </button>
         </div>
       </div>
 
-      {/* 已选提示 */}
-      {selectedRows.length > 0 && (
-        <div style={{ margin: '10px 16px 0', padding: '8px 12px', background: '#e6f4ff', borderRadius: 4, display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, color: '#1663c4', flexShrink: 0 }}>
-          <IconCat name="info" size={13} />
-          <span>已选择 <strong>{selectedRows.length}</strong> 项</span>
-          <button onClick={() => setSelectedRows([])} style={{ background: 'none', border: 'none', color: '#1663c4', cursor: 'pointer', fontSize: 13, textDecoration: 'underline', padding: 0, fontFamily: 'inherit' }}>清空选择</button>
+      {/* 工具栏 */}
+      <div style={{ marginBottom: 12, padding: '0 0', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+        <div style={{ display: 'flex', gap: 8, flexWrap: 'nowrap', flexShrink: 0 }}>
+          <button onClick={openAdd}
+            style={{ height: 32, padding: '0 16px', borderRadius: 4, border: 'none', background: '#1663c4', color: '#fff', fontSize: 13, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 6 }}>
+            <IconCat name="plus" size={13} /> 新增
+          </button>
+          <button onClick={handleBatchDelete} disabled={selectedRows.length === 0}
+            style={{ height: 32, padding: '0 16px', borderRadius: 4, border: `1px solid ${selectedRows.length > 0 ? '#ff4d4f' : '#d9d9d9'}`, background: selectedRows.length > 0 ? '#ff4d4f' : '#fff', color: selectedRows.length > 0 ? '#fff' : '#bfbfbf', fontSize: 13, cursor: selectedRows.length > 0 ? 'pointer' : 'not-allowed', display: 'flex', alignItems: 'center', gap: 6 }}>
+            <IconCat name="delete" size={13} /> {selectedRows.length > 0 ? `删除 (${selectedRows.length})` : '删除'}
+          </button>
+          <button onClick={handleExport}
+            style={{ height: 32, padding: '0 12px', borderRadius: 4, border: '1px solid #d9d9d9', background: '#fff', color: '#595959', fontSize: 13, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 6 }}>
+            <IconCat name="download" size={13} /> 导出
+          </button>
+          <button onClick={() => fileInputRef.current?.click()} disabled={importLoading}
+            style={{ height: 32, padding: '0 12px', borderRadius: 4, border: '1px solid #d9d9d9', background: '#fff', color: importLoading ? '#bfbfbf' : '#595959', fontSize: 13, cursor: importLoading ? 'not-allowed' : 'pointer', display: 'flex', alignItems: 'center', gap: 6 }}>
+            <IconCat name="upload" size={13} /> {importLoading ? '解析中...' : '导入'}
+          </button>
+          <button onClick={() => window.open('/api/fees/template', '_blank')}
+            style={{ height: 32, padding: '0 10px', borderRadius: 4, border: '1px solid #d9d9d9', background: '#fff', color: '#595959', fontSize: 13, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 6 }}>
+            <IconCat name="download" size={13} />
+          </button>
         </div>
-      )}
+        <div style={{ fontSize: 13, color: '#8c8c8c' }}>
+          {selectedRows.length > 0 && <span>已选择 <strong style={{ color: '#1663c4' }}>{selectedRows.length}</strong> 项</span>}
+        </div>
+      </div>
 
       {/* 表格 */}
       <div style={{ overflowX: 'auto', flex: 1, minHeight: 0 }}>
@@ -528,6 +613,163 @@ export default function FeeTable({
           </div>
         </div>
       )}
+
+      {/* 隐藏的文件上传 input */}
+      <input
+        ref={fileInputRef}
+        type="file"
+        accept=".xlsx,.xls"
+        style={{ display: 'none' }}
+        onChange={handleFileChange}
+      />
+
+      {/* 导入预览弹框 */}
+      {importModalVisible && importPreview && (
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.45)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1100 }}>
+          <div style={{ background: '#fff', borderRadius: 4, width: 920, maxHeight: '88vh', display: 'flex', flexDirection: 'column', boxShadow: '0 6px 16px rgba(0,0,0,0.15)', overflow: 'hidden' }}>
+            {/* 标题栏 */}
+            <div style={{ padding: '14px 16px', borderBottom: '1px solid #f0f0f0', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexShrink: 0 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 15, fontWeight: 600, color: '#262626' }}>
+                <span style={{ color: '#1663c4', display: 'flex' }}><IconCat name="upload" size={15} /></span>
+                导入预览
+              </div>
+              <button onClick={() => { setImportModalVisible(false); setImportPreview(null); setImportResult(null); }} style={{ background: 'none', border: 'none', color: '#8c8c8c', fontSize: 18, cursor: 'pointer', lineHeight: 1, padding: '2px', borderRadius: 3, transition: 'all 0.15s' }}
+                onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.color = '#595959'; (e.currentTarget as HTMLButtonElement).style.background = '#f5f5f5'; }}
+                onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.color = '#8c8c8c'; (e.currentTarget as HTMLButtonElement).style.background = 'none'; }}>
+                <IconCat name="close" size={16} />
+              </button>
+            </div>
+
+            {/* 统计信息 */}
+            {!importResult && (
+              <div style={{ padding: '10px 16px', borderBottom: '1px solid #f0f0f0', display: 'flex', gap: 24, alignItems: 'center', flexShrink: 0, background: '#fafafa' }}>
+                <div style={{ display: 'flex', gap: 16, fontSize: 13 }}>
+                  <span>共 <strong style={{ color: '#262626' }}>{importPreview.total}</strong> 条数据</span>
+                  <span style={{ color: '#52c41a' }}>有效 <strong>{importPreview.validCount}</strong> 条</span>
+                  {importPreview.errorCount > 0 && <span style={{ color: '#ff4d4f' }}>有误 <strong>{importPreview.errorCount}</strong> 条</span>}
+                </div>
+                <div style={{ fontSize: 12, color: '#8c8c8c' }}>仅前 20 条预览，完整数据将在确认后导入</div>
+              </div>
+            )}
+
+            {/* 导入结果 */}
+            {importResult && (
+              <div style={{ padding: '12px 16px', borderBottom: '1px solid #f0f0f0', flexShrink: 0 }}>
+                <div style={{ display: 'flex', gap: 16, fontSize: 13, marginBottom: importResult.errors.length > 0 ? 8 : 0 }}>
+                  <span style={{ color: '#52c41a' }}>✓ 成功导入 <strong>{importResult.inserted}</strong> 条</span>
+                  {importResult.skipped > 0 && <span style={{ color: '#fa8c16' }}>⚠ 跳过 <strong>{importResult.skipped}</strong> 条（编号已存在）</span>}
+                </div>
+                {importResult.errors.length > 0 && (
+                  <div style={{ fontSize: 12, color: '#ff4d4f', maxHeight: 80, overflowY: 'auto', padding: '4px 0' }}>
+                    {importResult.errors.map((err, i) => <div key={i}>• {err}</div>)}
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* 预览表格 */}
+            {!importResult && (
+              <div style={{ overflow: 'auto', flex: 1, minHeight: 0 }}>
+                <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12, minWidth: 800 }}>
+                  <thead>
+                    <tr style={{ background: '#fafafa', position: 'sticky', top: 0, zIndex: 1 }}>
+                      <th style={{ padding: '8px 6px', borderBottom: '1px solid #f0f0f0', textAlign: 'center', color: '#595959', fontWeight: 600, width: 50 }}>行号</th>
+                      <th style={{ padding: '8px 6px', borderBottom: '1px solid #f0f0f0', textAlign: 'center', color: '#595959', fontWeight: 600, width: 80 }}>校验状态</th>
+                      <th style={{ padding: '8px 6px', borderBottom: '1px solid #f0f0f0', textAlign: 'left', color: '#595959', fontWeight: 600, width: 90 }}>费用编号</th>
+                      <th style={{ padding: '8px 6px', borderBottom: '1px solid #f0f0f0', textAlign: 'left', color: '#595959', fontWeight: 600, width: 130 }}>费用名称</th>
+                      <th style={{ padding: '8px 6px', borderBottom: '1px solid #f0f0f0', textAlign: 'center', color: '#595959', fontWeight: 600, width: 90 }}>所属业务域</th>
+                      <th style={{ padding: '8px 6px', borderBottom: '1px solid #f0f0f0', textAlign: 'left', color: '#595959', fontWeight: 600, width: 200 }}>所属报价</th>
+                      <th style={{ padding: '8px 6px', borderBottom: '1px solid #f0f0f0', textAlign: 'left', color: '#595959', fontWeight: 600 }}>错误信息</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {importPreview.preview.map((row, idx) => {
+                      const hasError = row.errors.length > 0;
+                      return (
+                        <tr key={idx} style={{ background: hasError ? '#fff1f0' : (idx % 2 === 0 ? '#fff' : '#fafafa'), transition: 'background 0.1s' }}>
+                          <td style={{ padding: '7px 6px', borderBottom: '1px solid #f0f0f0', textAlign: 'center', color: '#8c8c8c' }}>{row.row}</td>
+                          <td style={{ padding: '7px 6px', borderBottom: '1px solid #f0f0f0', textAlign: 'center' }}>
+                            {hasError
+                              ? <span style={{ color: '#ff4d4f', fontSize: 11 }}>✗ 有误</span>
+                              : <span style={{ color: '#52c41a', fontSize: 11 }}>✓ 有效</span>}
+                          </td>
+                          <td style={{ padding: '7px 6px', borderBottom: '1px solid #f0f0f0', textAlign: 'left', fontFamily: 'monospace', fontSize: 12, color: '#1663c4' }}>{row.fee_code || '-'}</td>
+                          <td style={{ padding: '7px 6px', borderBottom: '1px solid #f0f0f0', textAlign: 'left', color: '#262626' }}><Tooltip content={row.fee_name}>{row.fee_name || '-'}</Tooltip></td>
+                          <td style={{ padding: '7px 6px', borderBottom: '1px solid #f0f0f0', textAlign: 'center' }}>
+                            {row.business_domain
+                              ? <span style={{ display: 'inline-block', padding: '1px 6px', borderRadius: 2, fontSize: 11, color: domainColor[row.business_domain] || '#1663c4', background: (domainColor[row.business_domain] || '#1663c4') + '1a' }}>{row.business_domain}</span>
+                              : <span style={{ color: '#c0c0c0' }}>-</span>}
+                          </td>
+                          <td style={{ padding: '7px 6px', borderBottom: '1px solid #f0f0f0', textAlign: 'left' }}>
+                            {row.price_types && row.price_types.length > 0
+                              ? row.price_types.map(pt => <span key={pt} style={{ display: 'inline-block', padding: '1px 4px', borderRadius: 2, fontSize: 10, background: '#f5f5f5', color: '#595959', marginRight: 3 }}>{pt}</span>)
+                              : <span style={{ color: '#c0c0c0' }}>-</span>}
+                          </td>
+                          <td style={{ padding: '7px 6px', borderBottom: '1px solid #f0f0f0', textAlign: 'left', color: '#ff4d4f', fontSize: 11, maxWidth: 180, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                            {hasError ? <Tooltip content={row.errors.join('；')} maxWidth={220}>{row.errors.join('；')}</Tooltip> : '-'}
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            )}
+
+            {/* 底部操作栏 */}
+            <div style={{ padding: '10px 16px', borderTop: '1px solid #f0f0f0', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexShrink: 0 }}>
+              {!importResult ? (
+                <>
+                  <div style={{ fontSize: 12, color: '#8c8c8c' }}>
+                    提示：编号已存在时，<strong style={{ color: '#fa8c16' }}>跳过</strong>保留原数据，<strong style={{ color: '#ff4d4f' }}>覆盖</strong>则覆盖更新
+                  </div>
+                  <div style={{ display: 'flex', gap: 8 }}>
+                    <button onClick={() => { setImportModalVisible(false); setImportPreview(null); }} style={{ height: 30, padding: '0 20px', border: '1px solid #d9d9d9', borderRadius: 4, background: '#fff', cursor: 'pointer', fontSize: 13, color: '#595959', fontFamily: 'inherit', transition: 'all 0.15s' }}
+                      onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.borderColor = '#1663c4'; (e.currentTarget as HTMLButtonElement).style.color = '#1663c4'; }}
+                      onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.borderColor = '#d9d9d9'; (e.currentTarget as HTMLButtonElement).style.color = '#595959'; }}>
+                      取消
+                    </button>
+                    <button onClick={() => handleImportConfirm('skip')} disabled={importing || importPreview.validCount === 0} style={{ height: 30, padding: '0 20px', border: '1px solid #fa8c16', borderRadius: 4, background: importing || importPreview.validCount === 0 ? '#f5f5f5' : '#fa8c16', color: importing || importPreview.validCount === 0 ? '#bfbfbf' : '#fff', cursor: importing || importPreview.validCount === 0 ? 'not-allowed' : 'pointer', fontSize: 13, fontFamily: 'inherit', transition: 'all 0.15s' }}
+                      onMouseEnter={e => { if (!importing && importPreview.validCount > 0) (e.currentTarget as HTMLButtonElement).style.background = '#f59e00'; }}
+                      onMouseLeave={e => { if (!importing && importPreview.validCount > 0) (e.currentTarget as HTMLButtonElement).style.background = '#fa8c16'; }}>
+                      {importing ? '导入中...' : `跳过冲突 (${importPreview.validCount} 条)`}
+                    </button>
+                    <button onClick={() => handleImportConfirm('insert')} disabled={importing || importPreview.validCount === 0} style={{ height: 30, padding: '0 20px', border: 'none', borderRadius: 4, background: importing || importPreview.validCount === 0 ? '#a0cfff' : '#1663c4', color: '#fff', cursor: importing || importPreview.validCount === 0 ? 'not-allowed' : 'pointer', fontSize: 13, fontWeight: 500, fontFamily: 'inherit', transition: 'all 0.15s', boxShadow: '0 2px 0 rgba(22,99,196,0.1)' }}
+                      onMouseEnter={e => { if (!importing && importPreview.validCount > 0) (e.currentTarget as HTMLButtonElement).style.background = '#3880d0'; }}
+                      onMouseLeave={e => { if (!importing && importPreview.validCount > 0) (e.currentTarget as HTMLButtonElement).style.background = '#1663c4'; }}>
+                      {importing ? '导入中...' : `确认导入 (${importPreview.validCount} 条)`}
+                    </button>
+                  </div>
+                </>
+              ) : (
+                <>
+                  <div />
+                  <button onClick={() => { setImportModalVisible(false); setImportPreview(null); setImportResult(null); }} style={{ height: 30, padding: '0 24px', border: 'none', borderRadius: 4, background: '#1663c4', color: '#fff', cursor: 'pointer', fontSize: 13, fontFamily: 'inherit', transition: 'background 0.15s', boxShadow: '0 2px 0 rgba(22,99,196,0.1)' }}
+                    onMouseEnter={e => (e.currentTarget as HTMLButtonElement).style.background = '#3880d0'}
+                    onMouseLeave={e => (e.currentTarget as HTMLButtonElement).style.background = '#1663c4'}>
+                    关闭
+                  </button>
+                </>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      <ConfirmDialog
+        visible={confirmVisible}
+        title={confirmTarget.type === 'batch' ? '批量删除' : '删除确认'}
+        message={
+          confirmTarget.type === 'batch'
+            ? <>确定删除选中的 <strong style={{ color: '#ff4d4f' }}>{selectedRows.length}</strong> 条数据吗？<br /><span style={{ color: '#8c8c8c', fontSize: 13 }}>删除后数据无法恢复，请谨慎操作。</span></>
+            : <>确定删除费用类型 <strong style={{ color: '#262626' }}>「{confirmTarget.item?.feeName}」</strong> 吗？<br /><span style={{ color: '#8c8c8c', fontSize: 13 }}>删除后数据无法恢复，请谨慎操作。</span></>
+        }
+        confirmText="删除"
+        cancelText="取消"
+        confirmType="danger"
+        onConfirm={doConfirmDelete}
+        onCancel={() => setConfirmVisible(false)}
+      />
     </div>
   );
 }
