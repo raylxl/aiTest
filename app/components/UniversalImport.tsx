@@ -8,6 +8,26 @@ import Icon from './Icon';
 // ============ SVG 图标 ============
 // Icon 已提取到 ./Icon.tsx
 
+// ============ Toast 组件 ============
+function Toast({ text, type, onClose }: { text: string; type: 'success' | 'error' | 'warning'; onClose: () => void }) {
+  const colors = { success: '#52c41a', error: '#ff4d4f', warning: '#faad14' };
+  return (
+    <div style={{
+      position: 'fixed', top: 16, left: '50%', transform: 'translateX(-50%)',
+      background: '#fff', borderLeft: `4px solid ${colors[type]}`,
+      padding: '10px 20px', borderRadius: 4, boxShadow: '0 4px 12px rgba(0,0,0,0.15)',
+      zIndex: 9999, minWidth: 200, animation: 'fadeInDown 0.3s ease',
+      color: '#333', fontSize: 14,
+    }}>
+      <span style={{ marginRight: 12, color: colors[type], fontWeight: 600 }}>
+        {type === 'success' ? '✓' : type === 'error' ? '✕' : '⚠'}
+      </span>
+      {text}
+      <button onClick={onClose} style={{ float: 'right', border: 'none', background: 'none', cursor: 'pointer', color: '#999', fontSize: 18, lineHeight: 1, padding: '0 0 0 8px' }}>×</button>
+    </div>
+  );
+}
+
 // ============ 校验函数 ============
 function validateRow(row: WaybillRow): Record<string, string> {
   const errors: Record<string, string> = {};
