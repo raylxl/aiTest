@@ -750,6 +750,49 @@ export default function UniversalImport() {
     }
   }, [previewData, listPage, fetchWaybillList, confirmModalOpen]);
 
+  // 运单列表导出
+  const handleListExport = useCallback(async () => {
+    if (waybillList.length === 0) {
+      showToast('没有可导出的数据，请先查询', 'warning');
+      return;
+    }
+    setExportLoading(true);
+    try {
+      const XLSX = await import('xlsx');
+      const exportData = waybillList.map((row, i) => ({
+        '序号': i + 1,
+        'ID': row.id,
+        '外部编码': row.external_code || '',
+        '发件人姓名': row.sender_name,
+        '发件人电话': row.sender_phone,
+        '发件人地址': row.sender_address,
+        '收件人姓名': row.receiver_name,
+        '收件人电话': row.receiver_phone,
+        '收件人地址': row.receiver_address,
+        '重量(kg)': row.weight,
+        '件数': row.quantity,
+        '温层': row.temp_layer,
+        '备注': row.remark || '',
+        '状态': row.status === 'submitted' ? '已提交' : row.status,
+        '创建时间': row.created_at ? new Date(row.created_at).toLocaleString('zh-CN') : '',
+      }));
+      const ws = XLSX.utils.json_to_sheet(exportData);
+      ws['!cols'] = [
+        { wch: 6 }, { wch: 8 }, { wch: 16 }, { wch: 12 }, { wch: 15 }, { wch: 35 },
+        { wch: 12 }, { wch: 15 }, { wch: 35 }, { wch: 10 }, { wch: 8 },
+        { wch: 10 }, { wch: 20 }, { wch: 10 }, { wch: 22 },
+      ];
+      const wb = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(wb, ws, '运单列表');
+      XLSX.writeFile(wb, `waybill_list_${Date.now()}.xlsx`);
+      showToast(`导出成功，共 ${waybillList.length} 条`, 'success');
+    } catch (e) {
+      showToast('导出失败', 'error');
+    } finally {
+      setExportLoading(false);
+    }
+  }, [waybillList]);
+
   // 导出Excel（前端生成）
   const handleExport = useCallback(async () => {
     if (previewData.length === 0) {
@@ -1251,6 +1294,18 @@ export default function UniversalImport() {
                 >
                   <Icon name="delete" size={13} />
                   {deleteLoading ? '删除中...' : `删除${selectedWaybillIds.size > 0 ? ` (${selectedWaybillIds.size})` : ''}`}
+                </button>
+                <button
+                  onClick={handleListExport}
+                  disabled={exportLoading}
+                  style={{
+                    height: 32, padding: '0 14px', border: '1px solid #d9d9d9', borderRadius: 4,
+                    background: exportLoading ? '#d9d9d9' : '#fff', color: exportLoading ? '#8c8c8c' : '#595959',
+                    cursor: exportLoading ? 'not-allowed' : 'pointer', fontSize: 13, display: 'flex', alignItems: 'center', gap: 4,
+                  }}
+                  onMouseEnter={e => { if (!exportLoading) { (e.currentTarget as HTMLButtonElement).style.borderColor = '#1677ff'; (e.currentTarget as HTMLButtonElement).style.color = '#1677ff'; } }}
+                  onMouseLeave={e => { if (!exportLoading) { (e.currentTarget as HTMLButtonElement).style.borderColor = '#d9d9d9'; (e.currentTarget as HTMLButtonElement).style.color = '#595959'; } }}>
+                  {exportLoading ? '导出中...' : <><Icon name="download" size={13} /> 导出</>}
                 </button>
               </div>
             </div>
