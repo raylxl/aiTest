@@ -541,17 +541,17 @@ export default function FeeManager() {
                   <div>完整前后端 + 数据库应用部署</div>
                   <div style={{ marginTop: 4 }}>指定平台：Vercel</div>
                 </div>
-                <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', justifyContent: 'center' }}>
+                <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', justifyContent: 'center', marginBottom: 32 }}>
                   {[
-                    { tag: '前端部署', color: '#1677ff', bg: '#e6f4ff' },
-                    { tag: '后端 API', color: '#52c41a', bg: '#f6ffed' },
-                    { tag: '数据库', color: '#722ed1', bg: '#f9f0ff' },
-                    { tag: 'Vercel', color: '#fa541c', bg: '#fff2e8' },
-                    { tag: '节后开考', color: '#faad14', bg: '#fffbe6' },
+                    { tag: '前后端 + 数据库', color: '#1677ff', bg: '#e6f4ff' },
+                    { tag: 'Vercel 部署', color: '#fa541c', bg: '#fff2e8' },
+                    { tag: '导入导出 Excel', color: '#52c41a', bg: '#f6ffed' },
+                    { tag: 'GitHub / Gitee', color: '#722ed1', bg: '#f9f0ff' },
                   ].map(t => (
                     <span key={t.tag} style={{ padding: '4px 12px', borderRadius: 4, fontSize: 13, fontWeight: 500, color: t.color, background: t.bg, border: `1px solid ${t.color}33` }}>{t.tag}</span>
                   ))}
                 </div>
+                <div style={{ fontSize: 13, color: '#bfbfbf' }}>节后开考，冲刺备考中 💪</div>
               </div>
             ) : activeMenu === 'fee-rules' ? (
               <FeeRulesTable
