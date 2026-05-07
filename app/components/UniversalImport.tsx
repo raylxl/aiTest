@@ -398,6 +398,15 @@ function validateRow(row: WaybillRow): Record<string, string> {
   return errors;
 }
 
+// ============ 日期格式化 ============
+function fmtDate(v: string | Date | null | undefined): string {
+  if (!v) return '-';
+  const d = new Date(v);
+  if (isNaN(d.getTime())) return '-';
+  const p = (n: number) => String(n).padStart(2, '0');
+  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}:${p(d.getSeconds())}`;
+}
+
 // ============ 主组件 ============
 export default function UniversalImport() {
   // 上传状态
@@ -774,7 +783,7 @@ export default function UniversalImport() {
         '温层': row.temp_layer,
         '备注': row.remark || '',
         '状态': row.status === 'submitted' ? '已提交' : row.status,
-        '创建时间': row.created_at ? new Date(row.created_at).toLocaleString('zh-CN') : '',
+        '创建时间': fmtDate(row.created_at),
       }));
       const ws = XLSX.utils.json_to_sheet(exportData);
       ws['!cols'] = [
@@ -1367,7 +1376,7 @@ export default function UniversalImport() {
                         <td style={{ padding: '8px 10px', whiteSpace: 'nowrap' }}>
                           <span style={{ padding: '2px 8px', borderRadius: 4, fontSize: 12, background: '#f6ffed', color: '#52c41a' }}>已提交</span>
                         </td>
-                        <td style={{ padding: '8px 10px', color: '#8c8c8c', whiteSpace: 'nowrap' }}>{w.created_at ? new Date(w.created_at).toLocaleString('zh-CN') : '-'}</td>
+                        <td style={{ padding: '8px 10px', color: '#8c8c8c', whiteSpace: 'nowrap' }}>{fmtDate(w.created_at)}</td>
                       </tr>
                     ))}
                   </tbody>
