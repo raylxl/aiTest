@@ -261,35 +261,28 @@ export default function WaybillTable({ currentUserNickname = '系统', onMessage
             />
           </div>
           {/* 按钮组 */}
-          <div style={{ display: 'flex', gap: 8, marginLeft: 'auto' }}>
+          <div style={{ display: 'flex', gap: 8, marginLeft: 'auto', alignItems: 'center' }}>
+            {selectedRows.length > 0 && (
+              <button onClick={() => openConfirm('batchDelete', selectedRows.length)}
+                style={{ height: 30, padding: '0 14px', borderRadius: 4, border: '1px solid #FF4D4F', background: '#fff', color: '#FF4D4F', fontSize: 13, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 4, fontFamily: 'inherit', whiteSpace: 'nowrap' }}>
+                <Icon name="delete" size={12} /> 删除({selectedRows.length})
+              </button>
+            )}
             <button onClick={() => fetchData()} style={{ height: 30, padding: '0 16px', borderRadius: 4, border: 'none', background: '#00BEBE', color: '#fff', fontSize: 13, cursor: 'pointer', fontFamily: 'inherit', display: 'flex', alignItems: 'center', gap: 4, fontWeight: 500 }}
               onMouseEnter={e => (e.currentTarget.style.background = '#00d4d4')}
               onMouseLeave={e => (e.currentTarget.style.background = '#00BEBE')}>
               <Icon name="search" size={12} /> 查询
             </button>
-            <button onClick={handleReset} style={{ height: 30, padding: '0 16px', borderRadius: 4, border: '1px solid #d9d9d9', background: '#fff', color: '#595959', fontSize: 13, cursor: 'pointer', fontFamily: 'inherit' }}
+            <button onClick={handleReset} style={{ height: 30, padding: '0 16px', borderRadius: 4, border: '1px solid #d9d9d9', background: '#fff', color: '#595959', fontSize: 13, cursor: 'pointer', fontFamily: 'inherit', display: 'flex', alignItems: 'center', gap: 4 }}
               onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.borderColor = '#00BEBE'; (e.currentTarget as HTMLButtonElement).style.color = '#00BEBE'; }}
               onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.borderColor = '#d9d9d9'; (e.currentTarget as HTMLButtonElement).style.color = '#595959'; }}>
               重置
             </button>
+            <button onClick={handleExport}
+              style={{ height: 30, padding: '0 14px', borderRadius: 4, border: '1px solid #d9d9d9', background: '#fff', color: '#595959', fontSize: 13, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 4, fontFamily: 'inherit' }}>
+              <Icon name="download" size={12} /> 导出
+            </button>
           </div>
-        </div>
-      </div>
-
-      {/* 工具栏 */}
-      <div style={{ background: '#fff', borderRadius: 4, border: '1px solid #e4edf7', padding: '10px 16px', marginBottom: 12, flexShrink: 0, display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap', width: '100%', boxSizing: 'border-box' }}>
-        {selectedRows.length > 0 && (
-          <button onClick={() => openConfirm('batchDelete', selectedRows.length)}
-            style={{ height: 30, padding: '0 14px', borderRadius: 4, border: '1px solid #FF4D4F', background: '#fff', color: '#FF4D4F', fontSize: 13, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 4, fontFamily: 'inherit' }}>
-            <Icon name="delete" size={12} /> 删除({selectedRows.length})
-          </button>
-        )}
-        <button onClick={handleExport}
-          style={{ height: 30, padding: '0 14px', borderRadius: 4, border: '1px solid #d9d9d9', background: '#fff', color: '#595959', fontSize: 13, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 4, fontFamily: 'inherit' }}>
-          <Icon name="download" size={12} /> 导出
-        </button>
-        <div style={{ fontSize: 13, color: '#8c8c8c', marginLeft: 'auto' }}>
-          {selectedRows.length > 0 && <span>已选择 {selectedRows.length} 项</span>}
         </div>
       </div>
 
