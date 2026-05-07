@@ -100,7 +100,7 @@ export async function POST(request: Request) {
         WHERE external_code = ANY(${extCodes})
       `;
       for (const r of existRows) {
-        existCodes.add(r.external_code);
+        existCodes.add(String(r.external_code));
       }
     }
 

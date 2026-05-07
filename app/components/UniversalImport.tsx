@@ -457,6 +457,30 @@ export default function UniversalImport() {
     }
   }, [allSelected]);
 
+  // 获取运单列表
+  const fetchWaybillList = useCallback(async (page = 1) => {
+    setListLoading(true);
+    try {
+      const params = new URLSearchParams({
+        page: String(page),
+        pageSize: '10',
+        ...(listQuery.external_code && { external_code: listQuery.external_code }),
+        ...(listQuery.receiver_name && { receiver_name: listQuery.receiver_name }),
+        ...(listQuery.start_date && { start_date: listQuery.start_date }),
+        ...(listQuery.end_date && { end_date: listQuery.end_date }),
+      });
+      const res = await fetch(`/api/waybills?${params}`);
+      const json = await res.json();
+      if (res.ok) {
+        setWaybillList(json.data || []);
+        setListTotal(json.total || 0);
+        setListPage(json.page || 1);
+      }
+    } finally {
+      setListLoading(false);
+    }
+  }, [listQuery]);
+
   // 提交下单（分批提交 + 真实进度）
   const handleSubmit = useCallback(async () => {
     const selectedRows = previewData.filter(r => r._selected !== false);
@@ -568,30 +592,6 @@ export default function UniversalImport() {
       showToast('导出失败', 'error');
     }
   }, [previewData]);
-
-  // 获取运单列表
-  const fetchWaybillList = useCallback(async (page = 1) => {
-    setListLoading(true);
-    try {
-      const params = new URLSearchParams({
-        page: String(page),
-        pageSize: '10',
-        ...(listQuery.external_code && { external_code: listQuery.external_code }),
-        ...(listQuery.receiver_name && { receiver_name: listQuery.receiver_name }),
-        ...(listQuery.start_date && { start_date: listQuery.start_date }),
-        ...(listQuery.end_date && { end_date: listQuery.end_date }),
-      });
-      const res = await fetch(`/api/waybills?${params}`);
-      const json = await res.json();
-      if (res.ok) {
-        setWaybillList(json.data || []);
-        setListTotal(json.total || 0);
-        setListPage(json.page || 1);
-      }
-    } finally {
-      setListLoading(false);
-    }
-  }, [listQuery]);
 
   useEffect(() => {
     if (activeTab === 'list') fetchWaybillList(1);

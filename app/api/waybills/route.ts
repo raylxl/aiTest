@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import sql, { initDB } from '@/lib/db';
+import sql, { initDB, getNeonClient } from '@/lib/db';
 import type { WaybillQuery } from '@/lib/waybill-types';
 
 // GET /api/waybills - 获取运单列表
@@ -81,8 +81,10 @@ export async function DELETE(request: Request) {
       return NextResponse.json({ error: '缺少 ids 参数' }, { status: 400 });
     }
 
-    const query = sql.join(ids.map((id) => sql`${id}`), sql`, `);
-    const result = await sql`DELETE FROM waybills WHERE id IN (${query}) RETURNING id`;
+    // 使用 neon 客户端的模板标签 + unsafe() 处理 IN 子句
+    const neonSql = getNeonClient();
+    const idList = ids.map((id) => String(id)).join(',');
+    const result = await neonSql`DELETE FROM waybills WHERE id IN (${neonSql.unsafe(idList)}) RETURNING id` as Array<{ id: number }>;
     const deletedCount = result.length;
 
     return NextResponse.json({ success: true, deletedCount });
