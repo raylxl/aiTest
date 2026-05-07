@@ -147,6 +147,131 @@ function EditableCell({
   );
 }
 
+// ============ 映射关系面板组件 ============
+function MappingPanel({
+  headers, mapping, pendingMapping, setPendingMapping,
+  onReapply, onSaveTemplate, hasSavedMapping, templateName
+}: {
+  headers: string[];
+  mapping: Record<string, string>;
+  pendingMapping: Record<string, string>;
+  setPendingMapping: (m: Record<string, string>) => void;
+  onReapply: (m: Record<string, string>) => void;
+  onSaveTemplate: (m: Record<string, string>) => void;
+  hasSavedMapping: boolean;
+  templateName: string;
+}) {
+  const [collapsed, setCollapsed] = useState(false);
+
+  const currentMapping = Object.keys(pendingMapping).length > 0 ? pendingMapping : mapping;
+
+  return (
+    <div style={{ border: '1px solid #d9d9d9', borderRadius: 8, background: '#fff', marginBottom: 12 }}>
+      {/* 面板标题栏 */}
+      <div
+        onClick={() => setCollapsed(c => !c)}
+        style={{
+          padding: '10px 16px', cursor: 'pointer', display: 'flex', justifyContent: 'space-between',
+          alignItems: 'center', borderBottom: collapsed ? 'none' : '1px solid #f0f0f0',
+          userSelect: 'none',
+        }}
+      >
+        <div style={{ fontSize: 14, fontWeight: 600, color: '#262626', display: 'flex', alignItems: 'center', gap: 8 }}>
+          🔗 映射关系配置
+          {templateName && (
+            <span style={{ fontSize: 12, padding: '2px 8px', background: '#e6f4ff', color: '#1677ff', borderRadius: 4, fontWeight: 400 }}>
+              {templateName}
+            </span>
+          )}
+          {hasSavedMapping && (
+            <span style={{ fontSize: 12, padding: '2px 8px', background: '#f6ffed', color: '#52c41a', borderRadius: 4, fontWeight: 400 }}>
+              已保存
+            </span>
+          )}
+        </div>
+        <span style={{ color: '#8c8c8c', fontSize: 18 }}>{collapsed ? '▶' : '▼'}</span>
+      </div>
+
+      {/* 映射内容 */}
+      {!collapsed && (
+        <div style={{ padding: '12px 16px' }}>
+          {/* 提示 */}
+          <div style={{ fontSize: 12, color: '#8c8c8c', marginBottom: 10 }}>
+            请确认每个 Excel 列名对应的系统字段。如需调整，请在下方下拉框中选择正确的字段映射。
+          </div>
+
+          {/* 映射表格 */}
+          <div style={{ overflow: 'auto', maxHeight: 240, border: '1px solid #f0f0f0', borderRadius: 6 }}>
+            <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
+              <thead>
+                <tr style={{ background: '#fafafa' }}>
+                  <th style={{ padding: '8px 12px', textAlign: 'left', fontWeight: 600, color: '#595959', borderBottom: '1px solid #e8e8e8', whiteSpace: 'nowrap' }}>
+                    Excel 列名
+                  </th>
+                  <th style={{ padding: '8px 12px', width: 40, textAlign: 'center', color: '#8c8c8c', borderBottom: '1px solid #e8e8e8' }}>→</th>
+                  <th style={{ padding: '8px 12px', textAlign: 'left', fontWeight: 600, color: '#595959', borderBottom: '1px solid #e8e8e8', whiteSpace: 'nowrap' }}>
+                    映射到系统字段
+                  </th>
+                </tr>
+              </thead>
+              <tbody>
+                {headers.map((col, idx) => {
+                  const mapped = currentMapping[col];
+                  const isRequired = SYSTEM_FIELDS.find(f => f.key === mapped)?.required;
+                  return (
+                    <tr key={idx} style={{ borderBottom: idx < headers.length - 1 ? '1px solid #f5f5f5' : 'none' }}>
+                      <td style={{ padding: '6px 12px', color: '#262626', maxWidth: 200, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                        {col}
+                      </td>
+                      <td style={{ padding: '6px 12px', textAlign: 'center', color: '#d9d9d9' }}>→</td>
+                      <td style={{ padding: '4px 12px' }}>
+                        <select
+                          value={mapped || ''}
+                          onChange={e => {
+                            const newMap = { ...currentMapping, [col]: e.target.value };
+                            setPendingMapping(newMap);
+                          }}
+                          style={{
+                            height: 30, padding: '0 8px', border: `1px solid ${mapped ? '#d9d9d9' : '#ff4d4f'}`,
+                            borderRadius: 4, fontSize: 13, outline: 'none', width: '100%', minWidth: 140,
+                            background: '#fff', cursor: 'pointer',
+                            color: mapped ? '#262626' : '#ff4d4f',
+                          }}
+                        >
+                          <option value="">— 未映射 —</option>
+                          {SYSTEM_FIELDS.map(f => (
+                            <option key={f.key} value={f.key}>{f.label}{f.required ? ' *' : ''}</option>
+                          ))}
+                        </select>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+
+          {/* 操作按钮 */}
+          <div style={{ marginTop: 10, display: 'flex', gap: 8 }}>
+            <button
+              onClick={() => onReapply(currentMapping)}
+              style={{ height: 32, padding: '0 16px', border: '1px solid #00BEBE', borderRadius: 4, background: '#00BEBE', color: '#fff', cursor: 'pointer', fontSize: 13, fontWeight: 500 }}
+            >
+              🔄 重新解析数据
+            </button>
+            <button
+              onClick={() => onSaveTemplate(currentMapping)}
+              style={{ height: 32, padding: '0 16px', border: '1px solid #d9d9d9', borderRadius: 4, background: '#fff', color: '#595959', cursor: 'pointer', fontSize: 13 }}
+            >
+              💾 保存为模板
+            </button>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ============ 主组件 ============
 export default function UniversalImport() {
   // 上传状态
@@ -167,6 +292,7 @@ export default function UniversalImport() {
   // 提交状态
   const [submitting, setSubmitting] = useState(false);
   const [submitProgress, setSubmitProgress] = useState(0);
+  const [submitProgressText, setSubmitProgressText] = useState('');
   const [submitResult, setSubmitResult] = useState<{ success: number; failed: number } | null>(null);
 
   // 运单列表
@@ -210,6 +336,7 @@ export default function UniversalImport() {
     setUploading(true);
     setUploadProgress(0);
     setSubmitResult(null);
+    setPendingMapping({});
 
     try {
       setUploadProgress(20);
@@ -232,7 +359,7 @@ export default function UniversalImport() {
       setHeaderHash(json.headerHash || '');
       setHasSavedMapping(json.hasSavedMapping || false);
       setTemplateName(json.templateName || '');
-      setPendingMapping(json.mapping || {});
+      setPendingMapping({});
       setIsManualMapping(false);
       setPreviewData(json.rows || []);
       showToast(`解析成功，共 ${json.totalCount} 条数据${json.totalErrors > 0 ? `，其中 ${json.totalErrors} 条有错误` : ''}`, json.totalErrors > 0 ? 'warning' : 'success');
@@ -243,6 +370,67 @@ export default function UniversalImport() {
       setUploadProgress(0);
     }
   }, []);
+
+  // 手动调整映射后，重新解析数据
+  const handleReapplyMapping = useCallback(async (newMapping: Record<string, string>) => {
+    if (previewData.length === 0) return;
+    setUploading(true);
+    setUploadProgress(0);
+    try {
+      const res = await fetch('/api/waybills/remap', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          rows: previewData,
+          rawHeaders: headers,
+          newMapping,
+        }),
+      });
+      const json = await res.json();
+      if (!res.ok) {
+        showToast(json.error || '重新解析失败', 'error');
+        return;
+      }
+      setMapping(newMapping);
+      setHeaderHash(json.headerHash || '');
+      setHasSavedMapping(json.hasSavedMapping || false);
+      setPendingMapping({});
+      setPreviewData(json.rows || []);
+      showToast(
+        `重新解析完成，共 ${json.totalCount} 条数据${json.totalErrors > 0 ? `，其中 ${json.totalErrors} 条有错误` : ''}`,
+        json.totalErrors > 0 ? 'warning' : 'success'
+      );
+    } catch (e) {
+      showToast('重新解析失败：' + (e instanceof Error ? e.message : String(e)), 'error');
+    } finally {
+      setUploading(false);
+      setUploadProgress(0);
+    }
+  }, [previewData, headers]);
+
+  // 保存映射为模板
+  const handleSaveTemplate = useCallback(async (saveMapping: Record<string, string>) => {
+    if (!headerHash) {
+      showToast('无法保存：缺少模板标识', 'warning');
+      return;
+    }
+    try {
+      const res = await fetch('/api/waybills/mapping', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ headerHash, headerColumns: saveMapping }),
+      });
+      const json = await res.json();
+      if (!res.ok) {
+        showToast(json.error || '保存模板失败', 'error');
+        return;
+      }
+      setHasSavedMapping(true);
+      showToast('映射模板已保存，下次上传相同结构文件将自动应用', 'success');
+    } catch (e) {
+      showToast('保存模板失败', 'error');
+    }
+  }, [headerHash]);
 
   // 单元格修改
   const handleCellChange = useCallback((rowIndex: number, field: string, value: string) => {
@@ -267,7 +455,7 @@ export default function UniversalImport() {
     }
   }, [allSelected]);
 
-  // 提交下单
+  // 提交下单（分批提交 + 真实进度）
   const handleSubmit = useCallback(async () => {
     const selectedRows = previewData.filter(r => r._selected !== false);
     const errors = selectedRows.flatMap((row, i) => {
@@ -285,28 +473,49 @@ export default function UniversalImport() {
 
     setSubmitting(true);
     setSubmitProgress(0);
+    setSubmitProgressText('正在准备提交...');
     setSubmitResult(null);
 
+    const BATCH_SIZE = 100;
+    let totalSuccess = 0;
+    let totalFailed = 0;
+    let done = 0;
+    const total = selectedRows.length;
+
     try {
-      const res = await fetch('/api/waybills/submit', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ rows: selectedRows, skipDuplicates: false }),
-      });
-      const json = await res.json();
-      if (!res.ok) {
-        showToast(json.error || '提交失败', 'error');
-        return;
+      for (let i = 0; i < selectedRows.length; i += BATCH_SIZE) {
+        const batch = selectedRows.slice(i, i + BATCH_SIZE);
+        setSubmitProgressText(`正在提交第 ${done + 1} ~ ${Math.min(done + batch.length, total)} 条，共 ${total} 条...`);
+
+        const res = await fetch('/api/waybills/submit', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ rows: batch, skipDuplicates: false }),
+        });
+        const json = await res.json();
+        if (!res.ok) {
+          showToast(json.error || '提交失败', 'error');
+          return;
+        }
+        totalSuccess += json.success || 0;
+        totalFailed += json.failed || 0;
+        done += batch.length;
+        setSubmitProgress(Math.round((done / total) * 100));
       }
-      setSubmitResult({ success: json.success, failed: json.failed });
-      showToast(`提交完成：成功 ${json.success} 条，失败 ${json.failed} 条`, json.failed > 0 ? 'warning' : 'success');
-      if (json.success > 0) {
-        // 清空预览
+
+      setSubmitProgress(100);
+      setSubmitProgressText(`已完成 ${totalSuccess + totalFailed} / ${total} 条`);
+      setSubmitResult({ success: totalSuccess, failed: totalFailed });
+      showToast(
+        `提交完成：成功 ${totalSuccess} 条${totalFailed > 0 ? `，失败 ${totalFailed} 条` : ''}`,
+        totalFailed > 0 ? 'warning' : 'success'
+      );
+      if (totalSuccess > 0) {
         setPreviewData([]);
         setHeaders([]);
         setMapping({});
         setHeaderHash('');
-        // 刷新列表
+        setPendingMapping({});
         fetchWaybillList(listPage);
       }
     } catch (e) {
@@ -314,8 +523,9 @@ export default function UniversalImport() {
     } finally {
       setSubmitting(false);
       setSubmitProgress(0);
+      setSubmitProgressText('');
     }
-  }, [previewData, listPage]);
+  }, [previewData, listPage, fetchWaybillList]);
 
   // 导出Excel（前端生成）
   const handleExport = useCallback(async () => {
@@ -484,6 +694,20 @@ export default function UniversalImport() {
               )}
             </div>
 
+            {/* 映射关系配置面板 */}
+            {previewData.length > 0 && (
+              <MappingPanel
+                headers={headers}
+                mapping={mapping}
+                pendingMapping={pendingMapping}
+                setPendingMapping={setPendingMapping}
+                onReapply={handleReapplyMapping}
+                onSaveTemplate={handleSaveTemplate}
+                hasSavedMapping={hasSavedMapping}
+                templateName={templateName}
+              />
+            )}
+
             {/* 预览表格 */}
             {previewData.length > 0 && (
               <div style={{ background: '#fff', borderRadius: 8, border: '1px solid #e8e8e8', overflow: 'hidden' }}>
@@ -576,7 +800,14 @@ export default function UniversalImport() {
                     已选 <strong style={{ color: invalidCount > 0 ? '#ff4d4f' : '#52c41a' }}>{totalSelected}</strong> 行，其中 {invalidCount > 0 ? <strong style={{ color: '#ff4d4f' }}>{invalidCount} 行有错误</strong> : <strong style={{ color: '#52c41a' }}>全部有效</strong>}
                   </div>
                   <div style={{ display: 'flex', gap: 8 }}>
-                    {submitting && <ProgressBar value={submitProgress} label="提交中..." />}
+                    {submitting && (
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: 4, minWidth: 200 }}>
+                        <ProgressBar value={submitProgress} label={submitProgressText || '提交中...'} />
+                        <div style={{ fontSize: 12, color: '#8c8c8c', textAlign: 'right' }}>
+                          {submitProgressText}
+                        </div>
+                      </div>
+                    )}
                     <button
                       onClick={handleSubmit}
                       disabled={submitting || invalidCount > 0 || totalSelected === 0}

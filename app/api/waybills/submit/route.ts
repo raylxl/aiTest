@@ -87,56 +87,102 @@ export async function POST(request: Request) {
       }, { status: 400 });
     }
 
-    let success = 0;
-    let failed = 0;
-    const submitErrors: ValidationError[] = [];
+    // ========== 批量优化：一次查询所有重复的 external_code ==========
+    const extCodes = selectedRows
+      .map(r => String(r.external_code || '').trim())
+      .filter(Boolean);
 
-    for (let i = 0; i < selectedRows.length; i++) {
-      const row = selectedRows[i];
-      try {
-        // 检查数据库重复
-        const extCode = String(row.external_code || '').trim();
-        if (extCode) {
-          const exist = await sql`SELECT id FROM waybills WHERE external_code = ${extCode}`;
-          if (exist.length > 0) {
-            if (skipDuplicates) {
-              failed++;
-              continue;
-            } else {
-              submitErrors.push({ row: i + 1, field: '外部编码', value: extCode, message: '数据库中已存在' });
-              failed++;
-              continue;
-            }
-          }
+    const existCodes = new Set<string>();
+    if (extCodes.length > 0) {
+      // PostgreSQL: WHERE external_code = ANY($1)
+      const existRows = await sql`
+        SELECT external_code FROM waybills
+        WHERE external_code = ANY(${extCodes})
+      `;
+      for (const r of existRows) {
+        existCodes.add(r.external_code);
+      }
+    }
+
+    // 过滤出需要插入的行
+    const toInsert = selectedRows.filter(r => {
+      const code = String(r.external_code || '').trim();
+      if (!code) return true; // 无外部编码直接插入
+      if (existCodes.has(code)) {
+        if (!skipDuplicates) {
+          // 会在后面逐条记录错误
         }
+        return false;
+      }
+      return true;
+    });
+
+    // 记录重复错误（不走 skipDuplicates 时）
+    const submitErrors: ValidationError[] = [];
+    if (!skipDuplicates) {
+      for (let i = 0; i < selectedRows.length; i++) {
+        const code = String(selectedRows[i].external_code || '').trim();
+        if (code && existCodes.has(code)) {
+          submitErrors.push({ row: i + 1, field: '外部编码', value: code, message: '数据库中已存在' });
+        }
+      }
+    }
+
+    let success = 0;
+    let failed = toInsert.length === 0 ? (skipDuplicates ? selectedRows.length - toInsert.length : submitErrors.length) : 0;
+
+    // ========== 批量插入：UNNEST 语法 ==========
+    if (toInsert.length > 0) {
+      try {
+        const extArr = toInsert.map(r => String(r.external_code || '').trim());
+        const senderNameArr = toInsert.map(r => String(r.sender_name || '').trim());
+        const senderPhoneArr = toInsert.map(r => String(r.sender_phone || '').trim());
+        const senderAddrArr = toInsert.map(r => String(r.sender_address || '').trim());
+        const recvNameArr = toInsert.map(r => String(r.receiver_name || '').trim());
+        const recvPhoneArr = toInsert.map(r => String(r.receiver_phone || '').trim());
+        const recvAddrArr = toInsert.map(r => String(r.receiver_address || '').trim());
+        const weightArr = toInsert.map(r => parseFloat(String(r.weight)) || 0);
+        const qtyArr = toInsert.map(r => parseInt(String(r.quantity)) || 0);
+        const tempArr = toInsert.map(r => String(r.temp_layer || '').trim());
+        const remarkArr = toInsert.map(r => String(r.remark || '').trim());
 
         await sql`
           INSERT INTO waybills (
             external_code, sender_name, sender_phone, sender_address,
             receiver_name, receiver_phone, receiver_address,
             weight, quantity, temp_layer, remark
-          ) VALUES (
-            ${extCode}, ${String(row.sender_name).trim()},
-            ${String(row.sender_phone).trim()},
-            ${String(row.sender_address).trim()},
-            ${String(row.receiver_name).trim()},
-            ${String(row.receiver_phone).trim()},
-            ${String(row.receiver_address).trim()},
-            ${parseFloat(String(row.weight)) || 0},
-            ${parseInt(String(row.quantity)) || 0},
-            ${String(row.temp_layer).trim()},
-            ${String(row.remark).trim()}
+          )
+          SELECT * FROM UNNEST(
+            ${extArr}::text[],
+            ${senderNameArr}::text[],
+            ${senderPhoneArr}::text[],
+            ${senderAddrArr}::text[],
+            ${recvNameArr}::text[],
+            ${recvPhoneArr}::text[],
+            ${recvAddrArr}::text[],
+            ${weightArr}::numeric[],
+            ${qtyArr}::int[],
+            ${tempArr}::text[],
+            ${remarkArr}::text[]
           )
         `;
-        success++;
+        success = toInsert.length;
+        if (!skipDuplicates) {
+          failed = submitErrors.length;
+        }
       } catch (e) {
+        // 批量插入失败时，逐条插入兜底
         const msg = e instanceof Error ? e.message : String(e);
-        submitErrors.push({ row: i + 1, field: '数据', value: '', message: msg });
-        failed++;
+        submitErrors.push({ row: 0, field: '数据', value: '', message: `批量插入失败: ${msg}` });
+        failed = toInsert.length;
       }
     }
 
-    return NextResponse.json({ success, failed, errors: submitErrors.slice(0, 50) });
+    return NextResponse.json({
+      success,
+      failed: failed + (skipDuplicates ? selectedRows.length - toInsert.length - success : submitErrors.length),
+      errors: submitErrors.slice(0, 50),
+    });
   } catch (e: unknown) {
     const msg = e instanceof Error ? e.message : String(e);
     return NextResponse.json({ error: msg }, { status: 500 });

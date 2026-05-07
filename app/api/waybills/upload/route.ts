@@ -96,7 +96,7 @@ function validateRow(
   row: Record<string, string>,
   rowIndex: number,
   existingCodes: Set<string>,
-  currentBatchCodes: Set<string>
+  currentBatchCodes: Map<string, number>
 ): { errors: Record<string, string>; isValid: boolean } {
   const errors: Record<string, string> = {};
 
@@ -152,9 +152,10 @@ function validateRow(
   const extCode = String(row.external_code || '').trim();
   if (extCode) {
     if (currentBatchCodes.has(extCode)) {
-      errors['external_code'] = '本批次内重复';
+      const firstRow = currentBatchCodes.get(extCode)!;
+      errors['external_code'] = `与第${firstRow}行重复`;
     } else {
-      currentBatchCodes.add(extCode);
+      currentBatchCodes.set(extCode, rowIndex);
     }
   }
 
@@ -251,7 +252,7 @@ export async function POST(request: Request) {
 
     // 检查外部编码是否已存在于数据库
     const externalCodes: string[] = [];
-    const currentBatchCodes = new Set<string>();
+    const currentBatchCodes = new Map<string, number>(); // code → 首次出现的Excel行号
 
     const parsedRows: WaybillRow[] = [];
 
@@ -324,7 +325,7 @@ export async function POST(request: Request) {
       if (row.external_code && existingCodeSet.has(row.external_code)) {
         return {
           ...row,
-          _errors: { ...row._errors, external_code: '已存在（数据库重复）' },
+          _errors: { ...row._errors, external_code: '已存在（数据库已有此编码）' },
           _isValid: false,
         };
       }
