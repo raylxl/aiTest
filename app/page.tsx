@@ -437,7 +437,16 @@ export default function FeeManager() {
                 .filter(item => !HIDDEN_MENUS.includes(item.key))
                 .map(item => {
                   if (item.children) {
-                    const visibleChildren = item.children.filter(c => !HIDDEN_MENUS.includes(c.key));
+                    const visibleChildren = item.children
+                      .filter(c => !HIDDEN_MENUS.includes(c.key))
+                      .map(c => {
+                        if (c.children) {
+                          const visibleGrandchildren = c.children.filter(g => !HIDDEN_MENUS.includes(g.key));
+                          return { ...c, children: visibleGrandchildren };
+                        }
+                        return c;
+                      })
+                      .filter(c => !c.children || c.children.length > 0);
                     if (visibleChildren.length === 0) return null;
                     return <MenuItemEl key={item.key} item={{ ...item, children: visibleChildren }} activeMenu={activeMenu} collapsed={collapsed} expandedKeys={expandedKeys} onSelect={handleSelect} onToggle={handleToggle} />;
                   }
