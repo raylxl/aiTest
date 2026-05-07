@@ -24,13 +24,40 @@ const STATUS_MAP: Record<string, string> = {
   rejected: '已驳回',
 };
 
-// GET /api/waybills/export - 导出全部运单数据为Excel
-export async function GET() {
+// GET /api/waybills/export - 根据查询条件导出运单数据为Excel
+export async function GET(request: Request) {
   try {
     await initDB();
+    const { searchParams } = new URL(request.url);
     const neonSql = getNeonClient();
 
-    const rows = await neonSql`SELECT * FROM waybills ORDER BY id DESC` as unknown as Waybill[];
+    // 构建 WHERE 条件
+    const conditions: string[] = [];
+    const esc = (v: string) => v.replace(/'/g, "''");
+
+    const addLike = (col: string, val: string | null) => {
+      if (!val) return;
+      conditions.push(`${col} ILIKE '%${esc(val)}%'`);
+    };
+
+    addLike('external_code', searchParams.get('external_code'));
+    addLike('sender_name', searchParams.get('sender_name'));
+    addLike('sender_phone', searchParams.get('sender_phone'));
+    addLike('receiver_name', searchParams.get('receiver_name'));
+    addLike('receiver_phone', searchParams.get('receiver_phone'));
+
+    const startDate = searchParams.get('start_date');
+    const endDate = searchParams.get('end_date');
+    if (startDate && endDate) {
+      conditions.push(`created_at >= '${esc(startDate)} 00:00:00' AND created_at <= '${esc(endDate)} 23:59:59'`);
+    } else if (startDate) {
+      conditions.push(`created_at >= '${esc(startDate)} 00:00:00'`);
+    } else if (endDate) {
+      conditions.push(`created_at <= '${esc(endDate)} 23:59:59'`);
+    }
+
+    const whereClause = conditions.length > 0 ? 'WHERE ' + conditions.join(' AND ') : '';
+    const rows = await neonSql.unsafe(`SELECT * FROM waybills ${whereClause} ORDER BY created_at DESC LIMIT 10000`) as unknown as Waybill[];
 
     if (!rows || rows.length === 0) {
       return NextResponse.json({ error: '没有可导出的数据' }, { status: 400 });
@@ -43,7 +70,15 @@ export async function GET() {
       for (const [key, label] of Object.entries(FIELD_LABELS)) {
         let val = r[key as keyof Waybill];
         if (key === 'status') val = STATUS_MAP[String(val)] || val;
-        if (key === 'created_at') val = val ? String(val).replace('T', ' ').slice(0, 19) : '';
+        if (key === 'created_at') {
+          if (val) {
+            const d = new Date(String(val));
+            const p = (n: number) => String(n).padStart(2, '0');
+            val = `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}:${p(d.getSeconds())}`;
+          } else {
+            val = '';
+          }
+        }
         item[label] = val ?? '';
       }
       return item;
