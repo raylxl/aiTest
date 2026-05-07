@@ -72,7 +72,7 @@ export async function POST(request: Request) {
 
     const body = await request.json();
     const { rows, rawHeaders, newMapping } = body as {
-      rows: Record<string, unknown>[];      // 原始行数据（按旧映射）
+      rows: WaybillRow[];                   // 前端传 WaybillRow 格式
       rawHeaders: string[];                  // 原始 Excel 列名顺序
       newMapping: Record<string, string>;   // 新映射 { excel列名: 字段key }
     };
@@ -81,15 +81,7 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: '参数错误' }, { status: 400 });
     }
 
-    // 倒转旧映射：字段key -> excel列名
-    const reverseOldMapping: Record<string, string> = {};
-    // 已有 WaybillRow 里的字段（系统标准字段），需要从 rows 的原始数据中按 rawHeaders 重新取
-
-    // 用 newMapping 重新构建 WaybillRow
-    // newMapping: { excel列名: 字段key }
-    // rows: 已经是 WaybillRow 结构（因为前端传的是当前预览数据）
-
-    // 直接使用 rows 的结构（前端传 WaybillRow 格式）和 newMapping 重算错误
+    // rows 已是 WaybillRow 格式，重新校验并返回
     const remappedRows: WaybillRow[] = [];
     let totalErrors = 0;
     const currentBatchCodes = new Map<string, number>(); // code → 首次出现的Excel行号
