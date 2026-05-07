@@ -192,6 +192,13 @@ function MappingPanel({
               已保存
             </span>
           )}
+          <span
+            onClick={() => { setPreviewData([]); setHeaders([]); setMapping({}); setHeaderHash(''); setPendingMapping({}); setIsManualMapping(false); setSubmitResult(null); setSelectedWaybillIds(new Set()); }}
+            style={{ fontSize: 12, padding: '2px 8px', background: '#fff', color: '#8c8c8c', borderRadius: 4, fontWeight: 400, cursor: 'pointer', border: '1px solid #d9d9d9', marginLeft: 4 }}
+            title="重新上传文件"
+          >
+            🔄 重新上传
+          </span>
         </div>
         <span style={{ color: '#8c8c8c', fontSize: 18 }}>{collapsed ? '▶' : '▼'}</span>
       </div>
@@ -719,51 +726,44 @@ export default function UniversalImport() {
       <div style={{ flex: 1, overflow: 'auto', padding: 16 }}>
         {activeTab === 'import' ? (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-            {/* 上传区 */}
-            <div style={{ background: '#fff', borderRadius: 8, padding: 20, border: '1px solid #e8e8e8' }}>
-              <div style={{ fontSize: 14, fontWeight: 600, color: '#262626', marginBottom: 12 }}>📤 Excel 文件上传</div>
-              <div
-                onDragOver={e => { e.preventDefault(); setDragOver(true); }}
-                onDragLeave={() => setDragOver(false)}
-                onDrop={e => { e.preventDefault(); setDragOver(false); const f = e.dataTransfer.files[0]; if (f) handleFileUpload(f); }}
-                onClick={() => {
-                  const input = document.createElement('input');
-                  input.type = 'file';
-                  input.accept = '.xlsx,.xls';
-                  input.onchange = () => { if (input.files?.[0]) handleFileUpload(input.files[0]); };
-                  input.click();
-                }}
-                style={{
-                  border: `2px dashed ${dragOver ? '#00BEBE' : uploading ? '#00BEBE' : '#d9d9d9'}`,
-                  borderRadius: 8, padding: '40px 20px', textAlign: 'center', cursor: 'pointer',
-                  background: dragOver ? '#e6fffb' : '#fafafa', transition: 'all 0.2s',
-                }}>
-                {uploading ? (
-                  <div style={{ color: '#00BEBE' }}>
-                    <div style={{ animation: 'spin 1s linear infinite', fontSize: 28, marginBottom: 8 }}>⟳</div>
-                    <div style={{ fontSize: 14 }}>正在解析 Excel... {uploadProgress > 0 && `(${uploadProgress}%)`}</div>
-                    {uploadProgress > 0 && <div style={{ height: 4, background: '#e8e8e8', borderRadius: 2, marginTop: 12, overflow: 'hidden' }}><div style={{ height: '100%', width: `${uploadProgress}%`, background: '#00BEBE', transition: 'width 0.3s' }} /></div>}
-                  </div>
-                ) : (
-                  <>
-                    <Icon name="upload" size={32} />
-                    <div style={{ fontSize: 14, color: '#595959', marginTop: 8 }}>
-                      拖拽 Excel 文件到此处，或<span style={{ color: '#00BEBE', fontWeight: 600 }}>点击选择文件</span>
+            {/* 上传区（仅无预览数据时显示） */}
+            {previewData.length === 0 && (
+              <div style={{ background: '#fff', borderRadius: 8, padding: 20, border: '1px solid #e8e8e8' }}>
+                <div style={{ fontSize: 14, fontWeight: 600, color: '#262626', marginBottom: 12 }}>📤 Excel 文件上传</div>
+                <div
+                  onDragOver={e => { e.preventDefault(); setDragOver(true); }}
+                  onDragLeave={() => setDragOver(false)}
+                  onDrop={e => { e.preventDefault(); setDragOver(false); const f = e.dataTransfer.files[0]; if (f) handleFileUpload(f); }}
+                  onClick={() => {
+                    const input = document.createElement('input');
+                    input.type = 'file';
+                    input.accept = '.xlsx,.xls';
+                    input.onchange = () => { if (input.files?.[0]) handleFileUpload(input.files[0]); };
+                    input.click();
+                  }}
+                  style={{
+                    border: `2px dashed ${dragOver ? '#00BEBE' : uploading ? '#00BEBE' : '#d9d9d9'}`,
+                    borderRadius: 8, padding: '40px 20px', textAlign: 'center', cursor: 'pointer',
+                    background: dragOver ? '#e6fffb' : '#fafafa', transition: 'all 0.2s',
+                  }}>
+                  {uploading ? (
+                    <div style={{ color: '#00BEBE' }}>
+                      <div style={{ animation: 'spin 1s linear infinite', fontSize: 28, marginBottom: 8 }}>⟳</div>
+                      <div style={{ fontSize: 14 }}>正在解析 Excel... {uploadProgress > 0 && `(${uploadProgress}%)`}</div>
+                      {uploadProgress > 0 && <div style={{ height: 4, background: '#e8e8e8', borderRadius: 2, marginTop: 12, overflow: 'hidden' }}><div style={{ height: '100%', width: `${uploadProgress}%`, background: '#00BEBE', transition: 'width 0.3s' }} /></div>}
                     </div>
-                    <div style={{ fontSize: 12, color: '#bfbfbf', marginTop: 4 }}>支持 .xlsx / .xls 格式，拖拽或点击上传</div>
-                  </>
-                )}
-              </div>
-
-              {templateName && (
-                <div style={{ marginTop: 12, fontSize: 13, color: '#8c8c8c', display: 'flex', alignItems: 'center', gap: 8 }}>
-                  <Icon name="check" size={14} />
-                  <span>检测到模板：<strong style={{ color: '#00BEBE' }}>{templateName}</strong>
-                    {hasSavedMapping && <span style={{ marginLeft: 8, fontSize: 12, padding: '2px 6px', background: '#f6ffed', color: '#52c41a', borderRadius: 4 }}>已保存映射</span>}
-                  </span>
+                  ) : (
+                    <>
+                      <Icon name="upload" size={32} />
+                      <div style={{ fontSize: 14, color: '#595959', marginTop: 8 }}>
+                        拖拽 Excel 文件到此处，或<span style={{ color: '#00BEBE', fontWeight: 600 }}>点击选择文件</span>
+                      </div>
+                      <div style={{ fontSize: 12, color: '#bfbfbf', marginTop: 4 }}>支持 .xlsx / .xls 格式，拖拽或点击上传</div>
+                    </>
+                  )}
                 </div>
-              )}
-            </div>
+              </div>
+            )}
 
             {/* 映射关系配置面板 */}
             {previewData.length > 0 && (
@@ -959,7 +959,7 @@ export default function UniversalImport() {
                   onMouseLeave={e => { if (!deleteLoading && selectedWaybillIds.size > 0) (e.currentTarget as HTMLButtonElement).style.background = '#ff4d4f'; }}
                 >
                   <Icon name="delete" size={13} />
-                  {deleteLoading ? '删除中...' : `批量删除${selectedWaybillIds.size > 0 ? ` (${selectedWaybillIds.size})` : ''}`}
+                  {deleteLoading ? '删除中...' : `删除${selectedWaybillIds.size > 0 ? ` (${selectedWaybillIds.size})` : ''}`}
                 </button>
               </div>
             </div>
