@@ -24,7 +24,6 @@ export async function GET(request: Request) {
     const pageSize = Math.min(100, Math.max(1, query.pageSize || 10));
     const offset = (page - 1) * pageSize;
 
-    // 提取非空过滤值
     const ext = query.external_code?.trim() || '';
     const sname = query.sender_name?.trim() || '';
     const sphone = query.sender_phone?.trim() || '';
@@ -33,38 +32,32 @@ export async function GET(request: Request) {
     const sdate = query.start_date?.trim() || '';
     const edate = query.end_date?.trim() || '';
 
-    const endDateFull = edate ? edate + ' 23:59:59' : '';
+    // 动态构建查询：只拼接有值的条件，避免空值传给 PG
+    let total = 0;
+    let data: Record<string, unknown>[] = [];
 
-    // 用 sql 模板标签拼接（保持类型安全）
-    const countRows = await sql`
-      SELECT COUNT(*) as ct FROM waybills
-      WHERE
-        (${ext} = '' OR external_code ILIKE ${'%' + ext + '%'})
-        AND (${sname} = '' OR sender_name ILIKE ${'%' + sname + '%'})
-        AND (${sphone} = '' OR sender_phone ILIKE ${'%' + sphone + '%'})
-        AND (${rname} = '' OR receiver_name ILIKE ${'%' + rname + '%'})
-        AND (${rphone} = '' OR receiver_phone ILIKE ${'%' + rphone + '%'})
-        AND (${sdate} = '' OR created_at >= ${sdate}::date)
-        AND (${endDateFull} = '' OR created_at <= ${endDateFull}::timestamp)
-    `;
-    const total = parseInt(String((countRows[0] as { ct: unknown })?.ct || '0'));
+    // 构建基表
+    const baseWhere = [];
+    if (ext)   baseWhere.push(sql` AND external_code ILIKE ${'%' + ext + '%'}`);
+    if (sname)  baseWhere.push(sql` AND sender_name ILIKE ${'%' + sname + '%'}`);
+    if (sphone) baseWhere.push(sql` AND sender_phone ILIKE ${'%' + sphone + '%'}`);
+    if (rname)  baseWhere.push(sql` AND receiver_name ILIKE ${'%' + rname + '%'}`);
+    if (rphone) baseWhere.push(sql` AND receiver_phone ILIKE ${'%' + rphone + '%'}`);
+    if (sdate)  baseWhere.push(sql` AND created_at >= ${sdate}::date`);
+    if (edate)  baseWhere.push(sql` AND created_at <= ${edate + ' 23:59:59'}::timestamp`);
 
-    const dataRows = await sql`
-      SELECT * FROM waybills
-      WHERE
-        (${ext} = '' OR external_code ILIKE ${'%' + ext + '%'})
-        AND (${sname} = '' OR sender_name ILIKE ${'%' + sname + '%'})
-        AND (${sphone} = '' OR sender_phone ILIKE ${'%' + sphone + '%'})
-        AND (${rname} = '' OR receiver_name ILIKE ${'%' + rname + '%'})
-        AND (${rphone} = '' OR receiver_phone ILIKE ${'%' + rphone + '%'})
-        AND (${sdate} = '' OR created_at >= ${sdate}::date)
-        AND (${endDateFull} = '' OR created_at <= ${endDateFull}::timestamp)
-      ORDER BY created_at DESC
-      LIMIT ${pageSize} OFFSET ${offset}
-    `;
+    const whereFrag = baseWhere.length > 0
+      ? sql`WHERE 1=1 ${baseWhere[0]}${baseWhere.slice(1).reduce((a, b) => sql`${a} ${b}`, sql``)}`
+      : sql`WHERE 1=1`;
+
+    const countRows = await sql`SELECT COUNT(*) as ct FROM waybills ${whereFrag}`;
+    total = parseInt(String((countRows[0] as { ct: unknown })?.ct || '0'));
+
+    const dataRows = await sql`SELECT * FROM waybills ${whereFrag} ORDER BY created_at DESC LIMIT ${pageSize} OFFSET ${offset}`;
+    data = dataRows as Record<string, unknown>[];
 
     return NextResponse.json({
-      data: dataRows,
+      data,
       total,
       page,
       pageSize,
@@ -87,7 +80,6 @@ export async function DELETE(request: Request) {
       return NextResponse.json({ error: '缺少 ids 参数' }, { status: 400 });
     }
 
-    // neon sql 不支持 IN 拼接，用 sql 函数 unsafe 处理
     const { getNeonClient } = await import('@/lib/db');
     const neonSql = getNeonClient();
     const idList = ids.map((id) => String(id)).join(',');
