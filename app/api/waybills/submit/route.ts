@@ -1,8 +1,9 @@
 import { NextResponse } from 'next/server';
-import sql, { initDB, getNeonClient } from '@/lib/db';
+import sql, { initDB } from '@/lib/db';
 import type { WaybillRow, ValidationError } from '@/lib/waybill-types';
 
 const TEMP_LAYER_OPTIONS = ['常温', '冷藏', '冷冻'];
+const BATCH_SIZE = 100; // 每批插入条数
 
 // 校验单行
 function validateRow(row: WaybillRow, rowIndex: number): ValidationError[] {
@@ -21,9 +22,7 @@ function validateRow(row: WaybillRow, rowIndex: number): ValidationError[] {
 
   for (const f of reqFields) {
     const val = String(row[f.k as keyof WaybillRow] || '').trim();
-    if (!val) {
-      errors.push({ row: rowIndex, field: f.l, value: val, message: '不能为空' });
-    }
+    if (!val) errors.push({ row: rowIndex, field: f.l, value: val, message: '不能为空' });
   }
 
   const phoneFields = [
@@ -55,6 +54,53 @@ function validateRow(row: WaybillRow, rowIndex: number): ValidationError[] {
   return errors;
 }
 
+// 单条插入（使用 sql 模板，参数化防注入）
+async function insertRow(
+  r: WaybillRow,
+  isOverwrite: boolean
+): Promise<{ success: boolean; error?: string }> {
+  const external_code = String(r.external_code || '').trim();
+  const onConflict = isOverwrite
+    ? sql`ON CONFLICT (external_code) DO UPDATE SET
+        sender_name = EXCLUDED.sender_name,
+        sender_phone = EXCLUDED.sender_phone,
+        sender_address = EXCLUDED.sender_address,
+        receiver_name = EXCLUDED.receiver_name,
+        receiver_phone = EXCLUDED.receiver_phone,
+        receiver_address = EXCLUDED.receiver_address,
+        weight = EXCLUDED.weight,
+        quantity = EXCLUDED.quantity,
+        temp_layer = EXCLUDED.temp_layer,
+        remark = EXCLUDED.remark`
+    : sql`ON CONFLICT (external_code) DO NOTHING`;
+
+  try {
+    await sql`
+      INSERT INTO waybills (
+        external_code, sender_name, sender_phone, sender_address,
+        receiver_name, receiver_phone, receiver_address,
+        weight, quantity, temp_layer, remark
+      ) VALUES (
+        ${external_code || null},
+        ${String(r.sender_name || '').trim()},
+        ${String(r.sender_phone || '').trim()},
+        ${String(r.sender_address || '').trim()},
+        ${String(r.receiver_name || '').trim()},
+        ${String(r.receiver_phone || '').trim()},
+        ${String(r.receiver_address || '').trim()},
+        ${parseFloat(String(r.weight)) || 0},
+        ${parseInt(String(r.quantity)) || 0},
+        ${String(r.temp_layer || '').trim()},
+        ${String(r.remark || '').trim()}
+      )
+      ${onConflict}
+    `;
+    return { success: true };
+  } catch (e) {
+    return { success: false, error: e instanceof Error ? e.message : String(e) };
+  }
+}
+
 // POST /api/waybills/submit
 export async function POST(request: Request) {
   try {
@@ -65,17 +111,16 @@ export async function POST(request: Request) {
       rows: WaybillRow[];
       skipDuplicates?: boolean;
     };
-    // overwrite 模式下 skipDuplicates=false，改为真正覆盖
     const isOverwrite = !skipDuplicates;
 
     if (!Array.isArray(rows) || rows.length === 0) {
       return NextResponse.json({ error: '没有可提交的数据' }, { status: 400 });
     }
 
-    // 过滤掉未选中的行
+    // 过滤未选中行
     const selectedRows = rows.filter(r => r._selected !== false);
 
-    // 全部重新校验
+    // 重新校验
     const allErrors: ValidationError[] = [];
     for (let i = 0; i < selectedRows.length; i++) {
       const errs = validateRow(selectedRows[i], i + 1);
@@ -89,111 +134,74 @@ export async function POST(request: Request) {
       }, { status: 400 });
     }
 
-    // ========== 批量优化：一次查询所有重复的 external_code ==========
+    // 查询数据库中已有的 external_code
     const extCodes = selectedRows
       .map(r => String(r.external_code || '').trim())
       .filter(Boolean);
 
     const existCodes = new Set<string>();
     if (extCodes.length > 0) {
-      // PostgreSQL: WHERE external_code = ANY($1)
-      const existRows = await sql`
-        SELECT external_code FROM waybills
-        WHERE external_code = ANY(${extCodes})
-      `;
-      for (const r of existRows) {
-        existCodes.add(String(r.external_code));
+      try {
+        const existRows = await sql`
+          SELECT external_code FROM waybills
+          WHERE external_code = ANY(${extCodes})
+        `;
+        for (const r of existRows) {
+          existCodes.add(String(r.external_code));
+        }
+      } catch {
+        // 查询失败不影响继续
       }
     }
 
-    // 过滤出需要插入的行
+    // 确定要插入的行
     const toInsert = selectedRows.filter(r => {
       const code = String(r.external_code || '').trim();
-      if (!code) return true; // 无外部编码直接插入
-      if (existCodes.has(code)) {
-        return isOverwrite; // overwrite 模式下也插入（后面用 ON CONFLICT DO UPDATE）
-      }
+      if (!code) return true;
+      if (existCodes.has(code)) return isOverwrite;
       return true;
     });
 
-    // 记录重复错误（skip 模式下且有重复时记录）
-    const submitErrors: ValidationError[] = [];
+    // 记录 skip 模式下的重复
+    const skipErrors: ValidationError[] = [];
     if (!isOverwrite) {
-      for (let i = 0; i < selectedRows.length; i++) {
-        const code = String(selectedRows[i].external_code || '').trim();
+      selectedRows.forEach((r, i) => {
+        const code = String(r.external_code || '').trim();
         if (code && existCodes.has(code)) {
-          submitErrors.push({ row: i + 1, field: '外部编码', value: code, message: '数据库中已存在' });
+          skipErrors.push({ row: i + 1, field: '外部编码', value: code, message: '数据库中已存在，已跳过' });
         }
-      }
+      });
     }
 
+    // 分批插入
     let success = 0;
-    let failed = toInsert.length === 0 ? (skipDuplicates ? selectedRows.length - toInsert.length : submitErrors.length) : 0;
+    let failed = 0;
+    const batchErrors: ValidationError[] = [];
 
-    // ========== 批量插入：UNNEST 语法，支持 ON CONFLICT DO UPDATE ==========
-    if (toInsert.length > 0) {
-      try {
-        const extArr = toInsert.map(r => String(r.external_code || '').trim());
-        const senderNameArr = toInsert.map(r => String(r.sender_name || '').trim());
-        const senderPhoneArr = toInsert.map(r => String(r.sender_phone || '').trim());
-        const senderAddrArr = toInsert.map(r => String(r.sender_address || '').trim());
-        const recvNameArr = toInsert.map(r => String(r.receiver_name || '').trim());
-        const recvPhoneArr = toInsert.map(r => String(r.receiver_phone || '').trim());
-        const recvAddrArr = toInsert.map(r => String(r.receiver_address || '').trim());
-        const weightArr = toInsert.map(r => parseFloat(String(r.weight)) || 0);
-        const qtyArr = toInsert.map(r => parseInt(String(r.quantity)) || 0);
-        const tempArr = toInsert.map(r => String(r.temp_layer || '').trim());
-        const remarkArr = toInsert.map(r => String(r.remark || '').trim());
-
-        // overwrite 模式：ON CONFLICT DO UPDATE；skip 模式：ON CONFLICT DO NOTHING
-        const onConflictAction = isOverwrite
-          ? `ON CONFLICT (external_code) DO UPDATE SET
-               sender_name=EXCLUDED.sender_name, sender_phone=EXCLUDED.sender_phone,
-               sender_address=EXCLUDED.sender_address, receiver_name=EXCLUDED.receiver_name,
-               receiver_phone=EXCLUDED.receiver_phone, receiver_address=EXCLUDED.receiver_address,
-               weight=EXCLUDED.weight, quantity=EXCLUDED.quantity,
-               temp_layer=EXCLUDED.temp_layer, remark=EXCLUDED.remark`
-          : `ON CONFLICT (external_code) DO NOTHING`;
-
-        // 拼接含 UNNEST + ON CONFLICT 的 INSERT（onConflictAction 是受控字符串，直接内联）
-        const insertSQL = `
-          INSERT INTO waybills (
-            external_code, sender_name, sender_phone, sender_address,
-            receiver_name, receiver_phone, receiver_address,
-            weight, quantity, temp_layer, remark
-          )
-          SELECT * FROM UNNEST(
-            '${extArr.join("','")}'::text[],
-            '${senderNameArr.join("','")}'::text[],
-            '${senderPhoneArr.join("','")}'::text[],
-            '${senderAddrArr.join("','")}'::text[],
-            '${recvNameArr.join("','")}'::text[],
-            '${recvPhoneArr.join("','")}'::text[],
-            '${recvAddrArr.join("','")}'::text[],
-            ARRAY[${weightArr.join(",")}]::numeric[],
-            ARRAY[${qtyArr.join(",")}]::int[],
-            '${tempArr.join("','")}'::text[],
-            '${remarkArr.join("','")}'::text[]
-          )
-          ${onConflictAction}
-        `;
-        await getNeonClient().unsafe(insertSQL);
-        success = toInsert.length;
-        if (!isOverwrite) {
-          failed = submitErrors.length;
+    for (let i = 0; i < toInsert.length; i += BATCH_SIZE) {
+      const batch = toInsert.slice(i, i + BATCH_SIZE);
+      const promises = batch.map((r, bi) => insertRow(r, isOverwrite));
+      const results = await Promise.all(promises);
+      results.forEach((res, bi) => {
+        if (res.success) {
+          success++;
+        } else {
+          failed++;
+          if (batchErrors.length < 50) {
+            batchErrors.push({ row: i + bi + 1, field: '数据', value: '', message: res.error || '插入失败' });
+          }
         }
-      } catch (e) {
-        // 批量插入失败时，逐条插入兜底
-        const msg = e instanceof Error ? e.message : String(e);
-        submitErrors.push({ row: 0, field: '数据', value: '', message: `批量插入失败: ${msg}` });
-        failed = toInsert.length;
-      }
+      });
     }
+
+    // skip 模式下，重复的不算失败
+    const finalFailed = isOverwrite ? failed : skipErrors.length;
+    const finalSuccess = isOverwrite ? success : toInsert.length - skipErrors.length;
 
     return NextResponse.json({
-      success,
-      failed: failed + (isOverwrite ? 0 : submitErrors.length),
-      errors: submitErrors.slice(0, 50),
+      success: finalSuccess,
+      failed: finalFailed,
+      errors: [...batchErrors, ...skipErrors].slice(0, 50),
     });
   } catch (e: unknown) {
     const msg = e instanceof Error ? e.message : String(e);
