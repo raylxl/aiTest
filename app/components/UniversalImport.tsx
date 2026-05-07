@@ -28,6 +28,68 @@ function Toast({ text, type, onClose }: { text: string; type: 'success' | 'error
   );
 }
 
+// ============ EditableCell 组件 ============
+function EditableCell({
+  value, rowIndex, field, onChange, error, options
+}: {
+  value: string; rowIndex: number; field: string; onChange: (rowIdx: number, field: string, value: string) => void;
+  error?: string; options?: readonly string[];
+}) {
+  const [editing, setEditing] = useState(false);
+  const [editVal, setEditVal] = useState(value);
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => { setEditVal(value); }, [value]);
+
+  const commitEdit = () => {
+    setEditing(false);
+    if (editVal !== value) onChange(rowIndex, field, editVal);
+  };
+
+  if (options) {
+    return editing ? (
+      <select
+        value={editVal} onChange={e => { setEditVal(e.target.value); onChange(rowIndex, field, e.target.value); setEditing(false); }}
+        autoFocus style={{ width: '100%', height: 32, border: '1px solid #00BEBE', borderRadius: 4, padding: '0 6px', fontSize: 13, outline: 'none', background: '#fff' }}
+      >
+        <option value="">请选择</option>
+        {options.map(o => <option key={o} value={o}>{o}</option>)}
+      </select>
+    ) : (
+      <div onClick={() => setEditing(true)} style={{
+        padding: '0 8px', minHeight: 32, lineHeight: '32px', cursor: 'text',
+        background: error ? '#fff1f0' : value ? '#fff' : '#fafafa',
+        border: `1px solid ${error ? '#ffccc7' : 'transparent'}`, borderRadius: 4, fontSize: 13,
+        color: error ? '#ff4d4f' : '#262626',
+      }}>
+        {value || <span style={{ color: '#bfbfbf' }}>点击选择</span>}
+      </div>
+    );
+  }
+
+  return editing ? (
+    <input
+      ref={inputRef} value={editVal} onChange={e => setEditVal(e.target.value)}
+      onBlur={commitEdit} onKeyDown={e => { if (e.key === 'Enter') commitEdit(); if (e.key === 'Escape') { setEditVal(value); setEditing(false); } }}
+      style={{ width: '100%', height: 32, border: '1px solid #00BEBE', borderRadius: 4, padding: '0 6px', fontSize: 13, outline: 'none', boxSizing: 'border-box' }}
+    />
+  ) : (
+    <div onClick={() => setEditing(true)} style={{
+      padding: '0 8px', minHeight: 32, lineHeight: '32px', cursor: 'text',
+      background: error ? '#fff1f0' : '#fff',
+      border: `1px solid ${error ? '#ffccc7' : 'transparent'}`, borderRadius: 4, fontSize: 13,
+      color: error ? '#ff4d4f' : '#262626', position: 'relative',
+    }}>
+      {value || <span style={{ color: '#bfbfbf' }}>点击编辑</span>}
+      {error && (
+        <span style={{ position: 'absolute', bottom: -18, left: 0, fontSize: 11, color: '#ff4d4f', whiteSpace: 'nowrap', background: '#fff', border: '1px solid #ffccc7', borderRadius: 3, padding: '1px 4px', zIndex: 10, cursor: 'default' }} title={`错误：${error}`}>
+          {error}
+        </span>
+      )}
+    </div>
+  );
+}
+
 // ============ MappingPanel 组件 ============
 function MappingPanel({
   headers, mapping, pendingMapping, setPendingMapping,
@@ -150,6 +212,21 @@ function MappingPanel({
           </div>
         </div>
       )}
+    </div>
+  );
+}
+
+// ============ ProgressBar 组件 ============
+function ProgressBar({ value, label }: { value: number; label: string }) {
+  return (
+    <div style={{ margin: '8px 0' }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13, color: '#595959', marginBottom: 4 }}>
+        <span>{label}</span>
+        <span>{value}%</span>
+      </div>
+      <div style={{ height: 8, background: '#f0f0f0', borderRadius: 4, overflow: 'hidden' }}>
+        <div style={{ height: '100%', width: `${value}%`, background: '#00BEBE', borderRadius: 4, transition: 'width 0.3s' }} />
+      </div>
     </div>
   );
 }
