@@ -69,3 +69,25 @@ export async function GET(request: Request) {
     return NextResponse.json({ error: msg }, { status: 500 });
   }
 }
+
+// DELETE /api/waybills - 批量删除运单
+export async function DELETE(request: Request) {
+  try {
+    await initDB();
+    const body = await request.json();
+    const { ids } = body as { ids: number[] };
+
+    if (!ids || !Array.isArray(ids) || ids.length === 0) {
+      return NextResponse.json({ error: '缺少 ids 参数' }, { status: 400 });
+    }
+
+    const placeholders = ids.map((_, i) => `$${i + 1}`).join(',');
+    const result = await sql`DELETE FROM waybills WHERE id IN (${sql.join(ids.map(id => sql`${id}`), sql`, `)}) RETURNING id`;
+    const deletedCount = result.length;
+
+    return NextResponse.json({ success: true, deletedCount });
+  } catch (e: unknown) {
+    const msg = e instanceof Error ? e.message : String(e);
+    return NextResponse.json({ error: msg }, { status: 500 });
+  }
+}

@@ -301,6 +301,8 @@ export default function UniversalImport() {
   const [listPage, setListPage] = useState(1);
   const [listTotal, setListTotal] = useState(0);
   const [listQuery, setListQuery] = useState({ external_code: '', receiver_name: '', start_date: '', end_date: '' });
+  const [selectedWaybillIds, setSelectedWaybillIds] = useState<Set<number>>(new Set());
+  const [deleteLoading, setDeleteLoading] = useState(false);
 
   // Toast
   const [toast, setToast] = useState<{ text: string; type: 'success' | 'error' | 'warning' } | null>(null);
@@ -600,6 +602,71 @@ export default function UniversalImport() {
     setPreviewData(prev => prev.filter((_, i) => i !== rowIndex));
   }, []);
 
+  // 运单列表勾选逻辑
+  const toggleWaybillSelect = useCallback((id: number) => {
+    setSelectedWaybillIds(prev => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }, []);
+
+  const toggleAllWaybillSelect = useCallback((checked: boolean) => {
+    if (checked) {
+      setSelectedWaybillIds(new Set(waybillList.map(w => w.id)));
+    } else {
+      setSelectedWaybillIds(new Set());
+    }
+  }, [waybillList]);
+
+  // 批量删除运单
+  const handleBatchDelete = useCallback(async () => {
+    if (selectedWaybillIds.size === 0) return;
+    if (!confirm(`确定删除选中的 ${selectedWaybillIds.size} 条运单吗？删除后不可恢复。`)) return;
+    setDeleteLoading(true);
+    try {
+      const res = await fetch('/api/waybills', {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ids: Array.from(selectedWaybillIds) }),
+      });
+      const json = await res.json();
+      if (res.ok) {
+        showToast(`成功删除 ${json.deletedCount} 条运单`, 'success');
+        setSelectedWaybillIds(new Set());
+        fetchWaybillList(listPage);
+      } else {
+        showToast(json.error || '删除失败', 'error');
+      }
+    } finally {
+      setDeleteLoading(false);
+    }
+  }, [selectedWaybillIds, listPage, fetchWaybillList]);
+
+  // 单条删除运单
+  const handleSingleDelete = useCallback(async (id: number) => {
+    if (!confirm('确定删除该运单吗？')) return;
+    setDeleteLoading(true);
+    try {
+      const res = await fetch('/api/waybills', {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ids: [id] }),
+      });
+      const json = await res.json();
+      if (res.ok) {
+        showToast('删除成功', 'success');
+        setSelectedWaybillIds(prev => { const next = new Set(prev); next.delete(id); return next; });
+        fetchWaybillList(listPage);
+      } else {
+        showToast(json.error || '删除失败', 'error');
+      }
+    } finally {
+      setDeleteLoading(false);
+    }
+  }, [listPage, fetchWaybillList]);
+
   // 新增空行
   const addEmptyRow = useCallback(() => {
     const newRow: WaybillRow = {
@@ -879,27 +946,62 @@ export default function UniversalImport() {
 
             {/* 列表 */}
             <div style={{ background: '#fff', borderRadius: 8, border: '1px solid #e8e8e8', overflow: 'hidden' }}>
-              <div style={{ padding: '12px 16px', borderBottom: '1px solid #f0f0f0', fontSize: 14, fontWeight: 600, color: '#262626' }}>
-                运单列表 <span style={{ fontWeight: 400, color: '#8c8c8c' }}>（共 {listTotal} 条）</span>
+              <div style={{ padding: '12px 16px', borderBottom: '1px solid #f0f0f0', fontSize: 14, fontWeight: 600, color: '#262626', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                <div>
+                  运单列表 <span style={{ fontWeight: 400, color: '#8c8c8c' }}>（共 {listTotal} 条）</span>
+                  {selectedWaybillIds.size > 0 && (
+                    <span style={{ marginLeft: 12, fontSize: 13, color: '#1677ff' }}>已选 {selectedWaybillIds.size} 条</span>
+                  )}
+                </div>
+                {selectedWaybillIds.size > 0 && (
+                  <button
+                    onClick={handleBatchDelete}
+                    disabled={deleteLoading}
+                    style={{
+                      height: 30, padding: '0 14px', border: 'none', borderRadius: 4,
+                      background: '#ff4d4f', color: '#fff', cursor: deleteLoading ? 'not-allowed' : 'pointer',
+                      fontSize: 13, display: 'flex', alignItems: 'center', gap: 4,
+                      opacity: deleteLoading ? 0.6 : 1,
+                    }}
+                    onMouseEnter={e => { if (!deleteLoading) (e.currentTarget as HTMLButtonElement).style.background = '#ff7875'; }}
+                    onMouseLeave={e => { if (!deleteLoading) (e.currentTarget as HTMLButtonElement).style.background = '#ff4d4f'; }}
+                  >
+                    <Icon name="delete" size={13} />
+                    {deleteLoading ? '删除中...' : `批量删除${selectedWaybillIds.size > 0 ? ` (${selectedWaybillIds.size})` : ''}`}
+                  </button>
+                )}
               </div>
               <div style={{ overflowX: 'auto' }}>
                 <table style={{ width: 'max-content', minWidth: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
                   <thead>
                     <tr style={{ background: '#fafafa' }}>
+                      <th style={{ padding: '8px 10px', textAlign: 'center', borderBottom: '1px solid #e8e8e8', whiteSpace: 'nowrap', fontWeight: 600, color: '#595959', width: 40 }}>
+                        <input type="checkbox"
+                          checked={waybillList.length > 0 && selectedWaybillIds.size === waybillList.length}
+                          ref={el => { if (el) el.indeterminate = selectedWaybillIds.size > 0 && selectedWaybillIds.size < waybillList.length; }}
+                          onChange={e => toggleAllWaybillSelect(e.target.checked)}
+                          style={{ cursor: 'pointer', width: 14, height: 14 }} />
+                      </th>
                       {['ID', '外部编码', '发件人', '发件人电话', '发件人地址', '收件人', '收件人电话', '收件人地址', '重量', '件数', '温层', '备注', '状态', '创建时间'].map(h => (
                         <th key={h} style={{ padding: '8px 10px', textAlign: 'left', borderBottom: '1px solid #e8e8e8', whiteSpace: 'nowrap', fontWeight: 600, color: '#595959' }}>{h}</th>
                       ))}
+                      <th style={{ padding: '8px 10px', textAlign: 'center', borderBottom: '1px solid #e8e8e8', whiteSpace: 'nowrap', fontWeight: 600, color: '#595959', width: 60 }}>操作</th>
                     </tr>
                   </thead>
                   <tbody>
                     {listLoading ? (
-                      <tr><td colSpan={14} style={{ padding: 40, textAlign: 'center', color: '#8c8c8c' }}>加载中...</td></tr>
+                      <tr><td colSpan={16} style={{ padding: 40, textAlign: 'center', color: '#8c8c8c' }}>加载中...</td></tr>
                     ) : waybillList.length === 0 ? (
-                      <tr><td colSpan={14} style={{ padding: 40, textAlign: 'center', color: '#8c8c8c' }}>暂无数据</td></tr>
+                      <tr><td colSpan={16} style={{ padding: 40, textAlign: 'center', color: '#8c8c8c' }}>暂无数据</td></tr>
                     ) : waybillList.map(w => (
-                      <tr key={w.id} style={{ borderBottom: '1px solid #f0f0f0' }}
-                        onMouseEnter={e => (e.currentTarget.style.background = '#fafafa')}
-                        onMouseLeave={e => (e.currentTarget.style.background = '#fff')}>
+                      <tr key={w.id} style={{ borderBottom: '1px solid #f0f0f0', background: selectedWaybillIds.has(w.id) ? '#fff1f0' : '#fff' }}
+                        onMouseEnter={e => { if (!selectedWaybillIds.has(w.id)) e.currentTarget.style.background = '#fafafa'; }}
+                        onMouseLeave={e => { if (!selectedWaybillIds.has(w.id)) e.currentTarget.style.background = '#fff'; }}>
+                        <td style={{ padding: '8px 10px', textAlign: 'center' }}>
+                          <input type="checkbox" checked={selectedWaybillIds.has(w.id)}
+                            onChange={() => toggleWaybillSelect(w.id)}
+                            style={{ cursor: 'pointer', width: 14, height: 14 }} />
+                        </td>
                         <td style={{ padding: '8px 10px', color: '#8c8c8c', whiteSpace: 'nowrap' }}>{w.id}</td>
                         <td style={{ padding: '8px 10px', whiteSpace: 'nowrap' }}>{w.external_code || '-'}</td>
                         <td style={{ padding: '8px 10px', whiteSpace: 'nowrap' }}>{w.sender_name}</td>
@@ -918,6 +1020,23 @@ export default function UniversalImport() {
                           <span style={{ padding: '2px 8px', borderRadius: 4, fontSize: 12, background: '#f6ffed', color: '#52c41a' }}>已提交</span>
                         </td>
                         <td style={{ padding: '8px 10px', color: '#8c8c8c', whiteSpace: 'nowrap' }}>{w.created_at ? new Date(w.created_at).toLocaleString('zh-CN') : '-'}</td>
+                        <td style={{ padding: '8px 10px', textAlign: 'center' }}>
+                          <button
+                            onClick={() => handleSingleDelete(w.id)}
+                            disabled={deleteLoading}
+                            style={{
+                              background: 'none', border: '1px solid #ffccc7', borderRadius: 4,
+                              color: '#ff4d4f', cursor: deleteLoading ? 'not-allowed' : 'pointer',
+                              fontSize: 12, padding: '2px 8px', display: 'inline-flex', alignItems: 'center', gap: 3,
+                              opacity: deleteLoading ? 0.5 : 1,
+                            }}
+                            onMouseEnter={e => { if (!deleteLoading) { (e.currentTarget as HTMLButtonElement).style.background = '#fff1f0'; (e.currentTarget as HTMLButtonElement).style.borderColor = '#ff4d4f'; } }}
+                            onMouseLeave={e => { if (!deleteLoading) { (e.currentTarget as HTMLButtonElement).style.background = 'none'; (e.currentTarget as HTMLButtonElement).style.borderColor = '#ffccc7'; } }}
+                          >
+                            <Icon name="delete" size={11} />
+                            删除
+                          </button>
+                        </td>
                       </tr>
                     ))}
                   </tbody>
