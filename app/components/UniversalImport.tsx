@@ -8,6 +8,45 @@ import Icon from './Icon';
 // ============ SVG 图标 ============
 // Icon 已提取到 ./Icon.tsx
 
+// ============ 校验函数 ============
+function validateRow(row: WaybillRow): Record<string, string> {
+  const errors: Record<string, string> = {};
+  const reqFields = ['sender_name', 'sender_phone', 'sender_address',
+    'receiver_name', 'receiver_phone', 'receiver_address', 'weight', 'quantity', 'temp_layer'];
+
+  for (const f of reqFields) {
+    const val = String(row[f as keyof WaybillRow] || '').trim();
+    if (!val) {
+      errors[f] = '不能为空';
+    }
+  }
+
+  const phoneFields = ['sender_phone', 'receiver_phone'];
+  for (const f of phoneFields) {
+    const val = String(row[f as keyof WaybillRow] || '').trim();
+    if (val && !/^1[3-9]\d{9}$/.test(val) && !/^0\d{2,3}-?\d{7,8}$/.test(val)) {
+      errors[f] = '格式错误（手机号11位或固话）';
+    }
+  }
+
+  const weight = parseFloat(String(row.weight));
+  if (row.weight !== '' && (isNaN(weight) || weight <= 0)) {
+    errors['weight'] = '必须为正数';
+  }
+
+  const qty = parseInt(String(row.quantity));
+  if (row.quantity !== '' && (isNaN(qty) || qty <= 0 || !Number.isInteger(qty))) {
+    errors['quantity'] = '必须为正整数';
+  }
+
+  const temp = String(row.temp_layer || '').trim();
+  if (temp && !TEMP_LAYER_OPTIONS.includes(temp as '常温' | '冷藏' | '冷冻')) {
+    errors['temp_layer'] = `可选值：${[...TEMP_LAYER_OPTIONS].join('、')}`;
+  }
+
+  return errors;
+}
+
 // ============ 主组件 ============
 export default function UniversalImport() {
   // 上传状态
