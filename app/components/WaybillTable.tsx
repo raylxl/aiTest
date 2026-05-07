@@ -3,18 +3,11 @@
 import React, { useState, useRef, useCallback, useEffect } from 'react';
 import type { Waybill, WaybillQuery } from '@/lib/waybill-types';
 import Tooltip from './Tooltip';
-import ConfirmDialog from './ConfirmDialog';
+import ConfirmDialog from './ConfirmDialog'
+import Icon from './Icon';
 
 // ============ SVG 图标 ============
-function Icon({ name, size = 14 }: { name: string; size?: number }) {
-  const paths: Record<string, string> = {
-    search: 'M772.188 672.172L579.558 479.586C605.586 442.688 620 398.766 620 352c0-141.16-114.84-256-256-256S108 210.84 108 352s114.84 256 256 256c46.766 0 90.688-14.414 127.586-40.442L672.172 772.188a16 16 0 0 0 22.628 0l77.388-77.388a16 16 0 0 0 0-22.628zM364 352c0-79.4 64.6-144 144-144s144 64.6 144 144-64.6 144-144 144-144-64.6-144-144z',
-    delete: 'M864 256H736v-64c0-35.2-28.8-64-64-64H352c-35.2 0-64 28.8-64 64v64H160c-44.2 0-80 35.8-80 80v32c0 17.7 14.3 32 32 32h640c17.7 0 32-14.3 32-32v-32c0-44.2-35.8-80-80-80zm-96-64V64c0-17.7 14.3-32 32-32h320c17.7 0 32 14.3 32 32v128c0 17.7-14.3 32-32 32H800c-17.7 0-32-14.3-32-32z',
-    close: 'M810 274l-238 238 238 238L608 810 370 572l238-238-238-238L274 240l238-238L370-2 608 236l238-238z',
-    download: 'M864 256H672v-64c0-35.2-28.8-64-64-64H416c-35.2 0-64 28.8-64 64v64H160c-44.2 0-80 35.8-80 80v416c0 35.2 28.8 64 64 64h640c35.2 0 64-28.8 64-64V336c0-44.2-35.8-80-80-80zm-80 560H240V336h544v400zm64-520H672v-64c0-17.7-14.3-32-32-32H384c-17.7 0-32 14.3-32 32v64H160v-80c0-17.7 14.3-32 32-32h544c17.7 0 32 14.3 32 32v80zM490.3 613.7L608 732l117.7-118.3a32 32 0 0 0-45.3-45.3l-72.4 72.4-72.4-72.4a32 32 0 0 0-45.3 45.3z',
-  };
-  return <svg width={size} height={size} viewBox="0 0 1024 1024" style={{ display: 'inline-block', flexShrink: 0 }}><path fill="currentColor" d={paths[name] || paths.close} /></svg>;
-}
+// Icon 已提取到 ./Icon.tsx
 
 // ============ 状态映射 ============
 const STATUS_MAP: Record<string, { label: string; color: string; bg: string }> = {

@@ -4,6 +4,7 @@ import React, { useMemo, useState, useRef, useCallback, useEffect } from 'react'
 import type { FeeItem, QueryForm } from './types';
 import Tooltip from './Tooltip';
 import ConfirmDialog from './ConfirmDialog';
+import Icon from './Icon';
 
 // ============ 拖拽上传区域 ============
 function DragDropZone({
@@ -428,25 +429,7 @@ const domainColor: Record<string, string> = {
   '运配': '#1677FF', '仓储': '#52c41a', '干线': '#fa8c16', '配送': '#f5222d'
 };
 
-function IconCat({ name, size = 14 }: { name: string; size?: number }) {
-  const paths: Record<string, string> = {
-    refresh: 'M724 218.3V141c0-6.7-7.7-10.4-12.9-6.3L260.3 486.8a31.75 31.75 0 0 0 50.3l450.8 352.1c5.3 3.1 12.9.4 12.9-6.3v-77.3a304 304 0 0 1 273-298.2c91.3-12.5 160 60.4 160 144 0 54.7-29.1 99.5-72.1 126.6-6.4 4-8.5 12.2-4.5 18.1l66.8 92.8c4 5.5 12 6.9 17.8 3.1a144 144 0 0 0 96.1-134.4c3.7-54.4-27.3-105.4-71.4-126C771.5 251.5 748 218.3 724 218.3z',
-    delete: 'M864 256H736v-64c0-35.2-28.8-64-64-64H352c-35.2 0-64 28.8-64 64v64H160c-44.2 0-80 35.8-80 80v32c0 17.7 14.3 32 32 32h640c17.7 0 32-14.3 32-32v-32c0-44.2-35.8-80-80-80zm-96-64V64c0-17.7 14.3-32 32-32h320c17.7 0 32 14.3 32 32v128c0 17.7-14.3 32-32 32H800c-17.7 0-32-14.3-32-32z',
-    edit: 'M721.7 199.5l-493.2 493.2a32 32 0 0 1-15.7 8.5H192c-17.7 0-32-14.3-32-32v-32c0-5.8 2.1-11.4 6.1-15.7L494.7 58.3c10.6-10.6 25.6-16 40-16h281c15.5 0 30.1 5.4 40 16h1l38.3 38.3a32 32 0 0 1 8.5 15.7v281c0 14.4-5.4 29.4-16 40L721.7 199.5zM688 136.1l-43.6-43.6L592 144l43.6 43.6L688 136.1z',
-    plus: 'M480-64v448h-64v64h448v-64h-64V-64h-64v448H544v-64H480z',
-    close: 'M810 274l-238 238 238 238L608 810 370 572l238-238-238-238L274 240l238-238L370-2 608 236l238-238z',
-    search: 'M772.188 672.172L579.558 479.586C605.586 442.688 620 398.766 620 352c0-141.16-114.84-256-256-256S108 210.84 108 352s114.84 256 256 256c46.766 0 90.688-14.414 127.586-40.442L672.172 772.188a16 16 0 0 0 22.628 0l77.388-77.388a16 16 0 0 0 0-22.628zM364 352c0-79.4 64.6-144 144-144s144 64.6 144 144-64.6 144-144 144-144-64.6-144-144z',
-    right: 'M384 160l320 352-320 352z',
-    info: 'M448 768a64 64 0 1 0 128 0 64 64 0 0 0-128 0zm0-224a64 64 0 1 0 0-128 64 64 0 0 0 0 128zM512-64h256v64H512v-64z',
-    upload: 'M864 256H672v-64c0-35.2-28.8-64-64-64H480c-35.2 0-64 28.8-64 64v64H160c-44.2 0-80 35.8-80 80v416c0 35.2 28.8 64 64 64h640c35.2 0 64-28.8 64-64V336c0-44.2-35.8-80-80-80zm-80 560H240V416h544v400zm64-488H672v-64c0-17.7-14.3-32-32-32H384c-17.7 0-32 14.3-32 32v64H160v-80c0-17.7 14.3-32 32-32h544c17.7 0 32 14.3 32 32v80z',
-    download: 'M864 256H672v-64c0-35.2-28.8-64-64-64H416c-35.2 0-64 28.8-64 64v64H160c-44.2 0-80 35.8-80 80v416c0 35.2 28.8 64 64 64h640c35.2 0 64-28.8 64-64V336c0-44.2-35.8-80-80-80zm-80 560H240V336h544v400zm64-520H672v-64c0-17.7-14.3-32-32-32H384c-17.7 0-32 14.3-32 32v64H160v-80c0-17.7 14.3-32 32-32h544c17.7 0 32 14.3 32 32v80zM490.3 613.7L608 732l117.7-118.3a32 32 0 0 0-45.3-45.3l-72.4 72.4-72.4-72.4a32 32 0 0 0-45.3 45.3z',
-  };
-  return (
-    <svg width={size} height={size} viewBox="0 0 1024 1024" style={{ display: 'inline-block', flexShrink: 0 }}>
-      <path fill="currentColor" d={paths[name] || ''} />
-    </svg>
-  );
-}
+// Icon 已提取到 ./Icon.tsx
 
 export default function FeeTable({
   data, setData, selectedRows, setSelectedRows, query, setQuery,
@@ -957,7 +940,7 @@ export default function FeeTable({
           </div>
           <div style={{ display: 'flex', gap: 8 }}>
             <button onClick={() => { setPage(1); fetchData(); }} style={{ height: 32, padding: '0 16px', borderRadius: 4, border: 'none', background: '#1677FF', color: '#fff', fontSize: 13, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 6, fontFamily: 'inherit' }}>
-              <IconCat name="search" size={13} /> 查询
+              <Icon name="search" size={13} /> 查询
             </button>
             <button onClick={handleReset} style={{ height: 32, padding: '0 16px', border: '1px solid #d9d9d9', borderRadius: 4, background: '#fff', color: '#595959', fontSize: 13, cursor: 'pointer', fontFamily: 'inherit' }}>
               重置
@@ -989,11 +972,11 @@ export default function FeeTable({
           <div style={{ width: 1, height: 20, background: '#e8e8e8', flexShrink: 0 }} />
           <button onClick={openAdd}
             style={{ height: 32, padding: '0 16px', borderRadius: 4, border: 'none', background: '#1677FF', color: '#fff', fontSize: 13, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 6 }}>
-            <IconCat name="plus" size={13} /> 新增
+            <Icon name="plus" size={13} /> 新增
           </button>
           <button onClick={handleBatchDelete} disabled={selectedRows.length === 0}
             style={{ height: 32, padding: '0 16px', borderRadius: 4, border: `1px solid ${selectedRows.length > 0 ? '#FF4D4F' : '#d9d9d9'}`, background: selectedRows.length > 0 ? '#FF4D4F' : '#fff', color: selectedRows.length > 0 ? '#fff' : '#bfbfbf', fontSize: 13, cursor: selectedRows.length > 0 ? 'pointer' : 'not-allowed', display: 'flex', alignItems: 'center', gap: 6 }}>
-            <IconCat name="delete" size={13} /> {selectedRows.length > 0 ? `删除 (${selectedRows.length})` : '删除'}
+            <Icon name="delete" size={13} /> {selectedRows.length > 0 ? `删除 (${selectedRows.length})` : '删除'}
           </button>
           <button onClick={() => window.open('/api/fees/template', '_blank')}
             style={{ height: 32, padding: '0 10px', borderRadius: 4, border: '1px solid #d9d9d9', background: '#fff', color: '#595959', fontSize: 13, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 6 }}>
@@ -1008,7 +991,7 @@ export default function FeeTable({
                 </>
               ) : (
                 <>
-                  <IconCat name="upload" size={13} />
+                  <Icon name="upload" size={13} />
                   <span>导入</span>
                 </>
               )}
@@ -1028,7 +1011,7 @@ export default function FeeTable({
               handleExport();
             }}
             style={{ height: 32, padding: '0 12px', borderRadius: 4, border: '1px solid #d9d9d9', background: '#fff', color: '#595959', fontSize: 13, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 6 }}>
-            <IconCat name="download" size={13} /> 导出
+            <Icon name="download" size={13} /> 导出
           </button>
         </div>
         <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
@@ -1326,7 +1309,7 @@ export default function FeeTable({
           <button onClick={() => setPage(p => Math.max(1, p - 1))} disabled={page <= 1} style={{ height: 28, width: 28, border: '1px solid #dcdfe6', borderRadius: 4, background: '#fff', cursor: page <= 1 ? 'not-allowed' : 'pointer', color: page <= 1 ? '#c0c4cc' : 'rgba(0,0,0,0.65)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: 'inherit', transition: 'all 0.15s', transform: 'rotate(180deg)' }}
             onMouseEnter={e => { if (page > 1) { (e.currentTarget as HTMLButtonElement).style.borderColor = '#1677FF'; (e.currentTarget as HTMLButtonElement).style.color = '#1677FF'; } }}
             onMouseLeave={e => { if (page > 1) { (e.currentTarget as HTMLButtonElement).style.borderColor = '#dcdfe6'; (e.currentTarget as HTMLButtonElement).style.color = 'rgba(0,0,0,0.65)'; } }}>
-            <IconCat name="right" size={10} />
+            <Icon name="right" size={10} />
           </button>
           {Array.from({ length: Math.min(5, Math.max(1, Math.ceil(filtered.length / pageSize))) }, (_, i) => {
             const totalPages = Math.max(1, Math.ceil(filtered.length / pageSize));
@@ -1344,7 +1327,7 @@ export default function FeeTable({
           <button onClick={() => setPage(p => Math.min(Math.ceil(filtered.length / pageSize), p + 1))} disabled={page >= Math.ceil(filtered.length / pageSize)} style={{ height: 28, width: 28, border: '1px solid #dcdfe6', borderRadius: 4, background: '#fff', cursor: page >= Math.ceil(filtered.length / pageSize) ? 'not-allowed' : 'pointer', color: page >= Math.ceil(filtered.length / pageSize) ? '#c0c4cc' : 'rgba(0,0,0,0.65)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: 'inherit', transition: 'all 0.15s' }}
             onMouseEnter={e => { if (page < Math.ceil(filtered.length / pageSize)) { (e.currentTarget as HTMLButtonElement).style.borderColor = '#1677FF'; (e.currentTarget as HTMLButtonElement).style.color = '#1677FF'; } }}
             onMouseLeave={e => { if (page < Math.ceil(filtered.length / pageSize)) { (e.currentTarget as HTMLButtonElement).style.borderColor = '#dcdfe6'; (e.currentTarget as HTMLButtonElement).style.color = 'rgba(0,0,0,0.65)'; } }}>
-            <IconCat name="right" size={10} />
+            <Icon name="right" size={10} />
           </button>
           <span style={{ fontSize: 13, color: 'rgba(0,0,0,0.45)' }}>跳至<input value={page} onChange={e => { const v = parseInt(e.target.value); if (!isNaN(v) && v >= 1 && v <= Math.ceil(filtered.length / pageSize)) setPage(v); }}
             style={{ width: 40, height: 28, margin: '0 4px', padding: '0 4px', border: '1px solid #dcdfe6', borderRadius: 4, textAlign: 'center', fontSize: 13, outline: 'none', fontFamily: 'inherit', color: 'rgba(0,0,0,0.8)', boxSizing: 'border-box' }} />页</span>
@@ -1357,11 +1340,11 @@ export default function FeeTable({
           <div style={{ background: '#fff', borderRadius: 4, width: 520, maxHeight: '85vh', display: 'flex', flexDirection: 'column', boxShadow: '0 6px 16px rgba(0,0,0,0.15)', overflow: 'hidden' }}>
             <div style={{ padding: '14px 16px', borderBottom: '1px solid #E8EAED', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexShrink: 0 }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 15, fontWeight: 600, color: '#262626' }}>
-                <span style={{ color: '#1677FF', display: 'flex' }}><IconCat name="search" size={15} /></span>
+                <span style={{ color: '#1677FF', display: 'flex' }}><Icon name="search" size={15} /></span>
                 费用类型详情
               </div>
               <button onClick={() => setDetailVisible(false)} style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 4, display: 'flex' }}>
-                <IconCat name="close" size={15} />
+                <Icon name="close" size={15} />
               </button>
             </div>
             <div style={{ padding: 20, overflowY: 'auto', flex: 1 }}>
@@ -1426,13 +1409,13 @@ export default function FeeTable({
           <div style={{ background: '#fff', borderRadius: 4, width: 560, maxHeight: '90vh', display: 'flex', flexDirection: 'column', boxShadow: '0 6px 16px rgba(0,0,0,0.15)', overflow: 'hidden' }}>
             <div style={{ padding: '14px 16px', borderBottom: '1px solid #E8EAED', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexShrink: 0 }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 15, fontWeight: 600, color: '#262626' }}>
-                <span style={{ color: '#1677FF', display: 'flex' }}>{editRow ? <IconCat name="edit" size={15} /> : <IconCat name="plus" size={15} />}</span>
+                <span style={{ color: '#1677FF', display: 'flex' }}>{editRow ? <Icon name="edit" size={15} /> : <Icon name="plus" size={15} />}</span>
                 {dialogTitle}
               </div>
               <button onClick={() => setDialogVisible(false)} style={{ background: 'none', border: 'none', color: '#8c8c8c', fontSize: 18, cursor: 'pointer', lineHeight: 1, padding: '2px', borderRadius: 3, transition: 'all 0.15s' }}
                 onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.color = '#595959'; (e.currentTarget as HTMLButtonElement).style.background = '#f5f5f5'; }}
                 onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.color = '#8c8c8c'; (e.currentTarget as HTMLButtonElement).style.background = 'none'; }}>
-                <IconCat name="close" size={16} />
+                <Icon name="close" size={16} />
               </button>
             </div>
             <div style={{ padding: '16px 16px 0', overflow: 'auto', flex: 1 }}>
@@ -1518,7 +1501,7 @@ export default function FeeTable({
             {/* 标题栏 */}
             <div style={{ padding: '14px 16px', borderBottom: '1px solid #E8EAED', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexShrink: 0 }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 15, fontWeight: 600, color: '#262626' }}>
-                <span style={{ color: '#1677FF', display: 'flex' }}><IconCat name="upload" size={15} /></span>
+                <span style={{ color: '#1677FF', display: 'flex' }}><Icon name="upload" size={15} /></span>
                 导入预览
                 {headerHash && (
                   <span style={{ fontSize: 12, fontWeight: 400, color: '#8c8c8c', marginLeft: 4 }}>
@@ -1529,7 +1512,7 @@ export default function FeeTable({
               <button onClick={() => { setImportModalVisible(false); setImportPreview(null); setImportResult(null); setPendingMapping({}); setImportHeaders([]); }} style={{ background: 'none', border: 'none', color: '#8c8c8c', fontSize: 18, cursor: 'pointer', lineHeight: 1, padding: '2px', borderRadius: 3, transition: 'all 0.15s' }}
                 onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.color = '#595959'; (e.currentTarget as HTMLButtonElement).style.background = '#f5f5f5'; }}
                 onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.color = '#8c8c8c'; (e.currentTarget as HTMLButtonElement).style.background = 'none'; }}>
-                <IconCat name="close" size={16} />
+                <Icon name="close" size={16} />
               </button>
             </div>
 

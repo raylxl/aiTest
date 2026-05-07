@@ -3,9 +3,17 @@ import { neon } from '@neondatabase/serverless';
 // 懒加载，运行时才真正初始化连接
 let _sql: ReturnType<typeof neon> | null = null;
 
+function getDatabaseUrl(): string {
+  const url = process.env.DATABASE_URL;
+  if (!url) {
+    throw new Error('环境变量 DATABASE_URL 未配置，请检查 Vercel 环境变量设置');
+  }
+  return url;
+}
+
 export function getNeonClient() {
   if (!_sql) {
-    _sql = neon(process.env.DATABASE_URL!);
+    _sql = neon(getDatabaseUrl());
   }
   return _sql;
 }

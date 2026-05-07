@@ -1,6 +1,7 @@
 'use client';
 
 import React from 'react';
+import Icon from './Icon';
 
 interface ConfirmDialogProps {
   visible: boolean;
@@ -11,14 +12,6 @@ interface ConfirmDialogProps {
   confirmType?: 'danger' | 'primary';
   onConfirm: () => void;
   onCancel: () => void;
-}
-
-function WarnIcon({ size = 40 }: { size?: number }) {
-  return (
-    <svg width={size} height={size} viewBox="0 0 1024 1024" style={{ display: 'block', flexShrink: 0 }}>
-      <path fill="#FFA940" d="M512 64a448 448 0 1 1 0 896A448 448 0 0 1 512 64zm0 64a384 384 0 1 0 0 768A384 384 0 0 0 512 128zm0 192a32 32 0 0 1 32 32v192a32 32 0 0 1-64 0V352a32 32 0 0 1 32-32zm0 320a32 32 0 1 1 0 64 32 32 0 0 1 0-64z"/>
-    </svg>
-  );
 }
 
 export default function ConfirmDialog({
@@ -58,7 +51,7 @@ export default function ConfirmDialog({
         {/* 内容区 */}
         <div style={{ padding: '20px 24px 16px', display: 'flex', alignItems: 'flex-start', gap: 16 }}>
           <div style={{ marginTop: 2, flexShrink: 0 }}>
-            <WarnIcon />
+            <Icon name="warningOrange" size={40} color="#FFA940" />
           </div>
           <div style={{ flex: 1, minWidth: 0 }}>
             <div style={{ fontSize: 15, fontWeight: 600, color: '#262626', marginBottom: 8 }}>{title}</div>
