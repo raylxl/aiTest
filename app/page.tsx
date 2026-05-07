@@ -307,6 +307,12 @@ export default function FeeManager() {
   const [authLoading, setAuthLoading] = useState(false);
   const authDropdownRef = useRef<HTMLDivElement>(null);
 
+  // 动态更新页签标题
+  useEffect(() => {
+    const title = MENU_ITEM_MAP[activeMenu]?.title || '首页';
+    document.title = title;
+  }, [activeMenu]);
+
   const fetchData = useCallback(async () => {
     setLoading(true); setFetchError('');
     try {
