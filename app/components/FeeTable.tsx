@@ -1,9 +1,196 @@
 'use client';
 
-import React, { useMemo, useState } from 'react';
+import React, { useMemo, useState, useRef, useCallback, useEffect } from 'react';
 import type { FeeItem, QueryForm } from './types';
 import Tooltip from './Tooltip';
 import ConfirmDialog from './ConfirmDialog';
+
+// ============ 拖拽上传区域 ============
+function DragDropZone({
+  children, onFile, dragOver, setDragOver, disabled,
+}: {
+  children: React.ReactNode;
+  onFile: (f: File) => void;
+  dragOver: boolean;
+  setDragOver: (v: boolean) => void;
+  disabled: boolean;
+}) {
+  const handleDrop = useCallback((e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setDragOver(false);
+    const file = e.dataTransfer.files[0];
+    if (file) onFile(file);
+  }, [onFile, setDragOver]);
+
+  const handleDragOver = useCallback((e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    if (!disabled) setDragOver(true);
+  }, [disabled, setDragOver]);
+
+  const handleDragLeave = useCallback((e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setDragOver(false);
+  }, [setDragOver]);
+
+  return (
+    <div
+      onDrop={handleDrop}
+      onDragOver={handleDragOver}
+      onDragLeave={handleDragLeave}
+      onClick={() => {
+        const input = document.createElement('input');
+        input.type = 'file';
+        input.accept = '.xlsx,.xls';
+        input.onchange = () => { if (input.files?.[0]) onFile(input.files[0]); };
+        input.click();
+      }}
+      style={{
+        border: `2px dashed ${dragOver ? '#1677FF' : '#d9d9d9'}`,
+        borderRadius: 8,
+        padding: '32px 20px',
+        textAlign: 'center',
+        cursor: disabled ? 'not-allowed' : 'pointer',
+        background: dragOver ? '#e6f4ff' : '#fafafa',
+        transition: 'all 0.2s',
+        userSelect: 'none',
+        opacity: disabled ? 0.6 : 1,
+      }}
+    >
+      {children}
+    </div>
+  );
+}
+
+// ============ 映射面板 ============
+const SYSTEM_FIELDS = [
+  { key: 'fee_code', label: '费用编号', required: true },
+  { key: 'fee_name', label: '费用名称', required: true },
+  { key: 'business_domain', label: '所属业务域', required: true },
+  { key: 'price_types', label: '所属报价', required: false },
+  { key: 'remark', label: '备注', required: false },
+  { key: 'creator', label: '创建人', required: false },
+];
+
+function MappingPanel({
+  headers, pendingMapping, setPendingMapping, fieldLabelMap,
+  onSaveTemplate, savedMappingCount,
+}: {
+  headers: string[];
+  pendingMapping: Record<string, string>;
+  setPendingMapping: (m: Record<string, string>) => void;
+  fieldLabelMap: Record<string, string>;
+  onSaveTemplate: () => void;
+  savedMappingCount: number;
+}) {
+  const [collapsed, setCollapsed] = useState(false);
+
+  return (
+    <div style={{ border: '1px solid #d9d9d9', borderRadius: 8, background: '#fff', marginTop: 12 }}>
+      <div
+        onClick={() => setCollapsed(c => !c)}
+        style={{
+          padding: '10px 16px', cursor: 'pointer', display: 'flex', justifyContent: 'space-between',
+          alignItems: 'center', borderBottom: collapsed ? 'none' : '1px solid #f0f0f0', userSelect: 'none',
+        }}
+      >
+        <div style={{ fontSize: 14, fontWeight: 600, color: '#262626', display: 'flex', alignItems: 'center', gap: 8 }}>
+          <span style={{ color: '#1677FF', fontSize: 16 }}>🔗</span>
+          映射关系配置
+          {savedMappingCount > 0 && (
+            <span style={{ fontSize: 12, padding: '2px 8px', background: '#f6ffed', color: '#52c41a', borderRadius: 4, fontWeight: 400 }}>
+              已保存 {savedMappingCount} 个模板
+            </span>
+          )}
+        </div>
+        <span style={{ color: '#8c8c8c', fontSize: 14 }}>{collapsed ? '▶' : '▼'}</span>
+      </div>
+
+      {!collapsed && (
+        <div style={{ padding: '12px 16px' }}>
+          <div style={{ fontSize: 12, color: '#8c8c8c', marginBottom: 10 }}>
+            请确认每个 Excel 列名对应的系统字段。如需调整，请在下方下拉框中选择正确的字段映射。
+          </div>
+          <div style={{ overflow: 'auto', maxHeight: 260, border: '1px solid #f0f0f0', borderRadius: 6 }}>
+            <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
+              <thead>
+                <tr style={{ background: '#fafafa' }}>
+                  <th style={{ padding: '8px 12px', textAlign: 'left', fontWeight: 600, color: '#595959', borderBottom: '1px solid #e8e8e8', whiteSpace: 'nowrap' }}>Excel 列名</th>
+                  <th style={{ padding: '8px 12px', width: 36, textAlign: 'center', color: '#d9d9d9', borderBottom: '1px solid #e8e8e8' }}>→</th>
+                  <th style={{ padding: '8px 12px', textAlign: 'left', fontWeight: 600, color: '#595959', borderBottom: '1px solid #e8e8e8', whiteSpace: 'nowrap' }}>映射到系统字段</th>
+                </tr>
+              </thead>
+              <tbody>
+                {headers.map((col, idx) => {
+                  const currentMap = pendingMapping[col] || '';
+                  const isRequired = SYSTEM_FIELDS.find(f => f.key === currentMap)?.required;
+                  return (
+                    <tr key={idx} style={{ borderBottom: idx < headers.length - 1 ? '1px solid #f5f5f5' : 'none' }}>
+                      <td style={{ padding: '6px 12px', color: '#262626', maxWidth: 200, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontFamily: 'monospace', fontSize: 12 }}>
+                        {col}
+                      </td>
+                      <td style={{ padding: '6px 12px', textAlign: 'center', color: '#d9d9d9' }}>→</td>
+                      <td style={{ padding: '4px 12px' }}>
+                        <select
+                          value={currentMap}
+                          onChange={e => setPendingMapping({ ...pendingMapping, [col]: e.target.value })}
+                          style={{
+                            height: 30, padding: '0 8px', border: `1px solid ${currentMap ? '#d9d9d9' : '#ff4d4f'}`,
+                            borderRadius: 4, fontSize: 13, outline: 'none', width: '100%', minWidth: 140,
+                            background: '#fff', cursor: 'pointer', color: currentMap ? '#262626' : '#ff4d4f',
+                          }}
+                        >
+                          <option value="">— 未映射 —</option>
+                          {SYSTEM_FIELDS.map(f => (
+                            <option key={f.key} value={f.key}>{f.label}{f.required ? ' *' : ''}</option>
+                          ))}
+                        </select>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+
+          <div style={{ marginTop: 10, display: 'flex', gap: 8 }}>
+            <button
+              onClick={onSaveTemplate}
+              disabled={headers.length === 0}
+              style={{
+                height: 32, padding: '0 16px', border: '1px solid #d9d9d9', borderRadius: 4,
+                background: headers.length === 0 ? '#f5f5f5' : '#fff', color: headers.length === 0 ? '#bfbfbf' : '#595959',
+                cursor: headers.length === 0 ? 'not-allowed' : 'pointer', fontSize: 13, display: 'flex', alignItems: 'center', gap: 6,
+              }}
+            >
+              <span>💾</span> 保存为模板
+            </button>
+            <div style={{ fontSize: 12, color: '#8c8c8c', lineHeight: '32px' }}>
+              保存后，下次上传相同结构的文件将自动应用映射
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ============ 进度条 ============
+function ProgressBar({ value, label }: { value: number; label: string }) {
+  return (
+    <div style={{ minWidth: 220 }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12, color: '#595959', marginBottom: 4 }}>
+        <span>{label}</span>
+        <span style={{ fontWeight: 600, color: '#1677FF' }}>{value}%</span>
+      </div>
+      <div style={{ height: 6, background: '#f0f0f0', borderRadius: 3, overflow: 'hidden' }}>
+        <div style={{ height: '100%', width: `${value}%`, background: 'linear-gradient(90deg, #1677FF, #4096ff)', borderRadius: 3, transition: 'width 0.3s' }} />
+      </div>
+    </div>
+  );
+}
 
 interface FeeTableProps {
   data: FeeItem[];
@@ -126,6 +313,14 @@ export default function FeeTable({
   const [importLoading, setImportLoading] = useState(false);
   const [importing, setImporting] = useState(false);
   const [importResult, setImportResult] = useState<{ inserted: number; skipped: number; errors: string[] } | null>(null);
+  const [dragOver, setDragOver] = useState(false);
+  const [importHeaders, setImportHeaders] = useState<string[]>([]);
+  const [headerHash, setHeaderHash] = useState('');
+  const [fieldLabelMap, setFieldLabelMap] = useState<Record<string, string>>({});
+  const [pendingMapping, setPendingMapping] = useState<Record<string, string>>({});
+  const [savedMappingCount, setSavedMappingCount] = useState(0);
+  const [importProgress, setImportProgress] = useState(0);
+  const [importProgressText, setImportProgressText] = useState('');
   const fileInputRef = React.useRef<HTMLInputElement>(null);
 
   const handleExport = () => {
@@ -134,11 +329,49 @@ export default function FeeTable({
     setTimeout(() => setMsg(null), 2000);
   };
 
+  // 加载已保存的映射模板数量
+  useEffect(() => {
+    try {
+      const saved = localStorage.getItem('fee_import_templates');
+      const templates = saved ? JSON.parse(saved) : {};
+      setSavedMappingCount(Object.keys(templates).length);
+    } catch { setSavedMappingCount(0); }
+  }, []);
+
+  // 从 localStorage 查找匹配的已保存模板
+  const findSavedTemplate = (hash: string): Record<string, string> | null => {
+    try {
+      const saved = localStorage.getItem('fee_import_templates');
+      if (!saved) return null;
+      const templates = JSON.parse(saved);
+      return templates[hash] || null;
+    } catch { return null; }
+  };
+
+  // 保存模板到 localStorage
+  const handleSaveTemplate = useCallback((hash: string, mapping: Record<string, string>) => {
+    try {
+      const saved = localStorage.getItem('fee_import_templates');
+      const templates = saved ? JSON.parse(saved) : {};
+      templates[hash] = mapping;
+      localStorage.setItem('fee_import_templates', JSON.stringify(templates));
+      setSavedMappingCount(Object.keys(templates).length);
+      showMsg('模板已保存，下次上传相同结构文件将自动应用映射', 'success');
+    } catch {
+      showMsg('模板保存失败', 'error');
+    }
+  }, []);
+
   const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
+    await doParseFile(file);
+  };
+
+  const doParseFile = async (file: File) => {
     setImportLoading(true);
     setImportResult(null);
+    setPendingMapping({});
     try {
       const fd = new FormData();
       fd.append('file', file);
@@ -148,8 +381,31 @@ export default function FeeTable({
         showMsg(json.error || '解析失败', 'error');
         return;
       }
+
+      // 模板记忆：检查是否有已保存的映射
+      const hash = json.headerHash || '';
+      const savedMapping = hash ? findSavedTemplate(hash) : null;
+
+      // 构建列名→字段映射（从 API 返回的 fieldLabelMap）
+      const mapping: Record<string, string> = {};
+      const rawLabelMap = json.fieldLabelMap || {};
+      for (const [field, label] of Object.entries(rawLabelMap as Record<string, string>)) {
+        mapping[label as string] = field;
+      }
+
+      setHeaderHash(hash);
+      setFieldLabelMap(json.fieldLabelMap || {});
+      setImportHeaders(Object.keys(mapping));
+      setPendingMapping(savedMapping || mapping);
       setImportPreview(json);
       setImportModalVisible(true);
+
+      // 提示模板匹配情况
+      if (savedMapping) {
+        showMsg(`检测到已保存模板，自动应用映射（${Object.keys(savedMapping).length} 个字段）`, 'info');
+      } else {
+        showMsg(`解析成功，共 ${json.total} 条数据${json.errorCount > 0 ? `，其中 ${json.errorCount} 条有误` : ''}`, json.errorCount > 0 ? 'warning' : 'success');
+      }
     } catch {
       showMsg('文件解析失败', 'error');
     } finally {
@@ -158,32 +414,66 @@ export default function FeeTable({
     }
   };
 
+  // 拖拽上传
+  const handleDropFile = useCallback((file: File) => {
+    doParseFile(file);
+  }, []);
+
+  // 确认导入（支持大批量分批 + 真实进度）
   const handleImportConfirm = async (action: 'insert' | 'skip') => {
     if (!importPreview) return;
     setImporting(true);
+    setImportProgress(0);
+    setImportProgressText('正在准备数据...');
+    setImportResult(null);
+
     try {
       const validRows = importPreview.allRows
         .filter(r => r.fee_code && r.fee_name && r.business_domain)
         .map(r => ({ fee_code: r.fee_code, fee_name: r.fee_name, business_domain: r.business_domain, price_types: r.price_types, remark: r.remark, creator: r.creator || currentUserNickname }));
-      const res = await fetch('/api/fees/import', {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ rows: validRows, action, creator: currentUserNickname }),
-      });
-      const json = await res.json();
-      if (!res.ok) {
-        showMsg(json.error || '导入失败', 'error');
-        return;
+
+      const total = validRows.length;
+      const BATCH_SIZE = 100;
+      let inserted = 0;
+      let skipped = 0;
+      const allErrors: string[] = [];
+
+      for (let i = 0; i < validRows.length; i += BATCH_SIZE) {
+        const batch = validRows.slice(i, i + BATCH_SIZE);
+        const batchNum = Math.floor(i / BATCH_SIZE) + 1;
+        const totalBatches = Math.ceil(total / BATCH_SIZE);
+        setImportProgressText(`正在导入第 ${i + 1} ~ ${Math.min(i + BATCH_SIZE, total)} 条（共 ${total} 条，第 ${batchNum}/${totalBatches} 批）...`);
+        setImportProgress(Math.round((i / total) * 100));
+
+        const res = await fetch('/api/fees/import', {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ rows: batch, action, creator: currentUserNickname }),
+        });
+        const json = await res.json();
+        if (!res.ok) {
+          showMsg(json.error || '导入失败', 'error');
+          return;
+        }
+        inserted += json.inserted || 0;
+        skipped += json.skipped || 0;
+        if (json.errors?.length) allErrors.push(...json.errors);
       }
-      setImportResult(json);
-      if (json.inserted > 0) {
+
+      setImportProgress(100);
+      setImportProgressText(`已完成 ${inserted + skipped} / ${total} 条`);
+      setImportResult({ inserted, skipped, errors: allErrors });
+
+      if (inserted > 0) {
         fetchData();
-        setTimeout(() => setImportModalVisible(false), 2000);
+        setTimeout(() => setImportModalVisible(false), 2500);
       }
     } catch {
       showMsg('导入失败', 'error');
     } finally {
       setImporting(false);
+      setImportProgress(0);
+      setImportProgressText('');
     }
   };
 
@@ -254,6 +544,11 @@ export default function FeeTable({
   };
 
   return (
+    <>
+      <style>{`
+        @keyframes spin { to { transform: rotate(360deg); } }
+        @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.5; } }
+      `}</style>
     <div style={{ padding: '0 0 0', flex: 1, overflow: 'auto' }}>
       {/* 标题栏 */}
       <div style={{ padding: '16px 16px 12px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexShrink: 0 }}>
@@ -327,10 +622,26 @@ export default function FeeTable({
             style={{ height: 32, padding: '0 10px', borderRadius: 4, border: '1px solid #d9d9d9', background: '#fff', color: '#595959', fontSize: 13, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 6 }}>
             模版下载
           </button>
-          <button onClick={() => fileInputRef.current?.click()} disabled={importLoading}
-            style={{ height: 32, padding: '0 12px', borderRadius: 4, border: '1px solid #d9d9d9', background: '#fff', color: importLoading ? '#bfbfbf' : '#595959', fontSize: 13, cursor: importLoading ? 'not-allowed' : 'pointer', display: 'flex', alignItems: 'center', gap: 6 }}>
-            <IconCat name="upload" size={13} /> {importLoading ? '解析中...' : '导入'}
-          </button>
+          <DragDropZone onFile={handleDropFile} dragOver={dragOver} setDragOver={setDragOver} disabled={importLoading}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 6, color: importLoading ? '#bfbfbf' : '#595959', fontSize: 13, justifyContent: 'center' }}>
+              {importLoading ? (
+                <>
+                  <span style={{ animation: 'spin 1s linear infinite', display: 'inline-block' }}>⟳</span>
+                  解析中...
+                </>
+              ) : (
+                <>
+                  <IconCat name="upload" size={13} />
+                  <span>导入</span>
+                </>
+              )}
+            </div>
+            {importLoading && (
+              <div style={{ height: 3, background: '#e8e8e8', borderRadius: 2, marginTop: 8, overflow: 'hidden' }}>
+                <div style={{ height: '100%', background: '#1677FF', width: '60%', borderRadius: 2, animation: 'pulse 1.5s ease-in-out infinite' }} />
+              </div>
+            )}
+          </DragDropZone>
           <button onClick={handleExport}
             style={{ height: 32, padding: '0 12px', borderRadius: 4, border: '1px solid #d9d9d9', background: '#fff', color: '#595959', fontSize: 13, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 6 }}>
             <IconCat name="download" size={13} /> 导出
@@ -617,14 +928,19 @@ export default function FeeTable({
       {/* 导入预览弹框 */}
       {importModalVisible && importPreview && (
         <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.45)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1100 }}>
-          <div style={{ background: '#fff', borderRadius: 4, width: 920, maxHeight: '88vh', display: 'flex', flexDirection: 'column', boxShadow: '0 6px 16px rgba(0,0,0,0.15)', overflow: 'hidden' }}>
+          <div style={{ background: '#fff', borderRadius: 4, width: 960, maxHeight: '90vh', display: 'flex', flexDirection: 'column', boxShadow: '0 6px 16px rgba(0,0,0,0.15)', overflow: 'hidden' }}>
             {/* 标题栏 */}
             <div style={{ padding: '14px 16px', borderBottom: '1px solid #E8EAED', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexShrink: 0 }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 15, fontWeight: 600, color: '#262626' }}>
                 <span style={{ color: '#1677FF', display: 'flex' }}><IconCat name="upload" size={15} /></span>
                 导入预览
+                {headerHash && (
+                  <span style={{ fontSize: 12, fontWeight: 400, color: '#8c8c8c', marginLeft: 4 }}>
+                    模板识别码：{headerHash}
+                  </span>
+                )}
               </div>
-              <button onClick={() => { setImportModalVisible(false); setImportPreview(null); setImportResult(null); }} style={{ background: 'none', border: 'none', color: '#8c8c8c', fontSize: 18, cursor: 'pointer', lineHeight: 1, padding: '2px', borderRadius: 3, transition: 'all 0.15s' }}
+              <button onClick={() => { setImportModalVisible(false); setImportPreview(null); setImportResult(null); setPendingMapping({}); setImportHeaders([]); }} style={{ background: 'none', border: 'none', color: '#8c8c8c', fontSize: 18, cursor: 'pointer', lineHeight: 1, padding: '2px', borderRadius: 3, transition: 'all 0.15s' }}
                 onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.color = '#595959'; (e.currentTarget as HTMLButtonElement).style.background = '#f5f5f5'; }}
                 onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.color = '#8c8c8c'; (e.currentTarget as HTMLButtonElement).style.background = 'none'; }}>
                 <IconCat name="close" size={16} />
@@ -633,13 +949,27 @@ export default function FeeTable({
 
             {/* 统计信息 */}
             {!importResult && (
-              <div style={{ padding: '10px 16px', borderBottom: '1px solid #E8EAED', display: 'flex', gap: 24, alignItems: 'center', flexShrink: 0, background: '#F5F7FA' }}>
+              <div style={{ padding: '10px 16px', borderBottom: '1px solid #E8EAED', display: 'flex', gap: 24, alignItems: 'center', flexShrink: 0, background: '#F5F7FA', flexWrap: 'wrap' }}>
                 <div style={{ display: 'flex', gap: 16, fontSize: 13 }}>
                   <span>共 <strong style={{ color: '#262626' }}>{importPreview.total}</strong> 条数据</span>
-                  <span style={{ color: '#52c41a' }}>有效 <strong>{importPreview.validCount}</strong> 条</span>
-                  {importPreview.errorCount > 0 && <span style={{ color: '#ff4d4f' }}>有误 <strong>{importPreview.errorCount}</strong> 条</span>}
+                  <span style={{ color: '#52c41a' }}>✓ 有效 <strong>{importPreview.validCount}</strong> 条</span>
+                  {importPreview.errorCount > 0 && <span style={{ color: '#ff4d4f' }}>✗ 有误 <strong>{importPreview.errorCount}</strong> 条</span>}
                 </div>
                 <div style={{ fontSize: 12, color: '#8c8c8c' }}>仅前 20 条预览，完整数据将在确认后导入</div>
+              </div>
+            )}
+
+            {/* 映射配置面板 */}
+            {!importResult && importHeaders.length > 0 && (
+              <div style={{ padding: '8px 16px 0', flexShrink: 0 }}>
+                <MappingPanel
+                  headers={importHeaders}
+                  pendingMapping={pendingMapping}
+                  setPendingMapping={setPendingMapping}
+                  fieldLabelMap={fieldLabelMap}
+                  onSaveTemplate={() => handleSaveTemplate(headerHash, pendingMapping)}
+                  savedMappingCount={savedMappingCount}
+                />
               </div>
             )}
 
@@ -709,14 +1039,22 @@ export default function FeeTable({
             )}
 
             {/* 底部操作栏 */}
-            <div style={{ padding: '10px 16px', borderTop: '1px solid #E8EAED', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexShrink: 0 }}>
+            <div style={{ padding: '10px 16px', borderTop: '1px solid #E8EAED', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexShrink: 0, flexWrap: 'wrap', gap: 8 }}>
               {!importResult ? (
                 <>
                   <div style={{ fontSize: 12, color: '#8c8c8c' }}>
                     提示：编号已存在时，<strong style={{ color: '#fa8c16' }}>跳过</strong>保留原数据，<strong style={{ color: '#ff4d4f' }}>覆盖</strong>则覆盖更新
+                    {importPreview.total > 500 && (
+                      <span style={{ color: '#1677FF', marginLeft: 8 }}>
+                        数据量较大（{importPreview.total} 条），将分批导入
+                      </span>
+                    )}
                   </div>
-                  <div style={{ display: 'flex', gap: 8 }}>
-                    <button onClick={() => { setImportModalVisible(false); setImportPreview(null); }} style={{ height: 30, padding: '0 20px', border: '1px solid #d9d9d9', borderRadius: 4, background: '#fff', cursor: 'pointer', fontSize: 13, color: '#595959', fontFamily: 'inherit', transition: 'all 0.15s' }}
+                  <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+                    {importing && (
+                      <ProgressBar value={importProgress} label={importProgressText || '导入中...'} />
+                    )}
+                    <button onClick={() => { setImportModalVisible(false); setImportPreview(null); setPendingMapping({}); setImportHeaders([]); }} style={{ height: 30, padding: '0 20px', border: '1px solid #d9d9d9', borderRadius: 4, background: '#fff', cursor: 'pointer', fontSize: 13, color: '#595959', fontFamily: 'inherit', transition: 'all 0.15s' }}
                       onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.borderColor = '#1677FF'; (e.currentTarget as HTMLButtonElement).style.color = '#1677FF'; }}
                       onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.borderColor = '#d9d9d9'; (e.currentTarget as HTMLButtonElement).style.color = '#595959'; }}>
                       取消
@@ -736,7 +1074,7 @@ export default function FeeTable({
               ) : (
                 <>
                   <div />
-                  <button onClick={() => { setImportModalVisible(false); setImportPreview(null); setImportResult(null); }} style={{ height: 30, padding: '0 24px', border: 'none', borderRadius: 4, background: '#1677FF', color: '#fff', cursor: 'pointer', fontSize: 13, fontFamily: 'inherit', transition: 'background 0.15s', boxShadow: '0 2px 0 rgba(22,99,196,0.1)' }}
+                  <button onClick={() => { setImportModalVisible(false); setImportPreview(null); setImportResult(null); setPendingMapping({}); setImportHeaders([]); }} style={{ height: 30, padding: '0 24px', border: 'none', borderRadius: 4, background: '#1677FF', color: '#fff', cursor: 'pointer', fontSize: 13, fontFamily: 'inherit', transition: 'background 0.15s', boxShadow: '0 2px 0 rgba(22,99,196,0.1)' }}
                     onMouseEnter={e => (e.currentTarget as HTMLButtonElement).style.background = '#3880d0'}
                     onMouseLeave={e => (e.currentTarget as HTMLButtonElement).style.background = '#1677FF'}>
                     关闭
@@ -763,5 +1101,6 @@ export default function FeeTable({
         onCancel={() => setConfirmVisible(false)}
       />
     </div>
+    </>
   );
 }

@@ -142,7 +142,11 @@ function EditableCell({
       color: error ? '#ff4d4f' : '#262626', position: 'relative',
     }}>
       {value || <span style={{ color: '#bfbfbf' }}>点击编辑</span>}
-      {error && <span style={{ position: 'absolute', bottom: -16, left: 8, fontSize: 11, color: '#ff4d4f', whiteSpace: 'nowrap' }}>{error}</span>}
+      {error && (
+        <span style={{ position: 'absolute', bottom: -18, left: 0, fontSize: 11, color: '#ff4d4f', whiteSpace: 'nowrap', background: '#fff', border: '1px solid #ffccc7', borderRadius: 3, padding: '1px 4px', zIndex: 10, cursor: 'default' }} title={`错误：${error}`}>
+          {error}
+        </span>
+      )}
     </div>
   );
 }
@@ -840,7 +844,7 @@ export default function UniversalImport() {
                           </td>
                           <td style={{ padding: '4px 8px', textAlign: 'center', color: '#8c8c8c', borderBottom: '1px solid #f0f0f0', borderRight: '1px solid #f0f0f0', whiteSpace: 'nowrap' }}>{row._rowIndex}</td>
                           {SYSTEM_FIELDS.map(f => (
-                            <td key={f.key} style={{ padding: '2px 4px', borderBottom: '1px solid #f0f0f0', borderRight: '1px solid #f0f0f0' }}>
+                            <td key={f.key} style={{ padding: '2px 4px', borderBottom: '1px solid #f0f0f0', borderRight: '1px solid #f0f0f0', position: 'relative' }}>
                               <EditableCell
                                 value={String(row[f.key as keyof WaybillRow] || '')}
                                 rowIndex={rowIdx}
