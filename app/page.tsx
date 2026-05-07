@@ -433,7 +433,16 @@ export default function FeeManager() {
             </div>
           ) : (
             <div style={{ padding: '4px 0' }}>
-              {MENU_DATA.map(item => <MenuItemEl key={item.key} item={item} activeMenu={activeMenu} collapsed={collapsed} expandedKeys={expandedKeys} onSelect={handleSelect} onToggle={handleToggle} />)}
+              {MENU_DATA
+                .filter(item => !HIDDEN_MENUS.includes(item.key))
+                .map(item => {
+                  if (item.children) {
+                    const visibleChildren = item.children.filter(c => !HIDDEN_MENUS.includes(c.key));
+                    if (visibleChildren.length === 0) return null;
+                    return <MenuItemEl key={item.key} item={{ ...item, children: visibleChildren }} activeMenu={activeMenu} collapsed={collapsed} expandedKeys={expandedKeys} onSelect={handleSelect} onToggle={handleToggle} />;
+                  }
+                  return <MenuItemEl key={item.key} item={item} activeMenu={activeMenu} collapsed={collapsed} expandedKeys={expandedKeys} onSelect={handleSelect} onToggle={handleToggle} />;
+                })}
             </div>
           )}
         </aside>
