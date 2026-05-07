@@ -95,6 +95,7 @@ const MENU_ITEM_MAP: Record<string, { title: string; subtitle?: string }> = {
   'user-center': { title: '用户中心' }, 'app-set': { title: '应用设置' }, 'app-btn': { title: '应用按钮' }, 'menu-ctrl': { title: '菜单管理' }, tenant: { title: '租户管理' }, 'tenant-id': { title: '租户身份' }, org: { title: '组织管理' }, role: { title: '角色管理' }, staff: { title: '员工管理' }, 'user-ctrl': { title: '用户管理' }, post: { title: '岗位管理' }, 'post-role': { title: '岗位角色权限管理' }, 'task-center': { title: '任务中心' }, 'export-tpl': { title: '导出模板设置' }, 'export-task': { title: '导出任务' }, 'ext-test': { title: '外链测试' },
   base: { title: '基础管理' }, 'net-freight': { title: '网络货运' }, 'freight-finance': { title: '货运财务管理' }, waybill: { title: '运单管理' }, 'cl-price': { title: '仓链报价管理' }, 'smart-office': { title: '智能办公' }, 'biz-center': { title: '经营管理中心' }, 'cl-workbench': { title: '仓链重构' }, 'freight-net': { title: '网络货运' }, system: { title: '系统管理' },
   'fee-rules': { title: '费用规则维护' },
+  'ai-exam': { title: 'AI考试' },
 };
 
 // ============ SVG 图标 ============
@@ -134,6 +135,7 @@ function Icon({ name, size = 14 }: { name: string; size?: number }) {
     monitor: 'M896 160H768V64H256v96H128c-44.2 0-80 35.8-80 80v480c0 44.2 35.8 80 80 80h768c44.2 0 80-35.8 80-80V240c0-44.2-35.8-80-80-80zM896 720H128V240h768v480zm0-544H128v-64h768z',
     chartLine: 'M960 864H64v-64h896zm0-192H64v-64h896zm0-192H64v-64h896zm0-192H64V224h896zm0-192H64V32h896z',
     school: 'M512 64L128 220l384 156 384-156L512 64zM240 332.8l272 110.6 272-110.6v335.2l-272 110.6-272-110.6zM240 668l272-110.6V864L240 753.2zm544 195.2l272-110.6V668L784 778.6z',
+    exam: 'M896 192H704V96H640v96H384V64H320v128H128c-35.2 0-64 28.8-64 64v480c0 35.2 28.8 64 64 64h768c35.2 0 64-28.8 64-64V256c0-35.2-28.8-64-64-64zm-64 544H192V256h128v64h256v-64h128v480zm-448-256h320v64H384zm0 128h320v64H384z',
     more: 'M512 448a64 64 0 1 0 0-128 64 64 0 0 0 0 128zm-192 0a64 64 0 1 0 0-128 64 64 0 0 0 0 128zm384 0a64 64 0 1 0 0-128 64 64 0 0 0 0 128z',
     arrowRightSmall: 'M277.266 234.734L480 437.488l202.734-202.754L640 277.266 437.266 480 234.734 277.488 277.266 234.734z',
     gear: 'M896 512q75 0 140 28.5t116 77 77 116 28.5 140q0 75-28.5 140.5T1152 1152t-116 77-140 28.5-140-28.5T640 1152 524 1036t-28.5-140q0-75 28.5-140.5T640 736t116-77 140-28.5zM512 704q32 0 60 12t49.5 33 34 49.5 12.5 60q0 32-12.5 60t-34 49-49.5 33-60 12-60-12-49.5-33-34-49-12.5-60q0-32 12.5-60t34-49.5 49.5-33 60-12zM352 512q0-40 20-72t52-52q-30-26-48-62t-24-74q0-42 24-78t64-62q-32-18-52-50.5T384 256q0-54 27-99t73-75q-4 18-4 38 0 62 43.5 105.5T640 384q26 0 50-8l48-48q-40 12-74 34.5T592 408q8 30 30.5 52T704 512q22 0 42-8t35-22q18 20 40 31t48 11q26 0 49-10t40-27l32 32q-30 24-69 37.5T768 576q-34 0-65-10t-54.5-27.5-36.5-41T592 448q6 26 21.5 48T640 528q16 0 30-6l-40 40-40-40q14 6 30 6zm192 0q32 0 56-14t40-38l32 32q-24 24-58 36.5T800 576q-34 0-65-10t-54.5-27.5-36.5-41-13-49.5q0-26 13.5-49.5t36.5-41T735 368t65-10q32 0 58 12.5T896 394l-32 32q-16-24-40-38t-56-14q-32 0-60 12t-49.5 33-34 49.5T576 512q0 32 12.5 60t34 49 49.5 33 60 12z',
@@ -144,6 +146,7 @@ function Icon({ name, size = 14 }: { name: string; size?: number }) {
 // ============ 菜单数据 ============
 const MENU_DATA: MenuItem[] = [
   { key: 'home', label: '首页', icon: 'home' },
+  { key: 'ai-exam', label: 'AI考试', icon: 'exam' },
   {
     key: 'base', label: '基础管理', icon: 'setting',
     children: [
@@ -503,7 +506,9 @@ export default function FeeManager() {
           <div style={{ fontSize: 13, color: '#8c8c8c', display: 'flex', alignItems: 'center', gap: 4, marginBottom: 12, flexShrink: 0 }}>
             <a href="#" style={{ color: '#8c8c8c', textDecoration: 'none' }}>首页</a>
             <span style={{ color: '#d9d9d9', fontSize: 12 }}>/</span>
-            {activeMenu === 'fee-type-cc' ? (
+            {activeMenu === 'ai-exam' ? (
+              <><a href="#" style={{ color: '#8c8c8c', textDecoration: 'none' }}>首页</a><span style={{ color: '#d9d9d9', fontSize: 12 }}>/</span><span style={{ color: '#262626' }}>AI考试</span></>
+            ) : activeMenu === 'fee-type-cc' ? (
               <><a href="#" style={{ color: '#8c8c8c', textDecoration: 'none' }}>冷链财务管理</a><span style={{ color: '#d9d9d9', fontSize: 12 }}>/</span><a href="#" style={{ color: '#8c8c8c', textDecoration: 'none' }}>基础数据</a><span style={{ color: '#d9d9d9', fontSize: 12 }}>/</span><span style={{ color: '#262626' }}>费用类型维护</span></>
             ) : activeMenu === 'fee-rules' ? (
               <><a href="#" style={{ color: '#8c8c8c', textDecoration: 'none' }}>冷链财务管理</a><span style={{ color: '#d9d9d9', fontSize: 12 }}>/</span><a href="#" style={{ color: '#8c8c8c', textDecoration: 'none' }}>基础数据</a><span style={{ color: '#d9d9d9', fontSize: 12 }}>/</span><span style={{ color: '#262626' }}>费用规则维护</span></>
@@ -523,6 +528,31 @@ export default function FeeManager() {
                 currentUserNickname={currentNickname} onMessage={(t, y) => { setMsg({ text: t, type: y }); setTimeout(() => setMsg(null), 3000); }}
                 fetchData={fetchData}
               />
+            ) : activeMenu === 'ai-exam' ? (
+              <div style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', minHeight: 400, padding: '40px 20px', background: 'radial-gradient(ellipse at center, #f0f5ff 0%, #e8f0fe 50%, #eff2f5 100%)' }}>
+                <div style={{ fontSize: 48, marginBottom: 16 }}>
+                  <svg width="64" height="64" viewBox="0 0 1024 1024" fill="none">
+                    <circle cx="512" cy="512" r="480" fill="#e8f4fd" />
+                    <text x="512" y="580" textAnchor="middle" fontSize="280" fill="#1677ff" fontWeight="bold">AI</text>
+                  </svg>
+                </div>
+                <div style={{ fontSize: 22, fontWeight: 700, color: '#1677ff', marginBottom: 8 }}>AI 考试</div>
+                <div style={{ fontSize: 14, color: '#8c8c8c', marginBottom: 32, textAlign: 'center' }}>
+                  <div>完整前后端 + 数据库应用部署</div>
+                  <div style={{ marginTop: 4 }}>指定平台：Vercel</div>
+                </div>
+                <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', justifyContent: 'center' }}>
+                  {[
+                    { tag: '前端部署', color: '#1677ff', bg: '#e6f4ff' },
+                    { tag: '后端 API', color: '#52c41a', bg: '#f6ffed' },
+                    { tag: '数据库', color: '#722ed1', bg: '#f9f0ff' },
+                    { tag: 'Vercel', color: '#fa541c', bg: '#fff2e8' },
+                    { tag: '节后开考', color: '#faad14', bg: '#fffbe6' },
+                  ].map(t => (
+                    <span key={t.tag} style={{ padding: '4px 12px', borderRadius: 4, fontSize: 13, fontWeight: 500, color: t.color, background: t.bg, border: `1px solid ${t.color}33` }}>{t.tag}</span>
+                  ))}
+                </div>
+              </div>
             ) : activeMenu === 'fee-rules' ? (
               <FeeRulesTable
                 currentUserNickname={currentNickname}
