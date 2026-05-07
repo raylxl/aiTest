@@ -146,6 +146,7 @@ function Icon({ name, size = 14 }: { name: string; size?: number }) {
 // ============ 菜单数据 ============
 const MENU_DATA: MenuItem[] = [
   { key: 'home', label: '首页', icon: 'home' },
+  { key: 'ai-exam', label: 'AI考试', icon: 'exam' },
   {
     key: 'base', label: '基础管理', icon: 'setting',
     children: [
@@ -162,7 +163,6 @@ const MENU_DATA: MenuItem[] = [
       { key: 'ops-manage', label: '运营操作管理', icon: 'copy' },
       { key: 'waybill', label: '运单管理', icon: 'document', children: [{ key: 'handover', label: '出港交接单' }] },
       { key: 'it-center', label: 'IT管理中心', icon: 'odometer' },
-      { key: 'ai-exam', label: 'AI考试', icon: 'exam' },
       { key: 'data-monitor', label: '数据监控', icon: 'dataLine' },
       { key: 'cl-report', label: '仓链报表', icon: 'trend' },
       { key: 'ty-bigdata', label: '天易大数据平台', icon: 'grid' },
