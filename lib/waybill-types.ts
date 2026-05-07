@@ -33,6 +33,7 @@ export interface WaybillRow {
   remark: string;
   // 校验相关
   _errors: Record<string, string>;  // field -> error message
+  _warnings: Record<string, string>; // field -> warning message（如外部编码重复提示）
   _isValid: boolean;
 }
 

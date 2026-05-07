@@ -364,6 +364,7 @@ export async function POST(request: Request) {
         temp_layer: mapped.temp_layer || '',
         remark: mapped.remark || '',
         _errors: errors,
+        _warnings: {},
         _isValid: isValid,
       });
     }
@@ -381,13 +382,12 @@ export async function POST(request: Request) {
       }
     }
 
-    // 标记数据库中已存在的外部编码
+    // 标记数据库中已存在的外部编码（作为警告，不阻止提交）
     const finalRows = parsedRows.map(row => {
       if (row.external_code && existingCodeSet.has(row.external_code)) {
         return {
           ...row,
-          _errors: { ...row._errors, external_code: '已存在（数据库已有此编码）' },
-          _isValid: false,
+          _warnings: { ...row._warnings, external_code: '已存在（可选择跳过或覆盖）' },
         };
       }
       return row;

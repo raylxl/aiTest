@@ -30,10 +30,10 @@ function Toast({ text, type, onClose }: { text: string; type: 'success' | 'error
 
 // ============ EditableCell 组件 ============
 function EditableCell({
-  value, rowIndex, field, onChange, error, options
+  value, rowIndex, field, onChange, error, warning, options
 }: {
   value: string; rowIndex: number; field: string; onChange: (rowIdx: number, field: string, value: string) => void;
-  error?: string; options?: readonly string[];
+  error?: string; warning?: string; options?: readonly string[];
 }) {
   const [editing, setEditing] = useState(false);
   const [editVal, setEditVal] = useState(value);
@@ -45,6 +45,11 @@ function EditableCell({
     setEditing(false);
     if (editVal !== value) onChange(rowIndex, field, editVal);
   };
+
+  const hasWarning = !!warning && !error;
+  const bg = error ? '#fff1f0' : hasWarning ? '#fffbe6' : value ? '#fff' : '#fafafa';
+  const borderColor = error ? '#ffccc7' : hasWarning ? '#ffd591' : 'transparent';
+  const textColor = error ? '#ff4d4f' : hasWarning ? '#d46b08' : '#262626';
 
   if (options) {
     return editing ? (
@@ -58,9 +63,8 @@ function EditableCell({
     ) : (
       <div onClick={() => setEditing(true)} style={{
         padding: '0 8px', minHeight: 32, lineHeight: '32px', cursor: 'text',
-        background: error ? '#fff1f0' : value ? '#fff' : '#fafafa',
-        border: `1px solid ${error ? '#ffccc7' : 'transparent'}`, borderRadius: 4, fontSize: 13,
-        color: error ? '#ff4d4f' : '#262626',
+        background: bg, border: `1px solid ${borderColor}`, borderRadius: 4, fontSize: 13,
+        color: textColor,
       }}>
         {value || <span style={{ color: '#bfbfbf' }}>点击选择</span>}
       </div>
@@ -76,14 +80,19 @@ function EditableCell({
   ) : (
     <div onClick={() => setEditing(true)} style={{
       padding: '0 8px', minHeight: 32, lineHeight: '32px', cursor: 'text',
-      background: error ? '#fff1f0' : '#fff',
-      border: `1px solid ${error ? '#ffccc7' : 'transparent'}`, borderRadius: 4, fontSize: 13,
-      color: error ? '#ff4d4f' : '#262626', position: 'relative',
+      background: bg,
+      border: `1px solid ${borderColor}`, borderRadius: 4, fontSize: 13,
+      color: textColor, position: 'relative',
     }}>
       {value || <span style={{ color: '#bfbfbf' }}>点击编辑</span>}
       {error && (
         <span style={{ position: 'absolute', bottom: -18, left: 0, fontSize: 11, color: '#ff4d4f', whiteSpace: 'nowrap', background: '#fff', border: '1px solid #ffccc7', borderRadius: 3, padding: '1px 4px', zIndex: 10, cursor: 'default' }} title={`错误：${error}`}>
           {error}
+        </span>
+      )}
+      {hasWarning && (
+        <span style={{ position: 'absolute', bottom: -18, left: 0, fontSize: 11, color: '#d46b08', whiteSpace: 'nowrap', background: '#fff', border: '1px solid #ffd591', borderRadius: 3, padding: '1px 4px', zIndex: 10, cursor: 'default' }} title={`警告：${warning}`}>
+          ⚠ {warning}
         </span>
       )}
     </div>
@@ -476,6 +485,17 @@ export default function UniversalImport() {
     }
   }
 
+  // 所有警告列表
+  const allWarnings: Array<{ row: number; field: string; msg: string }> = [];
+  for (const row of previewData) {
+    if (row._warnings) {
+      for (const [f, msg] of Object.entries(row._warnings)) {
+        const label = SYSTEM_FIELDS.find(sf => sf.key === f)?.label || f;
+        allWarnings.push({ row: row._rowIndex, field: label, msg });
+      }
+    }
+  }
+
   // 文件上传处理（含真实进度：先解析总行数，再模拟进度条）
   const handleFileUpload = useCallback(async (file: File) => {
     if (!file.name.match(/\.xlsx?$/)) {
@@ -641,7 +661,10 @@ export default function UniversalImport() {
       if (i !== rowIndex) return row;
       const updated = { ...row, [field]: value };
       const errors = validateRow(updated as WaybillRow);
-      return { ...updated, _errors: errors, _isValid: Object.keys(errors).length === 0 } as WaybillRow;
+      // 编辑字段时清除该字段的警告（如用户修改了外部编码）
+      const warnings = { ...row._warnings };
+      if (warnings[field]) delete warnings[field];
+      return { ...updated, _errors: errors, _warnings: warnings, _isValid: Object.keys(errors).length === 0 } as WaybillRow;
     }));
   }, []);
 
@@ -925,7 +948,7 @@ export default function UniversalImport() {
       external_code: '', sender_name: '', sender_phone: '', sender_address: '',
       receiver_name: '', receiver_phone: '', receiver_address: '',
       weight: '', quantity: '', temp_layer: '', remark: '',
-      _errors: {}, _isValid: false,
+      _errors: {}, _warnings: {}, _isValid: false,
     };
     setPreviewData(prev => [...prev, newRow]);
   }, [previewData.length]);
@@ -948,7 +971,7 @@ export default function UniversalImport() {
       {confirmModalOpen && (
         <ConfirmImportModal
           validCount={validCount}
-          duplicateCount={previewData.filter(r => r._errors?.['external_code']?.includes('已存在')).length}
+          duplicateCount={previewData.filter(r => r._warnings?.['external_code']?.includes('已存在')).length}
           onConfirm={(mode) => {
             setConfirmModalOpen(false);
             handleSubmit(mode);
@@ -1115,6 +1138,21 @@ export default function UniversalImport() {
                   </div>
                 )}
 
+                {/* 警告总览 */}
+                {allWarnings.length > 0 && (
+                  <div style={{ margin: '12px 16px 0', padding: '10px 12px', background: '#fffbe6', borderRadius: 6, border: '1px solid #ffd591', fontSize: 13 }}>
+                    <div style={{ fontWeight: 600, color: '#d46b08', marginBottom: 6 }}>⚠ 警告提示（共 {allWarnings.length} 个，不影响提交）</div>
+                    <div style={{ maxHeight: 100, overflow: 'auto' }}>
+                      {allWarnings.slice(0, 50).map((w, i) => (
+                        <div key={i} style={{ color: '#d46b08', marginBottom: 2 }}>
+                          <strong>第{w.row}行</strong> {w.field}：{w.msg}
+                        </div>
+                      ))}
+                      {allWarnings.length > 50 && <div style={{ color: '#8c8c8c', fontSize: 12 }}>...还有 {allWarnings.length - 50} 个警告</div>}
+                    </div>
+                  </div>
+                )}
+
                 {/* 表格（虚拟滚动）：CSS Grid 实现 sticky header + 虚拟 body */}
                 {(() => {
                   const containerHeight = 500; // maxHeight
@@ -1181,6 +1219,7 @@ export default function UniversalImport() {
                                       field={f.key}
                                       onChange={handleCellChange}
                                       error={row._errors?.[f.key]}
+                                      warning={row._warnings?.[f.key]}
                                       options={f.options as readonly string[] | undefined}
                                     />
                                   </div>

@@ -240,7 +240,7 @@ export default function FeeManager() {
   // 动态更新页签标题
   useEffect(() => {
     const title = MENU_ITEM_MAP[activeMenu]?.title || '首页';
-    document.title = title;
+    document.title = `鲸天管理系统 - ${title}`;
   }, [activeMenu]);
 
   const fetchData = useCallback(async () => {

@@ -123,7 +123,7 @@ export default function WaybillTable({ currentUserNickname = '系统', onMessage
     }
   }, []);
 
-  useEffect(() => { fetchData(); }, [fetchData]);
+  useEffect(() => { fetchData(); }, [fetchData, page]);
 
   // 全选 / 取消全选
   const handleSelectAll = (checked: boolean) => {
