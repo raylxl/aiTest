@@ -156,6 +156,7 @@ const MENU_DATA: MenuItem[] = [
       { key: 'fee-rules', label: '费用规则维护', icon: 'priceTag' },
     ]},
   ]},
+  { key: 'waybill', label: '已导入运单', icon: 'truck' },
   { key: 'ai-exam', label: 'AI考试', icon: 'exam', children: [
     { key: 'ai-exam-20260507', label: '20260507', icon: 'document', children: [
       { key: 'universal-import', label: '万能导入', icon: 'upload' },
