@@ -29,40 +29,37 @@ export async function GET(request: Request) {
   try {
     await initDB();
     const { searchParams } = new URL(request.url);
-    const neonSql = getNeonClient();
+    const neon = getNeonClient();
 
-    // 构建 WHERE 条件
-    const conditions: string[] = [];
-    const esc = (v: string) => v.replace(/'/g, "''");
+    const extCode = searchParams.get('external_code') || '';
+    const senderName = searchParams.get('sender_name') || '';
+    const senderPhone = searchParams.get('sender_phone') || '';
+    const recvName = searchParams.get('receiver_name') || '';
+    const recvPhone = searchParams.get('receiver_phone') || '';
+    const startDate = searchParams.get('start_date') || '';
+    const endDate = searchParams.get('end_date') || '';
 
-    const addLike = (col: string, val: string | null) => {
-      if (!val) return;
-      conditions.push(`${col} ILIKE '%${esc(val)}%'`);
-    };
-
-    addLike('external_code', searchParams.get('external_code'));
-    addLike('sender_name', searchParams.get('sender_name'));
-    addLike('sender_phone', searchParams.get('sender_phone'));
-    addLike('receiver_name', searchParams.get('receiver_name'));
-    addLike('receiver_phone', searchParams.get('receiver_phone'));
-
-    const startDate = searchParams.get('start_date');
-    const endDate = searchParams.get('end_date');
-    if (startDate && endDate) {
-      conditions.push(`created_at >= '${esc(startDate)} 00:00:00' AND created_at <= '${esc(endDate)} 23:59:59'`);
+    // 根据是否有条件选择不同的查询
+    let rows: Waybill[] = [];
+    if (extCode) {
+      rows = await neon`SELECT * FROM waybills WHERE external_code ILIKE ${'%' + extCode + '%'} ORDER BY created_at DESC LIMIT 10000` as unknown as Waybill[];
+    } else if (senderName) {
+      rows = await neon`SELECT * FROM waybills WHERE sender_name ILIKE ${'%' + senderName + '%'} ORDER BY created_at DESC LIMIT 10000` as unknown as Waybill[];
+    } else if (senderPhone) {
+      rows = await neon`SELECT * FROM waybills WHERE sender_phone ILIKE ${'%' + senderPhone + '%'} ORDER BY created_at DESC LIMIT 10000` as unknown as Waybill[];
+    } else if (recvName) {
+      rows = await neon`SELECT * FROM waybills WHERE receiver_name ILIKE ${'%' + recvName + '%'} ORDER BY created_at DESC LIMIT 10000` as unknown as Waybill[];
+    } else if (recvPhone) {
+      rows = await neon`SELECT * FROM waybills WHERE receiver_phone ILIKE ${'%' + recvPhone + '%'} ORDER BY created_at DESC LIMIT 10000` as unknown as Waybill[];
+    } else if (startDate && endDate) {
+      rows = await neon`SELECT * FROM waybills WHERE created_at >= ${startDate + ' 00:00:00'} AND created_at <= ${endDate + ' 23:59:59'} ORDER BY created_at DESC LIMIT 10000` as unknown as Waybill[];
     } else if (startDate) {
-      conditions.push(`created_at >= '${esc(startDate)} 00:00:00'`);
+      rows = await neon`SELECT * FROM waybills WHERE created_at >= ${startDate + ' 00:00:00'} ORDER BY created_at DESC LIMIT 10000` as unknown as Waybill[];
     } else if (endDate) {
-      conditions.push(`created_at <= '${esc(endDate)} 23:59:59'`);
+      rows = await neon`SELECT * FROM waybills WHERE created_at <= ${endDate + ' 23:59:59'} ORDER BY created_at DESC LIMIT 10000` as unknown as Waybill[];
+    } else {
+      rows = await neon`SELECT * FROM waybills ORDER BY created_at DESC LIMIT 10000` as unknown as Waybill[];
     }
-
-    const whereClause = conditions.length > 0 ? 'WHERE ' + conditions.join(' AND ') : '';
-    const orderLimit = 'ORDER BY created_at DESC LIMIT 10000';
-    const fullSql = `SELECT * FROM waybills ${whereClause} ${orderLimit}`.trim();
-
-    // .query(sql, params) 返回 { rows: [...] } 结构
-    const result = await neonSql.query(fullSql, []) as unknown as { rows: Waybill[] };
-    const rows: Waybill[] = result.rows || [];
 
     if (!rows || rows.length === 0) {
       return NextResponse.json({ error: '没有可导出的数据' }, { status: 400 });
