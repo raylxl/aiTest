@@ -60,8 +60,8 @@ export async function GET(request: Request) {
     const orderLimit = 'ORDER BY created_at DESC LIMIT 10000';
     const fullSql = `SELECT * FROM waybills ${whereClause} ${orderLimit}`.trim();
 
-    // .query() 返回 { rows: [...] } 结构
-    const result = await neonSql.query(fullSql) as unknown as { rows: Waybill[] };
+    // .query(sql, params) 返回 { rows: [...] } 结构
+    const result = await neonSql.query(fullSql, []) as unknown as { rows: Waybill[] };
     const rows: Waybill[] = result.rows || [];
 
     if (!rows || rows.length === 0) {
