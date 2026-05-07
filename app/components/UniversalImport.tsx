@@ -996,7 +996,7 @@ export default function UniversalImport() {
                           onChange={e => toggleAllWaybillSelect(e.target.checked)}
                           style={{ cursor: 'pointer', width: 14, height: 14 }} />
                       </th>
-                      {['ID', '外部编码', '发件人', '发件人电话', '发件人地址', '收件人', '收件人电话', '收件人地址', '重量', '件数', '温层', '备注', '状态', '创建时间'].map(h => (
+                      {['ID', '外部编码', '发件人姓名', '发件人电话', '发件人地址', '收件人姓名', '收件人电话', '收件人地址', '重量(kg)', '件数', '温层', '备注', '状态', '创建时间'].map(h => (
                         <th key={h} style={{ padding: '8px 10px', textAlign: 'left', borderBottom: '1px solid #e8e8e8', whiteSpace: 'nowrap', fontWeight: 600, color: '#595959' }}>{h}</th>
                       ))}
                     </tr>
