@@ -81,8 +81,8 @@ export async function DELETE(request: Request) {
       return NextResponse.json({ error: '缺少 ids 参数' }, { status: 400 });
     }
 
-    const placeholders = ids.map((_, i) => `$${i + 1}`).join(',');
-    const result = await sql`DELETE FROM waybills WHERE id IN (${sql.join(ids.map(id => sql`${id}`), sql`, `)}) RETURNING id`;
+    const query = sql.join(ids.map((id) => sql`${id}`), sql`, `);
+    const result = await sql`DELETE FROM waybills WHERE id IN (${query}) RETURNING id`;
     const deletedCount = result.length;
 
     return NextResponse.json({ success: true, deletedCount });
