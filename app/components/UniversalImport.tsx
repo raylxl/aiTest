@@ -154,7 +154,7 @@ function EditableCell({
 // ============ 映射关系面板组件 ============
 function MappingPanel({
   headers, mapping, pendingMapping, setPendingMapping,
-  onReapply, onSaveTemplate, hasSavedMapping, templateName
+  onReapply, onSaveTemplate, hasSavedMapping, templateName, onReset
 }: {
   headers: string[];
   mapping: Record<string, string>;
@@ -164,6 +164,7 @@ function MappingPanel({
   onSaveTemplate: (m: Record<string, string>) => void;
   hasSavedMapping: boolean;
   templateName: string;
+  onReset: () => void;
 }) {
   const [collapsed, setCollapsed] = useState(false);
 
@@ -193,7 +194,7 @@ function MappingPanel({
             </span>
           )}
           <span
-            onClick={() => { setPreviewData([]); setHeaders([]); setMapping({}); setHeaderHash(''); setPendingMapping({}); setIsManualMapping(false); setSubmitResult(null); setSelectedWaybillIds(new Set()); }}
+            onClick={onReset}
             style={{ fontSize: 12, padding: '2px 8px', background: '#fff', color: '#8c8c8c', borderRadius: 4, fontWeight: 400, cursor: 'pointer', border: '1px solid #d9d9d9', marginLeft: 4 }}
             title="重新上传文件"
           >
@@ -776,6 +777,16 @@ export default function UniversalImport() {
                 onSaveTemplate={handleSaveTemplate}
                 hasSavedMapping={hasSavedMapping}
                 templateName={templateName}
+                onReset={() => {
+                  setPreviewData([]);
+                  setHeaders([]);
+                  setMapping({});
+                  setHeaderHash('');
+                  setPendingMapping({});
+                  setIsManualMapping(false);
+                  setSubmitResult(null);
+                  setSelectedWaybillIds(new Set());
+                }}
               />
             )}
 
