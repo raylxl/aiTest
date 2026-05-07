@@ -133,7 +133,7 @@ const MENU_DATA: MenuItem[] = [
 
 // 隐藏的菜单项（不在侧边栏展示，但数据保留方便后续恢复）
 const HIDDEN_MENUS = [
-  'base', 'biz-center', 'oms', 'cl-workbench', 'warehouse', 'cl-bill', 'freight-net', 'data-alert',
+  'base', 'biz-center', 'oms', 'cl-workbench', 'warehouse', 'cl-bill', 'freight-net', 'data-alert', 'waybill',
 ];
 
 // ============ 菜单项组件 ============
