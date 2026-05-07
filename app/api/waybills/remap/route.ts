@@ -23,7 +23,7 @@ function validatePhone(phone: string): boolean {
   return /^1[3-9]\d{9}$/.test(p) || /^0\d{2,3}-?\d{7,8}$/.test(p);
 }
 
-function validateRow(row: WaybillRow, currentBatchCodes: Map<string, number>): Record<string, string> {
+function validateRow(row: WaybillRow): Record<string, string> {
   const errors: Record<string, string> = {};
   const reqFields = ['sender_name', 'sender_phone', 'sender_address', 'receiver_name', 'receiver_phone', 'receiver_address', 'weight', 'quantity', 'temp_layer'];
   const labels: Record<string, string> = {
@@ -92,12 +92,11 @@ export async function POST(request: Request) {
     // 直接使用 rows 的结构（前端传 WaybillRow 格式）和 newMapping 重算错误
     const remappedRows: WaybillRow[] = [];
     let totalErrors = 0;
-    const currentBatchCodes = new Map<string, number>(); // code → 首次出现的Excel行号
 
     for (let i = 0; i < rows.length; i++) {
       const raw = rows[i] as WaybillRow;
       // 重新校验（数据本身未变，只重新计算错误）
-      const errors = validateRow(raw, currentBatchCodes);
+      const errors = validateRow(raw);
       if (Object.keys(errors).length > 0) totalErrors++;
       remappedRows.push({
         ...raw,
