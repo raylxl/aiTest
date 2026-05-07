@@ -276,7 +276,7 @@ export default function WaybillTable({ currentUserNickname = '系统', onMessage
       </div>
 
       {/* 工具栏 */}
-      <div style={{ background: '#fff', borderRadius: 4, border: '1px solid #e4edf7', padding: '10px 16px', marginBottom: 12, flexShrink: 0, display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+      <div style={{ background: '#fff', borderRadius: 4, border: '1px solid #e4edf7', padding: '10px 16px', marginBottom: 12, flexShrink: 0, display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap', width: '100%', boxSizing: 'border-box' }}>
         {selectedRows.length > 0 && (
           <button onClick={() => openConfirm('batchDelete', selectedRows.length)}
             style={{ height: 30, padding: '0 14px', borderRadius: 4, border: '1px solid #FF4D4F', background: '#fff', color: '#FF4D4F', fontSize: 13, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 4, fontFamily: 'inherit' }}>

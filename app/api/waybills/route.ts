@@ -24,8 +24,8 @@ export async function GET(request: Request) {
     const pageSize = Math.min(100, Math.max(1, query.pageSize || 10));
     const offset = (page - 1) * pageSize;
 
-    // SQL 注入防护：LIKE 值转义单引号
-    const like = (v: string) => v.replace(/'/g, "''") + '%';
+    // SQL 注入防护：LIKE 值转义单引号，支持前/中/后/全匹配
+    const like = (v: string) => '%' + v.replace(/'/g, "''") + '%';
 
     // 收集有值的条件（避免空值传给 PG 导致类型强转错误）
     const conditions: string[] = [];
