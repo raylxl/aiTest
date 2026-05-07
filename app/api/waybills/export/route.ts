@@ -57,7 +57,12 @@ export async function GET(request: Request) {
     }
 
     const whereClause = conditions.length > 0 ? 'WHERE ' + conditions.join(' AND ') : '';
-    const rows = await neonSql.unsafe(`SELECT * FROM waybills ${whereClause} ORDER BY created_at DESC LIMIT 10000`) as unknown as Waybill[];
+    const orderLimit = 'ORDER BY created_at DESC LIMIT 10000';
+    const fullSql = `SELECT * FROM waybills ${whereClause} ${orderLimit}`.trim();
+
+    // .query() 返回 { rows: [...] } 结构
+    const result = await neonSql.query(fullSql) as unknown as { rows: Waybill[] };
+    const rows: Waybill[] = result.rows || [];
 
     if (!rows || rows.length === 0) {
       return NextResponse.json({ error: '没有可导出的数据' }, { status: 400 });
