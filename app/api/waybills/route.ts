@@ -33,6 +33,8 @@ export async function GET(request: Request) {
     const sdate = query.start_date?.trim() || '';
     const edate = query.end_date?.trim() || '';
 
+    const endDateFull = edate ? edate + ' 23:59:59' : '';
+
     // 用 sql 模板标签拼接（保持类型安全）
     const countRows = await sql`
       SELECT COUNT(*) as ct FROM waybills
@@ -42,8 +44,8 @@ export async function GET(request: Request) {
         AND (${sphone} = '' OR sender_phone ILIKE ${'%' + sphone + '%'})
         AND (${rname} = '' OR receiver_name ILIKE ${'%' + rname + '%'})
         AND (${rphone} = '' OR receiver_phone ILIKE ${'%' + rphone + '%'})
-        AND (${sdate} = '' OR created_at >= ${sdate})
-        AND (${edate} = '' OR created_at <= ${edate + ' 23:59:59'})
+        AND (${sdate} = '' OR created_at >= ${sdate}::date)
+        AND (${endDateFull} = '' OR created_at <= ${endDateFull}::timestamp)
     `;
     const total = parseInt(String((countRows[0] as { ct: unknown })?.ct || '0'));
 
@@ -55,8 +57,8 @@ export async function GET(request: Request) {
         AND (${sphone} = '' OR sender_phone ILIKE ${'%' + sphone + '%'})
         AND (${rname} = '' OR receiver_name ILIKE ${'%' + rname + '%'})
         AND (${rphone} = '' OR receiver_phone ILIKE ${'%' + rphone + '%'})
-        AND (${sdate} = '' OR created_at >= ${sdate})
-        AND (${edate} = '' OR created_at <= ${edate + ' 23:59:59'})
+        AND (${sdate} = '' OR created_at >= ${sdate}::date)
+        AND (${endDateFull} = '' OR created_at <= ${endDateFull}::timestamp)
       ORDER BY created_at DESC
       LIMIT ${pageSize} OFFSET ${offset}
     `;
