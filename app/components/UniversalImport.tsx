@@ -289,6 +289,7 @@ export default function UniversalImport() {
   // 上传状态
   const [uploading, setUploading] = useState(false);
   const [uploadProgress, setUploadProgress] = useState(0);
+  const [uploadProgressText, setUploadProgressText] = useState('');
   const [dragOver, setDragOver] = useState(false);
 
   // 预览数据
@@ -315,6 +316,7 @@ export default function UniversalImport() {
   const [listQuery, setListQuery] = useState({ external_code: '', sender_name: '', sender_phone: '', receiver_name: '', receiver_phone: '', start_date: '', end_date: '' });
   const [selectedWaybillIds, setSelectedWaybillIds] = useState<Set<number>>(new Set());
   const [deleteLoading, setDeleteLoading] = useState(false);
+  const [exportLoading, setExportLoading] = useState(false);
 
   // Toast
   const [toast, setToast] = useState<{ text: string; type: 'success' | 'error' | 'warning' } | null>(null);
@@ -341,7 +343,7 @@ export default function UniversalImport() {
     }
   }
 
-  // 文件上传处理
+  // 文件上传处理（含真实进度：先解析总行数，再模拟进度条）
   const handleFileUpload = useCallback(async (file: File) => {
     if (!file.name.match(/\.xlsx?$/)) {
       showToast('仅支持 .xlsx 或 .xls 格式', 'error');
@@ -349,17 +351,63 @@ export default function UniversalImport() {
     }
     setUploading(true);
     setUploadProgress(0);
+    setUploadProgressText('');
     setSubmitResult(null);
     setPendingMapping({});
 
+    let progressInterval: ReturnType<typeof setInterval> | null = null;
+
     try {
-      setUploadProgress(20);
+      // Step 1：快速前端解析，获取总行数
+      const XLSX = await import('xlsx');
+      const arrayBuf = await file.arrayBuffer();
+      const wb = XLSX.read(new Uint8Array(arrayBuf), { type: 'array' });
+
+      if (!wb.SheetNames || wb.SheetNames.length === 0) {
+        showToast('Excel 文件中没有工作表', 'error');
+        return;
+      }
+
+      // 选取数据 sheet（跳过"说明"类 sheet）
+      let sheetName = wb.SheetNames[0];
+      for (const sn of wb.SheetNames) {
+        if (sn.includes('说明') || sn.includes('readme') || sn.includes('guide')) continue;
+        sheetName = sn;
+        break;
+      }
+
+      const ws = wb.Sheets[sheetName];
+      const rawData = XLSX.utils.sheet_to_json(ws, { header: 1, defval: '' }) as unknown[][];
+      const totalRows = Math.max(0, rawData.length - 1);
+      const headers = (rawData[0] as string[] || []).map(h => String(h).trim());
+
+      if (totalRows === 0) {
+        showToast('Excel 文件中没有有效数据行', 'error');
+        return;
+      }
+
+      // Step 2：启动模拟进度条，显示"已解析 X/总数 条 (Y%)"
+      let simPct = 0;
+      progressInterval = setInterval(() => {
+        setUploadProgress(prev => {
+          if (prev >= 92) return prev;
+          const next = prev + Math.ceil((92 - prev) / 12);
+          const current = Math.min(Math.round(next * totalRows / 100), totalRows);
+          const pct = Math.round(current / totalRows * 100);
+          setUploadProgressText(`已解析 ${current}/${totalRows} 条 (${pct}%)`);
+          return Math.min(next, 92);
+        });
+      }, 250);
+
+      // Step 3：上传文件到后端（后端再次解析并校验）
       const formData = new FormData();
       formData.append('file', file);
-
-      setUploadProgress(50);
       const res = await fetch('/api/waybills/upload', { method: 'POST', body: formData });
-      setUploadProgress(80);
+
+      // Step 4：清除定时器，设 100%
+      if (progressInterval) clearInterval(progressInterval);
+      setUploadProgress(100);
+      setUploadProgressText(`已解析 ${totalRows}/${totalRows} 条 (100%)`);
 
       const json = await res.json();
       if (!res.ok) {
@@ -367,7 +415,6 @@ export default function UniversalImport() {
         return;
       }
 
-      setUploadProgress(100);
       setHeaders(json.headers || []);
       setMapping(json.mapping || {});
       setHeaderHash(json.headerHash || '');
@@ -376,12 +423,18 @@ export default function UniversalImport() {
       setPendingMapping({});
       setIsManualMapping(false);
       setPreviewData(json.rows || []);
-      showToast(`解析成功，共 ${json.totalCount} 条数据${json.totalErrors > 0 ? `，其中 ${json.totalErrors} 条有错误` : ''}`, json.totalErrors > 0 ? 'warning' : 'success');
+      showToast(
+        `解析成功，共 ${json.totalCount} 条数据${json.totalErrors > 0 ? `，其中 ${json.totalErrors} 条有错误` : ''}`,
+        json.totalErrors > 0 ? 'warning' : 'success'
+      );
     } catch (e) {
       showToast('上传失败：' + (e instanceof Error ? e.message : String(e)), 'error');
     } finally {
+      if (progressInterval) clearInterval(progressInterval);
       setUploading(false);
       setUploadProgress(0);
+      // 延迟清除文本，让用户看到 100%
+      setTimeout(() => setUploadProgressText(''), 1200);
     }
   }, []);
 
@@ -574,6 +627,7 @@ export default function UniversalImport() {
       showToast('没有可导出的数据', 'warning');
       return;
     }
+    setExportLoading(true);
     try {
       const XLSX = await import('xlsx');
       const FIELD_LABELS: Record<string, string> = {
@@ -605,6 +659,8 @@ export default function UniversalImport() {
       showToast('导出成功', 'success');
     } catch (e) {
       showToast('导出失败', 'error');
+    } finally {
+      setExportLoading(false);
     }
   }, [previewData]);
 
@@ -752,9 +808,12 @@ export default function UniversalImport() {
                   }}>
                   {uploading ? (
                     <div style={{ color: '#00BEBE' }}>
-                      <div style={{ animation: 'spin 1s linear infinite', fontSize: 28, marginBottom: 8 }}>⟳</div>
-                      <div style={{ fontSize: 14 }}>正在解析 Excel... {uploadProgress > 0 && `(${uploadProgress}%)`}</div>
-                      {uploadProgress > 0 && <div style={{ height: 4, background: '#e8e8e8', borderRadius: 2, marginTop: 12, overflow: 'hidden' }}><div style={{ height: '100%', width: `${uploadProgress}%`, background: '#00BEBE', transition: 'width 0.3s' }} /></div>}
+                        <div style={{ animation: 'spin 1s linear infinite', fontSize: 28, marginBottom: 8 }}>⟳</div>
+                        <div style={{ fontSize: 14, fontWeight: 600 }}>{uploadProgressText || '正在解析 Excel...'}</div>
+                        <div style={{ height: 6, background: '#e8e8e8', borderRadius: 3, marginTop: 12, overflow: 'hidden', maxWidth: 320, margin: '0 auto' }}>
+                          <div style={{ height: '100%', width: `${uploadProgress}%`, background: '#00BEBE', transition: 'width 0.4s ease' }} />
+                        </div>
+                        <div style={{ fontSize: 12, color: '#595959', marginTop: 6 }}>文件已上传，正在解析数据，请稍候...</div>
                     </div>
                   ) : (
                     <>
@@ -810,10 +869,11 @@ export default function UniversalImport() {
                       onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.borderColor = '#d9d9d9'; (e.currentTarget as HTMLButtonElement).style.color = '#595959'; }}>
                       <Icon name="plus" size={12} /> 新增行
                     </button>
-                    <button onClick={handleExport} style={{ height: 30, padding: '0 12px', border: '1px solid #d9d9d9', borderRadius: 4, background: '#fff', cursor: 'pointer', fontSize: 13, color: '#595959', display: 'flex', alignItems: 'center', gap: 4 }}
-                      onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.borderColor = '#00BEBE'; (e.currentTarget as HTMLButtonElement).style.color = '#00BEBE'; }}
-                      onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.borderColor = '#d9d9d9'; (e.currentTarget as HTMLButtonElement).style.color = '#595959'; }}>
-                      <Icon name="download" size={12} /> 导出Excel
+                    <button onClick={handleExport} disabled={exportLoading}
+                      style={{ height: 30, padding: '0 12px', border: '1px solid #d9d9d9', borderRadius: 4, background: exportLoading ? '#d9d9d9' : '#fff', cursor: exportLoading ? 'not-allowed' : 'pointer', fontSize: 13, color: exportLoading ? '#8c8c8c' : '#595959', display: 'flex', alignItems: 'center', gap: 4 }}
+                      onMouseEnter={e => { if (!exportLoading) { (e.currentTarget as HTMLButtonElement).style.borderColor = '#00BEBE'; (e.currentTarget as HTMLButtonElement).style.color = '#00BEBE'; } }}
+                      onMouseLeave={e => { if (!exportLoading) { (e.currentTarget as HTMLButtonElement).style.borderColor = '#d9d9d9'; (e.currentTarget as HTMLButtonElement).style.color = '#595959'; } }}>
+                      {exportLoading ? '导出中...' : <><Icon name="download" size={12} /> 导出Excel</>}
                     </button>
                   </div>
                 </div>
@@ -957,9 +1017,16 @@ export default function UniversalImport() {
                 ))}
               </div>
               <div style={{ marginTop: 12, display: 'flex', gap: 8, alignItems: 'center' }}>
-                <button onClick={() => fetchWaybillList(1)} style={{ height: 32, padding: '0 16px', border: 'none', borderRadius: 4, background: '#00BEBE', color: '#fff', cursor: 'pointer', fontSize: 13 }}
-                  onMouseEnter={e => (e.currentTarget.style.background = '#00c4c4')}
-                  onMouseLeave={e => (e.currentTarget.style.background = '#00BEBE')}>查询</button>
+                <button onClick={() => fetchWaybillList(1)} disabled={listLoading}
+                  style={{
+                    height: 32, padding: '0 16px', border: 'none', borderRadius: 4,
+                    background: listLoading ? '#d9d9d9' : '#00BEBE', color: '#fff',
+                    cursor: listLoading ? 'not-allowed' : 'pointer', fontSize: 13
+                  }}
+                  onMouseEnter={e => { if (!listLoading) (e.currentTarget as HTMLButtonElement).style.background = '#00c4c4'; }}
+                  onMouseLeave={e => { if (!listLoading) (e.currentTarget as HTMLButtonElement).style.background = '#00BEBE'; }}>
+                  {listLoading ? '查询中...' : '查询'}
+                </button>
                 <button onClick={() => { setListQuery({ external_code: '', sender_name: '', sender_phone: '', receiver_name: '', receiver_phone: '', start_date: '', end_date: '' }); }}
                   style={{ height: 32, padding: '0 16px', border: '1px solid #d9d9d9', borderRadius: 4, background: '#fff', color: '#595959', cursor: 'pointer', fontSize: 13 }}>重置</button>
                 <button
