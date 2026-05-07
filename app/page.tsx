@@ -5,6 +5,7 @@ import { getSession, setSession, clearSession, validateUsername, validatePasswor
 import type { FeeItem, QueryForm, MenuItem } from './components/types';
 import FeeTable from './components/FeeTable';
 import FeeRulesTable from './components/FeeRulesTable';
+import WaybillTable from './components/WaybillTable';
 import UniversalImport from './components/UniversalImport';
 
 // ============ 招财猫占位页 ============
@@ -540,6 +541,11 @@ export default function FeeManager() {
               <UniversalImport />
             ) : activeMenu === 'fee-rules' ? (
               <FeeRulesTable
+                currentUserNickname={currentNickname}
+                onMessage={(t, y) => { setMsg({ text: t, type: y }); setTimeout(() => setMsg(null), 3000); }}
+              />
+            ) : activeMenu === 'waybill' ? (
+              <WaybillTable
                 currentUserNickname={currentNickname}
                 onMessage={(t, y) => { setMsg({ text: t, type: y }); setTimeout(() => setMsg(null), 3000); }}
               />
