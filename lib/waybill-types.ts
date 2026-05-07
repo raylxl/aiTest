@@ -112,30 +112,36 @@ export const COLUMN_ALIAS_MAP: Record<string, string> = {
   '单号': 'external_code',
   // 发件人姓名
   '发件人姓名': 'sender_name',
+  '发件人': 'sender_name',        // 分组模板别名
   '发货人': 'sender_name',
   'sender': 'sender_name',
   '寄件人': 'sender_name',
   '寄件人姓名': 'sender_name',
   // 发件人电话
   '发件人电话': 'sender_phone',
+  '发件电话': 'sender_phone',      // 分组模板别名
   '发货电话': 'sender_phone',
   'sender tel': 'sender_phone',
   '寄件人电话': 'sender_phone',
   // 发件人地址
   '发件人地址': 'sender_address',
+  '发件地址': 'sender_address',    // 分组模板别名
   '发货地址': 'sender_address',
   'sender address': 'sender_address',
   '寄件人地址': 'sender_address',
   // 收件人姓名
   '收件人姓名': 'receiver_name',
+  '收件人': 'receiver_name',       // 分组模板别名
   '收货人': 'receiver_name',
   'receiver': 'receiver_name',
   // 收件人电话
   '收件人电话': 'receiver_phone',
+  '收件电话': 'receiver_phone',     // 分组模板别名
   '收货电话': 'receiver_phone',
   'receiver tel': 'receiver_phone',
   // 收件人地址
   '收件人地址': 'receiver_address',
+  '收件地址': 'receiver_address',   // 分组模板别名
   '收货地址': 'receiver_address',
   'receiver address': 'receiver_address',
   // 重量
@@ -144,6 +150,7 @@ export const COLUMN_ALIAS_MAP: Record<string, string> = {
   'weight(kg)': 'weight',
   'weight': 'weight',
   '重量(KG)': 'weight',
+  '重量(Kg)': 'weight',
   // 件数
   '件数': 'quantity',
   '数量': 'quantity',

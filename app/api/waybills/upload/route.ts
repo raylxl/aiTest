@@ -36,6 +36,30 @@ function generateHeaderHash(headers: string[], mapping: Record<string, string>):
 
 // 检测哪一行是表头（跳过头部的说明行）
 function findHeaderRow(rawData: unknown[][], maxSkip = 5): { headerRow: number; headers: string[]; isGrouped: boolean } {
+  // 先检查是否有分组标题行（第0行是分组标题，第1行是字段名）
+  if (rawData.length >= 2) {
+    const row0 = rawData[0] as unknown[];
+    const row1 = rawData[1] as unknown[];
+    const cells0 = row0.map(c => normalizeKey(c as string));
+    const cells1 = row1.map(c => normalizeKey(c as string));
+
+    // 检查第0行是否包含分组关键词
+    const groupKeywords = ['发件方', '收件方', '货物信息', '发件人信息', '收件人信息'];
+    const hasGroupKeyword = cells0.some(c => groupKeywords.some(kw => c.includes(kw)));
+
+    if (hasGroupKeyword) {
+      // 检查第1行是否是字段名行
+      let matched1 = 0;
+      for (const cell of cells1) {
+        if (findFieldKey(cell)) matched1++;
+      }
+      if (matched1 >= 4) {
+        return { headerRow: 1, headers: cells1, isGrouped: true };
+      }
+    }
+  }
+
+  // 普通模板检测逻辑
   for (let i = 0; i < Math.min(maxSkip, rawData.length); i++) {
     const row = rawData[i] as unknown[];
     const cells = row.map(c => normalizeKey(c as string));
@@ -48,11 +72,7 @@ function findHeaderRow(rawData: unknown[][], maxSkip = 5): { headerRow: number; 
 
     // 如果匹配字段 >= 4，认为是表头行
     if (matched >= 4) {
-      // 检查是否是分组布局（template4）
-      const nonEmpty = cells.filter(Boolean).length;
-      const uniqueNonEmpty = [...new Set(cells.filter(Boolean))].length;
-      const isGrouped = uniqueNonEmpty < nonEmpty * 0.7; // 大量重复说明是分组
-      return { headerRow: i, headers: cells, isGrouped };
+      return { headerRow: i, headers: cells, isGrouped: false };
     }
   }
   // 默认第0行
@@ -212,13 +232,20 @@ export async function POST(request: Request) {
     let mapping: Record<string, string> = buildMapping(headers);
 
     // 分组布局特殊处理（template4）
+    // 分组模板：第0行是分组标题（如"发件方信息"），第1行是字段名（如"发件人"）
+    // 数据从第2行开始
     if (isGrouped && rawData.length > headerRow + 1) {
-      const fieldRow = rawData[headerRow + 1] as unknown[] || [];
+      // 重新生成 headers 为字段名行（用于显示）
+      // 映射使用列索引作为 key：group_col_0, group_col_1, ...
+      const fieldRow = headers; // headers 已经是字段名行（第1行）
+      const newMapping: Record<string, string> = {};
       for (let i = 0; i < fieldRow.length; i++) {
-        const fn = normalizeKey(fieldRow[i] as string);
+        const fn = normalizeKey(fieldRow[i]);
         const fk = findFieldKey(fn);
-        if (fk) mapping[`group_col_${i}`] = fk;
+        if (fk) newMapping[`group_col_${i}`] = fk;
       }
+      // 合并映射
+      mapping = { ...mapping, ...newMapping };
     }
 
     if (Object.keys(mapping).length === 0) {
