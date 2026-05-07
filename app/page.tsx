@@ -96,6 +96,7 @@ const MENU_ITEM_MAP: Record<string, { title: string; subtitle?: string }> = {
   base: { title: '基础管理' }, 'net-freight': { title: '网络货运' }, 'freight-finance': { title: '货运财务管理' }, waybill: { title: '运单管理' }, 'cl-price': { title: '仓链报价管理' }, 'smart-office': { title: '智能办公' }, 'biz-center': { title: '经营管理中心' }, 'cl-workbench': { title: '仓链重构' }, 'freight-net': { title: '网络货运' }, system: { title: '系统管理' },
   'fee-rules': { title: '费用规则维护' },
   'ai-exam-20260507': { title: '20260507' },
+  'universal-import': { title: '万能导入' },
 };
 
 // ============ SVG 图标 ============
@@ -136,6 +137,7 @@ function Icon({ name, size = 14 }: { name: string; size?: number }) {
     chartLine: 'M960 864H64v-64h896zm0-192H64v-64h896zm0-192H64v-64h896zm0-192H64V224h896zm0-192H64V32h896z',
     school: 'M512 64L128 220l384 156 384-156L512 64zM240 332.8l272 110.6 272-110.6v335.2l-272 110.6-272-110.6zM240 668l272-110.6V864L240 753.2zm544 195.2l272-110.6V668L784 778.6z',
     exam: 'M896 192H704V96H640v96H384V64H320v128H128c-35.2 0-64 28.8-64 64v480c0 35.2 28.8 64 64 64h768c35.2 0 64-28.8 64-64V256c0-35.2-28.8-64-64-64zm-64 544H192V256h128v64h256v-64h128v480zm-448-256h320v64H384zm0 128h320v64H384z',
+    upload: 'M832 192v640q0 17-7 24t-24 7H176q-17 0-24-7t-7-24V192q0-17 7-24t24-7h656q17 0 24 7t7 24zm-352 448V320q0-26-19-45t-45-19-45 19-19 45v352l288-160q14-7 29-7 16 0 29 7l352 192q22 13 22 31 0 19-19 38-19 17-45 17t-45-19l-64-32v32q0 26-19 45t-45 19-45-19-19-45z',
     more: 'M512 448a64 64 0 1 0 0-128 64 64 0 0 0 0 128zm-192 0a64 64 0 1 0 0-128 64 64 0 0 0 0 128zm384 0a64 64 0 1 0 0-128 64 64 0 0 0 0 128z',
     arrowRightSmall: 'M277.266 234.734L480 437.488l202.734-202.754L640 277.266 437.266 480 234.734 277.488 277.266 234.734z',
     gear: 'M896 512q75 0 140 28.5t116 77 77 116 28.5 140q0 75-28.5 140.5T1152 1152t-116 77-140 28.5-140-28.5T640 1152 524 1036t-28.5-140q0-75 28.5-140.5T640 736t116-77 140-28.5zM512 704q32 0 60 12t49.5 33 34 49.5 12.5 60q0 32-12.5 60t-34 49-49.5 33-60 12-60-12-49.5-33-34-49-12.5-60q0-32 12.5-60t34-49.5 49.5-33 60-12zM352 512q0-40 20-72t52-52q-30-26-48-62t-24-74q0-42 24-78t64-62q-32-18-52-50.5T384 256q0-54 27-99t73-75q-4 18-4 38 0 62 43.5 105.5T640 384q26 0 50-8l48-48q-40 12-74 34.5T592 408q8 30 30.5 52T704 512q22 0 42-8t35-22q18 20 40 31t48 11q26 0 49-10t40-27l32 32q-30 24-69 37.5T768 576q-34 0-65-10t-54.5-27.5-36.5-41T592 448q6 26 21.5 48T640 528q16 0 30-6l-40 40-40-40q14 6 30 6zm192 0q32 0 56-14t40-38l32 32q-24 24-58 36.5T800 576q-34 0-65-10t-54.5-27.5-36.5-41-13-49.5q0-26 13.5-49.5t36.5-41T735 368t65-10q32 0 58 12.5T896 394l-32 32q-16-24-40-38t-56-14q-32 0-60 12t-49.5 33-34 49.5T576 512q0 32 12.5 60t34 49 49.5 33 60 12z',
@@ -153,7 +155,9 @@ const MENU_DATA: MenuItem[] = [
     ]},
   ]},
   { key: 'ai-exam', label: 'AI考试', icon: 'exam', children: [
-    { key: 'ai-exam-20260507', label: '20260507', icon: 'document' },
+    { key: 'ai-exam-20260507', label: '20260507', icon: 'document', children: [
+      { key: 'universal-import', label: '万能导入', icon: 'upload' },
+    ]},
   ]},
   { key: 'system', label: '系统管理', icon: 'setting', children: [
     { key: 'user-center', label: '用户中心' }, { key: 'app-set', label: '应用设置' }, { key: 'app-btn', label: '应用按钮' },
@@ -361,7 +365,9 @@ export default function FeeManager() {
       if (menu.children) {
         for (const child of menu.children) {
           if (child.key === key) setExpandedKeys(prev => new Set([...prev, menu.key]));
-          if (child.children) for (const gc of child.children) if (gc.key === key) setExpandedKeys(prev => new Set([...prev, menu.key, child.key]));
+          if (child.children) for (const gc of child.children) {
+            if (gc.key === key) setExpandedKeys(prev => new Set([...prev, menu.key, child.key]));
+          }
         }
       }
     }
@@ -480,6 +486,8 @@ export default function FeeManager() {
               <><a href="#" style={{ color: '#8c8c8c', textDecoration: 'none' }}>首页</a><span style={{ color: '#d9d9d9', fontSize: 12 }}>/</span><span style={{ color: '#262626' }}>AI考试</span></>
             ) : activeMenu === 'ai-exam-20260507' ? (
               <><a href="#" style={{ color: '#8c8c8c', textDecoration: 'none' }}>首页</a><span style={{ color: '#d9d9d9', fontSize: 12 }}>/</span><a href="#" style={{ color: '#8c8c8c', textDecoration: 'none' }}>AI考试</a><span style={{ color: '#d9d9d9', fontSize: 12 }}>/</span><span style={{ color: '#262626' }}>20260507</span></>
+            ) : activeMenu === 'universal-import' ? (
+              <><a href="#" style={{ color: '#8c8c8c', textDecoration: 'none' }}>首页</a><span style={{ color: '#d9d9d9', fontSize: 12 }}>/</span><a href="#" style={{ color: '#8c8c8c', textDecoration: 'none' }}>AI考试</a><span style={{ color: '#d9d9d9', fontSize: 12 }}>/</span><a href="#" style={{ color: '#8c8c8c', textDecoration: 'none' }}>20260507</a><span style={{ color: '#d9d9d9', fontSize: 12 }}>/</span><span style={{ color: '#262626' }}>万能导入</span></>
             ) : activeMenu === 'fee-type-cc' ? (
               <><a href="#" style={{ color: '#8c8c8c', textDecoration: 'none' }}>冷链财务管理</a><span style={{ color: '#d9d9d9', fontSize: 12 }}>/</span><a href="#" style={{ color: '#8c8c8c', textDecoration: 'none' }}>基础数据</a><span style={{ color: '#d9d9d9', fontSize: 12 }}>/</span><span style={{ color: '#262626' }}>费用类型维护</span></>
             ) : activeMenu === 'fee-rules' ? (
@@ -527,6 +535,8 @@ export default function FeeManager() {
               </div>
             ) : activeMenu === 'ai-exam-20260507' ? (
               <MenuPlaceholder title="20260507" subtitle="AI考试" />
+            ) : activeMenu === 'universal-import' ? (
+              <MenuPlaceholder title="万能导入" subtitle="通用Excel导入工具" />
             ) : activeMenu === 'fee-rules' ? (
               <FeeRulesTable
                 currentUserNickname={currentNickname}
