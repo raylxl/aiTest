@@ -708,8 +708,8 @@ export default function UniversalImport() {
       {/* Tab切换 */}
       <div style={{ display: 'flex', borderBottom: '1px solid #e8e8e8', padding: '0 0 0 16px', background: '#fff', flexShrink: 0 }}>
         {[
-          { key: 'import', label: '万能导入', icon: 'upload' },
-          { key: 'list', label: '已导入运单', icon: 'file' },
+          { key: 'import', label: '文件上传', icon: 'upload' },
+          { key: 'list', label: '运单管理', icon: 'file' },
         ].map(tab => (
           <div key={tab.key} onClick={() => setActiveTab(tab.key as 'import' | 'list')}
             style={{
