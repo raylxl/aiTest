@@ -28,6 +28,132 @@ function Toast({ text, type, onClose }: { text: string; type: 'success' | 'error
   );
 }
 
+// ============ MappingPanel 组件 ============
+function MappingPanel({
+  headers, mapping, pendingMapping, setPendingMapping,
+  onReapply, onSaveTemplate, hasSavedMapping, templateName, onReset
+}: {
+  headers: string[];
+  mapping: Record<string, string>;
+  pendingMapping: Record<string, string>;
+  setPendingMapping: (m: Record<string, string>) => void;
+  onReapply: (m: Record<string, string>) => void;
+  onSaveTemplate: (m: Record<string, string>) => void;
+  hasSavedMapping: boolean;
+  templateName: string;
+  onReset: () => void;
+}) {
+  const [collapsed, setCollapsed] = useState(false);
+  const currentMapping = Object.keys(pendingMapping).length > 0 ? pendingMapping : mapping;
+
+  return (
+    <div style={{ border: '1px solid #d9d9d9', borderRadius: 8, background: '#fff', marginBottom: 12 }}>
+      <div
+        onClick={() => setCollapsed(c => !c)}
+        style={{
+          padding: '10px 16px', cursor: 'pointer', display: 'flex', justifyContent: 'space-between',
+          alignItems: 'center', borderBottom: collapsed ? 'none' : '1px solid #f0f0f0',
+          userSelect: 'none',
+        }}
+      >
+        <div style={{ fontSize: 14, fontWeight: 600, color: '#262626', display: 'flex', alignItems: 'center', gap: 8 }}>
+          🔗 映射关系配置
+          {templateName && (
+            <span style={{ fontSize: 12, padding: '2px 8px', background: '#e6f4ff', color: '#1677ff', borderRadius: 4, fontWeight: 400 }}>
+              {templateName}
+            </span>
+          )}
+          {hasSavedMapping && (
+            <span style={{ fontSize: 12, padding: '2px 8px', background: '#f6ffed', color: '#52c41a', borderRadius: 4, fontWeight: 400 }}>
+              已保存
+            </span>
+          )}
+          <span
+            onClick={e => { e.stopPropagation(); onReset(); }}
+            style={{ fontSize: 12, padding: '2px 8px', background: '#fff', color: '#8c8c8c', borderRadius: 4, fontWeight: 400, cursor: 'pointer', border: '1px solid #d9d9d9', marginLeft: 4 }}
+            title="重新上传文件"
+          >
+            🔄 重新上传
+          </span>
+        </div>
+        <span style={{ color: '#8c8c8c', fontSize: 18 }}>{collapsed ? '▶' : '▼'}</span>
+      </div>
+
+      {!collapsed && (
+        <div style={{ padding: '12px 16px' }}>
+          <div style={{ fontSize: 12, color: '#8c8c8c', marginBottom: 10 }}>
+            请确认每个 Excel 列名对应的系统字段。如需调整，请在下方下拉框中选择正确的字段映射。
+          </div>
+
+          <div style={{ overflow: 'auto', maxHeight: 240, border: '1px solid #f0f0f0', borderRadius: 6 }}>
+            <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
+              <thead>
+                <tr style={{ background: '#fafafa' }}>
+                  <th style={{ padding: '8px 12px', textAlign: 'left', fontWeight: 600, color: '#595959', borderBottom: '1px solid #e8e8e8', whiteSpace: 'nowrap' }}>
+                    Excel 列名
+                  </th>
+                  <th style={{ padding: '8px 12px', width: 40, textAlign: 'center', color: '#8c8c8c', borderBottom: '1px solid #e8e8e8' }}>→</th>
+                  <th style={{ padding: '8px 12px', textAlign: 'left', fontWeight: 600, color: '#595959', borderBottom: '1px solid #e8e8e8', whiteSpace: 'nowrap' }}>
+                    映射到系统字段
+                  </th>
+                </tr>
+              </thead>
+              <tbody>
+                {headers.map((col, idx) => {
+                  const mapped = currentMapping[col];
+                  return (
+                    <tr key={idx} style={{ borderBottom: idx < headers.length - 1 ? '1px solid #f5f5f5' : 'none' }}>
+                      <td style={{ padding: '6px 12px', color: '#262626', maxWidth: 200, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                        {col}
+                      </td>
+                      <td style={{ padding: '6px 12px', textAlign: 'center', color: '#d9d9d9' }}>→</td>
+                      <td style={{ padding: '4px 12px' }}>
+                        <select
+                          value={mapped || ''}
+                          onChange={e => {
+                            const newMap = { ...currentMapping, [col]: e.target.value };
+                            setPendingMapping(newMap);
+                          }}
+                          style={{
+                            height: 30, padding: '0 8px', border: `1px solid ${mapped ? '#d9d9d9' : '#ff4d4f'}`,
+                            borderRadius: 4, fontSize: 13, outline: 'none', width: '100%', minWidth: 140,
+                            background: '#fff', cursor: 'pointer',
+                            color: mapped ? '#262626' : '#ff4d4f',
+                          }}
+                        >
+                          <option value="">— 未映射 —</option>
+                          {SYSTEM_FIELDS.map(f => (
+                            <option key={f.key} value={f.key}>{f.label}{f.required ? ' *' : ''}</option>
+                          ))}
+                        </select>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+
+          <div style={{ marginTop: 10, display: 'flex', gap: 8 }}>
+            <button
+              onClick={() => onReapply(currentMapping)}
+              style={{ height: 32, padding: '0 16px', border: '1px solid #00BEBE', borderRadius: 4, background: '#00BEBE', color: '#fff', cursor: 'pointer', fontSize: 13, fontWeight: 500 }}
+            >
+              🔄 重新解析数据
+            </button>
+            <button
+              onClick={() => onSaveTemplate(currentMapping)}
+              style={{ height: 32, padding: '0 16px', border: '1px solid #d9d9d9', borderRadius: 4, background: '#fff', color: '#595959', cursor: 'pointer', fontSize: 13 }}
+            >
+              💾 保存为模板
+            </button>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ============ 校验函数 ============
 function validateRow(row: WaybillRow): Record<string, string> {
   const errors: Record<string, string> = {};
