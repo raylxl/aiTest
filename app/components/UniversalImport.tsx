@@ -93,7 +93,7 @@ function EditableCell({
 // ============ MappingPanel 组件 ============
 function MappingPanel({
   headers, mapping, pendingMapping, setPendingMapping,
-  onReapply, onSaveTemplate, hasSavedMapping, templateName, onReset
+  onReapply, onSaveTemplate, hasSavedMapping, templateName, templateMatchNote, onReset
 }: {
   headers: string[];
   mapping: Record<string, string>;
@@ -103,6 +103,7 @@ function MappingPanel({
   onSaveTemplate: (m: Record<string, string>) => void;
   hasSavedMapping: boolean;
   templateName: string;
+  templateMatchNote: string;
   onReset: () => void;
 }) {
   const [collapsed, setCollapsed] = useState(false);
@@ -127,7 +128,7 @@ function MappingPanel({
           )}
           {hasSavedMapping && (
             <span style={{ fontSize: 12, padding: '2px 8px', background: '#f6ffed', color: '#52c41a', borderRadius: 4, fontWeight: 400 }}>
-              已保存
+              {templateMatchNote || '已保存'}
             </span>
           )}
           <span
@@ -216,6 +217,133 @@ function MappingPanel({
   );
 }
 
+// ============ ConfirmImportModal 组件 ============
+function ConfirmImportModal({
+  validCount, duplicateCount, onConfirm, onCancel, loading
+}: {
+  validCount: number;
+  duplicateCount: number; // 有外部编码且已存在的行数
+  onConfirm: (mode: 'skip' | 'overwrite') => void;
+  onCancel: () => void;
+  loading: boolean;
+}) {
+  return (
+    <div style={{
+      position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
+      background: 'rgba(0,0,0,0.45)', zIndex: 9000,
+      display: 'flex', alignItems: 'center', justifyContent: 'center',
+    }}>
+      <div style={{
+        background: '#fff', borderRadius: 8, padding: '24px 28px',
+        width: 440, maxWidth: '90vw',
+        boxShadow: '0 8px 32px rgba(0,0,0,0.15)',
+        animation: 'fadeInDown 0.2s ease',
+      }}>
+        <div style={{ fontSize: 16, fontWeight: 700, color: '#262626', marginBottom: 6 }}>
+          确认导入运单
+        </div>
+        <div style={{ fontSize: 14, color: '#595959', marginBottom: 16, lineHeight: 1.7 }}>
+          即将导入 <strong style={{ color: '#1677ff' }}>{validCount}</strong> 条有效运单到数据库。
+          {duplicateCount > 0 && (
+            <span style={{ color: '#faad14', fontWeight: 600 }}>
+              {' '}&nbsp;其中 <strong>{duplicateCount}</strong> 条外部编码与已有数据重复
+            </span>
+          )}
+        </div>
+
+        {/* 跳过冲突 */}
+        <div
+          id="card-skip"
+          onClick={() => !loading && (document.getElementById('mode-skip') as HTMLInputElement)?.click()}
+          style={{
+            display: 'block', padding: '12px 14px', border: '2px solid #d9d9d9',
+            borderRadius: 8, marginBottom: 10, cursor: loading ? 'not-allowed' : 'pointer',
+            background: '#fafafa', transition: 'all 0.15s',
+          }}
+        >
+          <input type="radio" name="import-mode" id="mode-skip" value="skip" defaultChecked style={{ display: 'none' }} />
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            <div style={{ width: 16, height: 16, borderRadius: '50%', border: '2px solid #d9d9d9', background: '#fff', flexShrink: 0, transition: 'all 0.15s' }} id="dot-skip" />
+            <div>
+              <strong style={{ color: '#262626', fontSize: 14 }}>跳过冲突（推荐）</strong>
+              <div style={{ fontSize: 12, color: '#8c8c8c', marginTop: 3 }}>
+                {duplicateCount > 0
+                  ? `已有编码的 ${duplicateCount} 条将被跳过，不更新`
+                  : '数据库中无重复编码，等效于直接插入'}
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* 覆盖已有 */}
+        <div
+          id="card-overwrite"
+          onClick={() => !loading && (document.getElementById('mode-overwrite') as HTMLInputElement)?.click()}
+          style={{
+            display: 'block', padding: '12px 14px', border: '2px solid #d9d9d9',
+            borderRadius: 8, marginBottom: 20, cursor: loading ? 'not-allowed' : 'pointer',
+            background: '#fafafa', transition: 'all 0.15s',
+          }}
+        >
+          <input type="radio" name="import-mode" id="mode-overwrite" value="overwrite" style={{ display: 'none' }} />
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            <div style={{ width: 16, height: 16, borderRadius: '50%', border: '2px solid #d9d9d9', background: '#fff', flexShrink: 0 }} id="dot-overwrite" />
+            <div>
+              <strong style={{ color: '#262626', fontSize: 14 }}>覆盖已有数据</strong>
+              <div style={{ fontSize: 12, color: '#ff4d4f', marginTop: 3 }}>
+                {duplicateCount > 0
+                  ? `已有编码的 ${duplicateCount} 条将被覆盖更新，请谨慎操作！`
+                  : '无重复编码，此选项等效于直接插入'}
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* 选中效果 JS（radio change 时更新样式） */}
+        <script dangerouslySetInnerHTML={{ __html: `
+          document.querySelectorAll('input[name="import-mode"]').forEach(function(r) {
+            r.addEventListener('change', function() {
+              ['skip','overwrite'].forEach(function(m) {
+                var card = document.getElementById('card-' + m);
+                var dot = document.getElementById('dot-' + m);
+                if (r.value === m && r.checked) {
+                  card.style.borderColor = '#1677ff';
+                  card.style.background = '#e6f4ff';
+                  dot.style.borderColor = '#1677ff';
+                  dot.style.background = '#1677ff';
+                } else {
+                  card.style.borderColor = '#d9d9d9';
+                  card.style.background = '#fafafa';
+                  dot.style.borderColor = '#d9d9d9';
+                  dot.style.background = '#fff';
+                }
+              });
+            });
+          });
+        ` }} />
+
+        <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end' }}>
+          <button
+            onClick={onCancel}
+            disabled={loading}
+            style={{ height: 34, padding: '0 16px', border: '1px solid #d9d9d9', borderRadius: 4, background: '#fff', color: '#595959', cursor: loading ? 'not-allowed' : 'pointer', fontSize: 13 }}>
+            取消
+          </button>
+          <button
+            onClick={() => {
+              const selected = (document.querySelector('input[name="import-mode"]:checked') as HTMLInputElement)?.value as 'skip' | 'overwrite' || 'skip';
+              onConfirm(selected);
+            }}
+            disabled={loading}
+            style={{ height: 34, padding: '0 20px', border: 'none', borderRadius: 4, background: '#1677ff', color: '#fff', cursor: loading ? 'not-allowed' : 'pointer', fontSize: 13, fontWeight: 600 }}>
+            {loading ? '提交中...' : '确认提交'}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ============ ProgressBar 组件 ============
 function ProgressBar({ value, label }: { value: number; label: string }) {
   return (
@@ -285,6 +413,7 @@ export default function UniversalImport() {
   const [headerHash, setHeaderHash] = useState('');
   const [hasSavedMapping, setHasSavedMapping] = useState(false);
   const [templateName, setTemplateName] = useState('');
+  const [templateMatchNote, setTemplateMatchNote] = useState('');
   const [isManualMapping, setIsManualMapping] = useState(false);
   const [pendingMapping, setPendingMapping] = useState<Record<string, string>>({});
 
@@ -293,6 +422,15 @@ export default function UniversalImport() {
   const [submitProgress, setSubmitProgress] = useState(0);
   const [submitProgressText, setSubmitProgressText] = useState('');
   const [submitResult, setSubmitResult] = useState<{ success: number; failed: number } | null>(null);
+
+  // 确认导入弹框
+  const [confirmModalOpen, setConfirmModalOpen] = useState(false);
+
+  // 虚拟滚动
+  const [scrollTop, setScrollTop] = useState(0);
+  const ROW_HEIGHT = 42; // 每行高度（px）
+  const BUFFER = 8;      // 上下各多渲染 N 行缓冲
+  const [dismissAutoApply, setDismissAutoApply] = useState(false); // 是否已撤销自动应用
 
   // 运单列表
   const [waybillList, setWaybillList] = useState<Waybill[]>([]);
@@ -406,7 +544,9 @@ export default function UniversalImport() {
       setHeaderHash(json.headerHash || '');
       setHasSavedMapping(json.hasSavedMapping || false);
       setTemplateName(json.templateName || '');
+      setTemplateMatchNote(json.templateMatchNote || '');
       setPendingMapping({});
+      setDismissAutoApply(false);
       setIsManualMapping(false);
       setPreviewData(json.rows || []);
       showToast(
@@ -447,6 +587,7 @@ export default function UniversalImport() {
       setMapping(newMapping);
       setHeaderHash(json.headerHash || '');
       setHasSavedMapping(json.hasSavedMapping || false);
+      setTemplateMatchNote(json.templateMatchNote || '');
       setPendingMapping({});
       setPreviewData(json.rows || []);
       showToast(
@@ -536,7 +677,7 @@ export default function UniversalImport() {
   }, [listQuery]);
 
   // 提交下单（分批提交 + 真实进度）
-  const handleSubmit = useCallback(async () => {
+  const handleSubmit = useCallback(async (mode: 'skip' | 'overwrite' = 'skip') => {
     const selectedRows = previewData.filter(r => r._selected !== false);
     const errors = selectedRows.flatMap((row, i) => {
       const errs = validateRow(row);
@@ -561,6 +702,7 @@ export default function UniversalImport() {
     let totalFailed = 0;
     let done = 0;
     const total = selectedRows.length;
+    const skipDuplicates = mode === 'skip';
 
     try {
       for (let i = 0; i < selectedRows.length; i += BATCH_SIZE) {
@@ -570,7 +712,7 @@ export default function UniversalImport() {
         const res = await fetch('/api/waybills/submit', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ rows: batch, skipDuplicates: false }),
+          body: JSON.stringify({ rows: batch, skipDuplicates }),
         });
         const json = await res.json();
         if (!res.ok) {
@@ -596,6 +738,7 @@ export default function UniversalImport() {
         setMapping({});
         setHeaderHash('');
         setPendingMapping({});
+        setConfirmModalOpen(false);
         fetchWaybillList(listPage);
       }
     } catch (e) {
@@ -605,7 +748,7 @@ export default function UniversalImport() {
       setSubmitProgress(0);
       setSubmitProgressText('');
     }
-  }, [previewData, listPage, fetchWaybillList]);
+  }, [previewData, listPage, fetchWaybillList, confirmModalOpen]);
 
   // 导出Excel（前端生成）
   const handleExport = useCallback(async () => {
@@ -750,6 +893,20 @@ export default function UniversalImport() {
 
       {toast && <Toast text={toast.text} type={toast.type} onClose={() => setToast(null)} />}
 
+      {/* 确认导入弹框 */}
+      {confirmModalOpen && (
+        <ConfirmImportModal
+          validCount={validCount}
+          duplicateCount={previewData.filter(r => r._errors?.['external_code']?.includes('已存在')).length}
+          onConfirm={(mode) => {
+            setConfirmModalOpen(false);
+            handleSubmit(mode);
+          }}
+          onCancel={() => setConfirmModalOpen(false)}
+          loading={submitting}
+        />
+      )}
+
       {/* Tab切换 */}
       <div style={{ display: 'flex', borderBottom: '1px solid #e8e8e8', padding: '0 0 0 16px', background: '#fff', flexShrink: 0 }}>
         {[
@@ -825,6 +982,7 @@ export default function UniversalImport() {
                 onSaveTemplate={handleSaveTemplate}
                 hasSavedMapping={hasSavedMapping}
                 templateName={templateName}
+                templateMatchNote={templateMatchNote}
                 onReset={() => {
                   setPreviewData([]);
                   setHeaders([]);
@@ -834,8 +992,30 @@ export default function UniversalImport() {
                   setIsManualMapping(false);
                   setSubmitResult(null);
                   setSelectedWaybillIds(new Set());
+                  setTemplateMatchNote('');
+                  setScrollTop(0);
+                  setDismissAutoApply(false);
                 }}
               />
+            )}
+
+            {/* 自动应用模板横幅 */}
+            {previewData.length > 0 && hasSavedMapping && templateMatchNote && !dismissAutoApply && (
+              <div style={{
+                padding: '10px 14px', borderRadius: 6, background: '#e6f4ff',
+                border: '1px solid #91caff', display: 'flex', alignItems: 'center', gap: 8,
+                fontSize: 13, color: '#1677ff', marginBottom: 8,
+              }}>
+                <span style={{ fontSize: 16 }}>🔮</span>
+                <span style={{ flex: 1 }}>
+                  <strong>已自动应用映射规则</strong>（{templateMatchNote}），数据已按此规则解析
+                </span>
+                <button
+                  onClick={() => setDismissAutoApply(true)}
+                  style={{ fontSize: 12, padding: '2px 8px', border: '1px solid #91caff', borderRadius: 4, background: '#fff', color: '#1677ff', cursor: 'pointer' }}>
+                  重新选择映射
+                </button>
+              </div>
             )}
 
             {/* 预览表格 */}
@@ -846,7 +1026,12 @@ export default function UniversalImport() {
                   <div style={{ fontSize: 14, fontWeight: 600, color: '#262626' }}>
                     数据预览
                     <span style={{ fontWeight: 400, fontSize: 13, color: '#8c8c8c', marginLeft: 8 }}>
-                      共 {totalSelected} 行（含 {invalidCount} 个错误行）
+                      共 {previewData.length} 行（含 {invalidCount} 个错误行）
+                      {previewData.length > 50 && (
+                        <span style={{ marginLeft: 6, color: '#8c8c8c', fontWeight: 400 }}>
+                          | 当前显示 {Math.max(1, Math.floor(scrollTop / ROW_HEIGHT) + 1)}–{Math.min(previewData.length, Math.floor(scrollTop / ROW_HEIGHT) + Math.ceil(500 / ROW_HEIGHT))} 行
+                        </span>
+                      )}
                     </span>
                   </div>
                   <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
@@ -879,51 +1064,87 @@ export default function UniversalImport() {
                   </div>
                 )}
 
-                {/* 表格 */}
-                <div style={{ overflow: 'auto', maxHeight: 500, margin: '12px 0' }}>
-                  <table style={{ width: 'max-content', minWidth: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
-                    <thead>
-                      <tr style={{ background: '#fafafa', position: 'sticky', top: 0, zIndex: 2 }}>
-                        <th style={{ padding: '8px 8px', width: 40, textAlign: 'center', borderBottom: '2px solid #e8e8e8', borderRight: '1px solid #f0f0f0', fontWeight: 600, color: '#595959', whiteSpace: 'nowrap' }}>
-                          <input type="checkbox" checked={allSelected} onChange={toggleAll} style={{ cursor: 'pointer', width: 16, height: 16 }} />
-                        </th>
-                        <th style={{ padding: '8px 8px', width: 60, textAlign: 'center', borderBottom: '2px solid #e8e8e8', borderRight: '1px solid #f0f0f0', fontWeight: 600, color: '#595959', whiteSpace: 'nowrap' }}>行号</th>
-                        {SYSTEM_FIELDS.map(f => (
-                          <th key={f.key} style={{ padding: '8px 8px', minWidth: 120, borderBottom: '2px solid #e8e8e8', borderRight: '1px solid #f0f0f0', fontWeight: 600, color: f.required ? '#cf1322' : '#595959', whiteSpace: 'nowrap' }}>
-                            {f.label}{f.required && <span style={{ color: '#ff4d4f', marginLeft: 2 }}>*</span>}
-                          </th>
-                        ))}
-                        <th style={{ padding: '8px 8px', width: 60, borderBottom: '2px solid #e8e8e8', fontWeight: 600, color: '#595959' }}>操作</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {previewData.map((row, rowIdx) => (
-                        <tr key={rowIdx} style={{ background: row._isValid ? '#fff' : '#fff1f0' }}>
-                          <td style={{ padding: '4px 8px', textAlign: 'center', borderBottom: '1px solid #f0f0f0' }}>
-                            <input type="checkbox" checked={row._selected !== false} onChange={() => toggleRow(rowIdx)} style={{ cursor: 'pointer', width: 16, height: 16 }} />
-                          </td>
-                          <td style={{ padding: '4px 8px', textAlign: 'center', color: '#8c8c8c', borderBottom: '1px solid #f0f0f0', borderRight: '1px solid #f0f0f0', whiteSpace: 'nowrap' }}>{row._rowIndex}</td>
-                          {SYSTEM_FIELDS.map(f => (
-                            <td key={f.key} style={{ padding: '2px 4px', borderBottom: '1px solid #f0f0f0', borderRight: '1px solid #f0f0f0', position: 'relative' }}>
-                              <EditableCell
-                                value={String(row[f.key as keyof WaybillRow] || '')}
-                                rowIndex={rowIdx}
-                                field={f.key}
-                                onChange={handleCellChange}
-                                error={row._errors?.[f.key]}
-                                options={f.options as readonly string[] | undefined}
-                              />
-                            </td>
+                {/* 表格（虚拟滚动）：CSS Grid 实现 sticky header + 虚拟 body */}
+                {(() => {
+                  const containerHeight = 500; // maxHeight
+                  const startIdx = Math.max(0, Math.floor(scrollTop / ROW_HEIGHT) - BUFFER);
+                  const visibleCount = Math.ceil(containerHeight / ROW_HEIGHT) + BUFFER * 2;
+                  const endIdx = Math.min(previewData.length, startIdx + visibleCount);
+                  const visibleRows = previewData.slice(startIdx, endIdx);
+                  const totalHeight = previewData.length * ROW_HEIGHT;
+
+                  return (
+                    <div
+                      style={{ overflowX: 'auto', maxHeight: 500 }}
+                      onScroll={e => setScrollTop(e.currentTarget.scrollTop)}
+                    >
+                      <div style={{
+                        display: 'grid',
+                        gridTemplateColumns: '40px 60px repeat(' + SYSTEM_FIELDS.length + ', minmax(120px, 1fr)) 60px',
+                        minWidth: 'max-content',
+                        fontSize: 13,
+                      }}>
+                        {/* 表头行（sticky） */}
+                        <div style={{
+                          display: 'contents',
+                        }}>
+                          <div style={{
+                            padding: '8px', textAlign: 'center', borderBottom: '2px solid #e8e8e8',
+                            borderRight: '1px solid #f0f0f0', fontWeight: 600, color: '#595959',
+                            background: '#fafafa', position: 'sticky', top: 0, left: 0, zIndex: 3,
+                          }}>
+                            <input type="checkbox" checked={allSelected} onChange={toggleAll} style={{ cursor: 'pointer', width: 16, height: 16 }} />
+                          </div>
+                          <div style={{ padding: '8px', textAlign: 'center', borderBottom: '2px solid #e8e8e8', borderRight: '1px solid #f0f0f0', fontWeight: 600, color: '#595959', background: '#fafafa', position: 'sticky', top: 0, zIndex: 2 }}>行号</div>
+                          {SYSTEM_FIELDS.map((f, fi) => (
+                            <div key={f.key} style={{ padding: '8px', borderBottom: '2px solid #e8e8e8', borderRight: '1px solid #f0f0f0', fontWeight: 600, color: f.required ? '#cf1322' : '#595959', background: '#fafafa', position: 'sticky', top: 0, zIndex: 2, whiteSpace: 'nowrap' }}>
+                              {f.label}{f.required && <span style={{ color: '#ff4d4f', marginLeft: 2 }}>*</span>}
+                            </div>
                           ))}
-                          <td style={{ padding: '4px 8px', borderBottom: '1px solid #f0f0f0' }}>
-                            <button onClick={() => deleteRow(rowIdx)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#ff4d4f', fontSize: 16, padding: 4 }}
-                              title="删除此行">×</button>
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
+                          <div style={{ padding: '8px', borderBottom: '2px solid #e8e8e8', fontWeight: 600, color: '#595959', background: '#fafafa', position: 'sticky', top: 0, zIndex: 2 }}>操作</div>
+                        </div>
+
+                        {/* 虚拟滚动占位（撑满滚动高度） */}
+                        <div style={{ gridColumn: '1 / -1', height: totalHeight, position: 'relative' }}>
+                          {visibleRows.map((row, vIdx) => {
+                            const rowIdx = startIdx + vIdx;
+                            const isErr = !row._isValid;
+                            return (
+                              <div key={rowIdx} style={{
+                                display: 'grid',
+                                gridTemplateColumns: '40px 60px repeat(' + SYSTEM_FIELDS.length + ', minmax(120px, 1fr)) 60px',
+                                minWidth: 'max-content',
+                                position: 'absolute', top: rowIdx * ROW_HEIGHT,
+                                width: '100%', height: ROW_HEIGHT,
+                                background: isErr ? '#fff1f0' : '#fff',
+                              }}>
+                                <div style={{ padding: '4px 8px', textAlign: 'center', borderBottom: '1px solid #f0f0f0' }}>
+                                  <input type="checkbox" checked={row._selected !== false} onChange={() => toggleRow(rowIdx)} style={{ cursor: 'pointer', width: 16, height: 16 }} />
+                                </div>
+                                <div style={{ padding: '4px 8px', textAlign: 'center', color: '#8c8c8c', borderBottom: '1px solid #f0f0f0', borderRight: '1px solid #f0f0f0', whiteSpace: 'nowrap', lineHeight: ROW_HEIGHT + 'px' }}>{row._rowIndex}</div>
+                                {SYSTEM_FIELDS.map(f => (
+                                  <div key={f.key} style={{ padding: '2px 4px', borderBottom: '1px solid #f0f0f0', borderRight: '1px solid #f0f0f0' }}>
+                                    <EditableCell
+                                      value={String(row[f.key as keyof WaybillRow] || '')}
+                                      rowIndex={rowIdx}
+                                      field={f.key}
+                                      onChange={handleCellChange}
+                                      error={row._errors?.[f.key]}
+                                      options={f.options as readonly string[] | undefined}
+                                    />
+                                  </div>
+                                ))}
+                                <div style={{ padding: '4px 8px', borderBottom: '1px solid #f0f0f0', lineHeight: ROW_HEIGHT + 'px' }}>
+                                  <button onClick={() => deleteRow(rowIdx)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#ff4d4f', fontSize: 16, padding: 4 }} title="删除此行">×</button>
+                                </div>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })()}
 
                 {/* 提交区 */}
                 <div style={{ padding: '12px 16px', borderTop: '1px solid #e8e8e8', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 12 }}>
@@ -940,15 +1161,15 @@ export default function UniversalImport() {
                       </div>
                     )}
                     <button
-                      onClick={handleSubmit}
+                      onClick={() => setConfirmModalOpen(true)}
                       disabled={submitting || invalidCount > 0 || totalSelected === 0}
                       style={{
                         height: 36, padding: '0 24px', border: 'none', borderRadius: 4,
-                        background: (submitting || invalidCount > 0 || totalSelected === 0) ? '#d9d9d9' : '#00BEBE',
+                        background: (submitting || invalidCount > 0 || totalSelected === 0) ? '#d9d9d9' : '#1677ff',
                         color: '#fff', cursor: (submitting || invalidCount > 0 || totalSelected === 0) ? 'not-allowed' : 'pointer',
                         fontSize: 14, fontWeight: 600,
                       }}>
-                      {submitting ? '提交中...' : '提交下单'}
+                      {submitting ? '提交中...' : '确认导入'}
                     </button>
                   </div>
                 </div>

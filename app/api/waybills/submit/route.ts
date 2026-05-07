@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import sql, { initDB } from '@/lib/db';
+import sql, { initDB, getNeonClient } from '@/lib/db';
 import type { WaybillRow, ValidationError } from '@/lib/waybill-types';
 
 const TEMP_LAYER_OPTIONS = ['常温', '冷藏', '冷冻'];
@@ -65,6 +65,8 @@ export async function POST(request: Request) {
       rows: WaybillRow[];
       skipDuplicates?: boolean;
     };
+    // overwrite 模式下 skipDuplicates=false，改为真正覆盖
+    const isOverwrite = !skipDuplicates;
 
     if (!Array.isArray(rows) || rows.length === 0) {
       return NextResponse.json({ error: '没有可提交的数据' }, { status: 400 });
@@ -109,17 +111,14 @@ export async function POST(request: Request) {
       const code = String(r.external_code || '').trim();
       if (!code) return true; // 无外部编码直接插入
       if (existCodes.has(code)) {
-        if (!skipDuplicates) {
-          // 会在后面逐条记录错误
-        }
-        return false;
+        return isOverwrite; // overwrite 模式下也插入（后面用 ON CONFLICT DO UPDATE）
       }
       return true;
     });
 
-    // 记录重复错误（不走 skipDuplicates 时）
+    // 记录重复错误（skip 模式下且有重复时记录）
     const submitErrors: ValidationError[] = [];
-    if (!skipDuplicates) {
+    if (!isOverwrite) {
       for (let i = 0; i < selectedRows.length; i++) {
         const code = String(selectedRows[i].external_code || '').trim();
         if (code && existCodes.has(code)) {
@@ -131,7 +130,7 @@ export async function POST(request: Request) {
     let success = 0;
     let failed = toInsert.length === 0 ? (skipDuplicates ? selectedRows.length - toInsert.length : submitErrors.length) : 0;
 
-    // ========== 批量插入：UNNEST 语法 ==========
+    // ========== 批量插入：UNNEST 语法，支持 ON CONFLICT DO UPDATE ==========
     if (toInsert.length > 0) {
       try {
         const extArr = toInsert.map(r => String(r.external_code || '').trim());
@@ -146,28 +145,41 @@ export async function POST(request: Request) {
         const tempArr = toInsert.map(r => String(r.temp_layer || '').trim());
         const remarkArr = toInsert.map(r => String(r.remark || '').trim());
 
-        await sql`
+        // overwrite 模式：ON CONFLICT DO UPDATE；skip 模式：ON CONFLICT DO NOTHING
+        const onConflictAction = isOverwrite
+          ? `ON CONFLICT (external_code) DO UPDATE SET
+               sender_name=EXCLUDED.sender_name, sender_phone=EXCLUDED.sender_phone,
+               sender_address=EXCLUDED.sender_address, receiver_name=EXCLUDED.receiver_name,
+               receiver_phone=EXCLUDED.receiver_phone, receiver_address=EXCLUDED.receiver_address,
+               weight=EXCLUDED.weight, quantity=EXCLUDED.quantity,
+               temp_layer=EXCLUDED.temp_layer, remark=EXCLUDED.remark`
+          : `ON CONFLICT (external_code) DO NOTHING`;
+
+        // 拼接含 UNNEST + ON CONFLICT 的 INSERT（onConflictAction 是受控字符串，直接内联）
+        const insertSQL = `
           INSERT INTO waybills (
             external_code, sender_name, sender_phone, sender_address,
             receiver_name, receiver_phone, receiver_address,
             weight, quantity, temp_layer, remark
           )
           SELECT * FROM UNNEST(
-            ${extArr}::text[],
-            ${senderNameArr}::text[],
-            ${senderPhoneArr}::text[],
-            ${senderAddrArr}::text[],
-            ${recvNameArr}::text[],
-            ${recvPhoneArr}::text[],
-            ${recvAddrArr}::text[],
-            ${weightArr}::numeric[],
-            ${qtyArr}::int[],
-            ${tempArr}::text[],
-            ${remarkArr}::text[]
+            '${extArr.join("','")}'::text[],
+            '${senderNameArr.join("','")}'::text[],
+            '${senderPhoneArr.join("','")}'::text[],
+            '${senderAddrArr.join("','")}'::text[],
+            '${recvNameArr.join("','")}'::text[],
+            '${recvPhoneArr.join("','")}'::text[],
+            '${recvAddrArr.join("','")}'::text[],
+            ARRAY[${weightArr.join(",")}]::numeric[],
+            ARRAY[${qtyArr.join(",")}]::int[],
+            '${tempArr.join("','")}'::text[],
+            '${remarkArr.join("','")}'::text[]
           )
+          ${onConflictAction}
         `;
+        await getNeonClient().unsafe(insertSQL);
         success = toInsert.length;
-        if (!skipDuplicates) {
+        if (!isOverwrite) {
           failed = submitErrors.length;
         }
       } catch (e) {
@@ -180,7 +192,7 @@ export async function POST(request: Request) {
 
     return NextResponse.json({
       success,
-      failed: failed + (skipDuplicates ? selectedRows.length - toInsert.length - success : submitErrors.length),
+      failed: failed + (isOverwrite ? 0 : submitErrors.length),
       errors: submitErrors.slice(0, 50),
     });
   } catch (e: unknown) {

@@ -34,6 +34,18 @@ function generateHeaderHash(headers: string[], mapping: Record<string, string>):
   return crypto.createHash('md5').update(fields.join(',')).digest('hex');
 }
 
+// 计算两个字符串数组的 Jaccard 相似度（交集/并集）
+function jaccardSimilarity(a: string[], b: string[]): number {
+  const setA = new Set(a.filter(Boolean));
+  const setB = new Set(b.filter(Boolean));
+  let intersection = 0;
+  for (const item of setA) {
+    if (setB.has(item)) intersection++;
+  }
+  const union = setA.size + setB.size - intersection;
+  return union === 0 ? 0 : intersection / union;
+}
+
 // 检测哪一行是表头（跳过头部的说明行）
 function findHeaderRow(rawData: unknown[][], maxSkip = 5): { headerRow: number; headers: string[]; isGrouped: boolean } {
   // 先检查是否有分组标题行（第0行是分组标题，第1行是字段名）
@@ -252,17 +264,39 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: '无法识别 Excel 表头，请手动选择列映射' }, { status: 400 });
     }
 
-    // 生成模板指纹并查询是否已保存
+    // 生成模板指纹并查询是否已保存（精确匹配 + 模糊匹配）
     const headerHash = generateHeaderHash(headers, mapping);
+    const currentFields = headers.map(h => mapping[h] || '').filter(Boolean);
 
-    let savedMapping = null;
+    let savedMapping: Record<string, string> | null = null;
+    let savedTemplateName = '';
+    const SIMILARITY_THRESHOLD = 0.75;
+
     try {
-      const rows = await sql`SELECT header_columns FROM template_mappings WHERE header_hash = ${headerHash} LIMIT 1`;
-      if (rows.length > 0) {
-        savedMapping = rows[0].header_columns;
-        // 如果已有保存的映射，覆盖
-        if (savedMapping) mapping = savedMapping as Record<string, string>;
+      // Step 1: 精确匹配（header_hash 完全一致）
+      const exactRows = await sql`SELECT header_columns, id FROM template_mappings WHERE header_hash = ${headerHash} LIMIT 1`;
+      if (exactRows.length > 0) {
+        savedMapping = exactRows[0].header_columns as Record<string, string>;
+      } else {
+        // Step 2: 模糊匹配（Jaccard 相似度）
+        const allTemplates = await sql`SELECT id, header_hash, header_columns FROM template_mappings ORDER BY id DESC LIMIT 50`;
+        let bestScore = 0;
+        let bestTemplate: typeof allTemplates[0] | null = null;
+        for (const t of allTemplates) {
+          const savedFields = Object.values(t.header_columns as Record<string, string>).filter(Boolean);
+          const score = jaccardSimilarity(currentFields, savedFields);
+          if (score > bestScore) {
+            bestScore = score;
+            bestTemplate = t;
+          }
+        }
+        if (bestScore >= SIMILARITY_THRESHOLD && bestTemplate) {
+          savedMapping = bestTemplate.header_columns as Record<string, string>;
+          savedTemplateName = `模糊匹配(${Math.round(bestScore * 100)}%)`;
+        }
       }
+      // 应用已保存的映射
+      if (savedMapping) mapping = savedMapping;
     } catch {
       // 表可能不存在，忽略
     }
@@ -371,6 +405,7 @@ export async function POST(request: Request) {
       isGrouped,
       templateName: sheetName,
       hasSavedMapping: !!savedMapping,
+      templateMatchNote: savedTemplateName || (!!savedMapping ? '已保存模板' : ''),
     });
   } catch (e: unknown) {
     const msg = e instanceof Error ? e.message : String(e);

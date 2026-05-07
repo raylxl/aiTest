@@ -116,6 +116,7 @@ export async function POST(request: Request) {
       isGrouped: false,
       templateName: '',
       hasSavedMapping,
+      templateMatchNote: hasSavedMapping ? '已保存模板' : '',
     });
   } catch (e: unknown) {
     const msg = e instanceof Error ? e.message : String(e);

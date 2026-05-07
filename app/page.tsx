@@ -98,6 +98,7 @@ const MENU_ITEM_MAP: Record<string, { title: string; subtitle?: string }> = {
   'user-center': { title: '用户中心' }, 'app-set': { title: '应用设置' }, 'app-btn': { title: '应用按钮' }, 'menu-ctrl': { title: '菜单管理' }, tenant: { title: '租户管理' }, 'tenant-id': { title: '租户身份' }, org: { title: '组织管理' }, role: { title: '角色管理' }, staff: { title: '员工管理' }, 'user-ctrl': { title: '用户管理' }, post: { title: '岗位管理' }, 'post-role': { title: '岗位角色权限管理' }, 'task-center': { title: '任务中心' }, 'export-tpl': { title: '导出模板设置' }, 'export-task': { title: '导出任务' }, 'ext-test': { title: '外链测试' },
   base: { title: '基础管理' }, 'net-freight': { title: '网络货运' }, 'freight-finance': { title: '货运财务管理' }, waybill: { title: '运单管理' }, 'cl-price': { title: '仓链报价管理' }, 'smart-office': { title: '智能办公' }, 'biz-center': { title: '经营管理中心' }, 'cl-workbench': { title: '仓链重构' }, 'freight-net': { title: '网络货运' }, system: { title: '系统管理' },
   'fee-rules': { title: '费用规则维护' },
+  'fee-type-cc': { title: '费用类型维护' },
   'ai-exam-20260507': { title: '20260507' },
   'universal-import': { title: '万能导入' },
 };
@@ -114,10 +115,10 @@ const MENU_DATA: MenuItem[] = [
       { key: 'fee-rules', label: '费用规则维护', icon: 'priceTag' },
     ]},
   ]},
-  { key: 'waybill', label: '已导入运单', icon: 'truck' },
   { key: 'ai-exam', label: 'AI考试', icon: 'exam', children: [
     { key: 'ai-exam-20260507', label: '20260507', icon: 'document', children: [
       { key: 'universal-import', label: '万能导入', icon: 'upload' },
+      { key: 'waybill', label: '已导入运单', icon: 'truck' },
     ]},
   ]},
   { key: 'system', label: '系统管理', icon: 'setting', children: [
