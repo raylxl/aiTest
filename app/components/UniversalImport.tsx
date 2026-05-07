@@ -236,6 +236,38 @@ function ConfirmImportModal({
   onCancel: () => void;
   loading: boolean;
 }) {
+  const [selectedMode, setSelectedMode] = React.useState<'skip' | 'overwrite'>('skip');
+
+  const OptionCard = ({ mode, label, desc, color }: { mode: 'skip' | 'overwrite'; label: string; desc: string; color: string }) => {
+    const isActive = selectedMode === mode;
+    return (
+      <div
+        onClick={() => !loading && setSelectedMode(mode)}
+        style={{
+          display: 'block', padding: '12px 14px', border: `2px solid ${isActive ? '#1677ff' : '#d9d9d9'}`,
+          borderRadius: 8, marginBottom: 10, cursor: loading ? 'not-allowed' : 'pointer',
+          background: isActive ? '#e6f4ff' : '#fafafa', transition: 'all 0.15s',
+        }}
+      >
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          <div style={{
+            width: 16, height: 16, borderRadius: '50%',
+            border: `2px solid ${isActive ? '#1677ff' : '#d9d9d9'}`,
+            background: isActive ? '#1677ff' : '#fff',
+            flexShrink: 0, transition: 'all 0.15s',
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+          }}>
+            {isActive && <div style={{ width: 6, height: 6, borderRadius: '50%', background: '#fff' }} />}
+          </div>
+          <div>
+            <strong style={{ color: '#262626', fontSize: 14 }}>{label}</strong>
+            <div style={{ fontSize: 12, color, marginTop: 3 }}>{desc}</div>
+          </div>
+        </div>
+      </div>
+    );
+  };
+
   return (
     <div style={{
       position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
@@ -260,76 +292,18 @@ function ConfirmImportModal({
           )}
         </div>
 
-        {/* 跳过冲突 */}
-        <div
-          id="card-skip"
-          onClick={() => !loading && (document.getElementById('mode-skip') as HTMLInputElement)?.click()}
-          style={{
-            display: 'block', padding: '12px 14px', border: '2px solid #d9d9d9',
-            borderRadius: 8, marginBottom: 10, cursor: loading ? 'not-allowed' : 'pointer',
-            background: '#fafafa', transition: 'all 0.15s',
-          }}
-        >
-          <input type="radio" name="import-mode" id="mode-skip" value="skip" defaultChecked style={{ display: 'none' }} />
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-            <div style={{ width: 16, height: 16, borderRadius: '50%', border: '2px solid #d9d9d9', background: '#fff', flexShrink: 0, transition: 'all 0.15s' }} id="dot-skip" />
-            <div>
-              <strong style={{ color: '#262626', fontSize: 14 }}>跳过冲突（推荐）</strong>
-              <div style={{ fontSize: 12, color: '#8c8c8c', marginTop: 3 }}>
-                {duplicateCount > 0
-                  ? `已有编码的 ${duplicateCount} 条将被跳过，不更新`
-                  : '数据库中无重复编码，等效于直接插入'}
-              </div>
-            </div>
-          </div>
-        </div>
-
-        {/* 覆盖已有 */}
-        <div
-          id="card-overwrite"
-          onClick={() => !loading && (document.getElementById('mode-overwrite') as HTMLInputElement)?.click()}
-          style={{
-            display: 'block', padding: '12px 14px', border: '2px solid #d9d9d9',
-            borderRadius: 8, marginBottom: 20, cursor: loading ? 'not-allowed' : 'pointer',
-            background: '#fafafa', transition: 'all 0.15s',
-          }}
-        >
-          <input type="radio" name="import-mode" id="mode-overwrite" value="overwrite" style={{ display: 'none' }} />
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-            <div style={{ width: 16, height: 16, borderRadius: '50%', border: '2px solid #d9d9d9', background: '#fff', flexShrink: 0 }} id="dot-overwrite" />
-            <div>
-              <strong style={{ color: '#262626', fontSize: 14 }}>覆盖已有数据</strong>
-              <div style={{ fontSize: 12, color: '#ff4d4f', marginTop: 3 }}>
-                {duplicateCount > 0
-                  ? `已有编码的 ${duplicateCount} 条将被覆盖更新，请谨慎操作！`
-                  : '无重复编码，此选项等效于直接插入'}
-              </div>
-            </div>
-          </div>
-        </div>
-
-        {/* 选中效果 JS（radio change 时更新样式） */}
-        <script dangerouslySetInnerHTML={{ __html: `
-          document.querySelectorAll('input[name="import-mode"]').forEach(function(r) {
-            r.addEventListener('change', function() {
-              ['skip','overwrite'].forEach(function(m) {
-                var card = document.getElementById('card-' + m);
-                var dot = document.getElementById('dot-' + m);
-                if (r.value === m && r.checked) {
-                  card.style.borderColor = '#1677ff';
-                  card.style.background = '#e6f4ff';
-                  dot.style.borderColor = '#1677ff';
-                  dot.style.background = '#1677ff';
-                } else {
-                  card.style.borderColor = '#d9d9d9';
-                  card.style.background = '#fafafa';
-                  dot.style.borderColor = '#d9d9d9';
-                  dot.style.background = '#fff';
-                }
-              });
-            });
-          });
-        ` }} />
+        <OptionCard
+          mode="skip"
+          label="跳过冲突（推荐）"
+          desc={duplicateCount > 0 ? `已有编码的 ${duplicateCount} 条将被跳过，不更新` : '数据库中无重复编码，等效于直接插入'}
+          color="#8c8c8c"
+        />
+        <OptionCard
+          mode="overwrite"
+          label="覆盖已有数据"
+          desc={duplicateCount > 0 ? `已有编码的 ${duplicateCount} 条将被覆盖更新，请谨慎操作！` : '无重复编码，此选项等效于直接插入'}
+          color="#ff4d4f"
+        />
 
         <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end' }}>
           <button
@@ -339,10 +313,7 @@ function ConfirmImportModal({
             取消
           </button>
           <button
-            onClick={() => {
-              const selected = (document.querySelector('input[name="import-mode"]:checked') as HTMLInputElement)?.value as 'skip' | 'overwrite' || 'skip';
-              onConfirm(selected);
-            }}
+            onClick={() => onConfirm(selectedMode)}
             disabled={loading}
             style={{ height: 34, padding: '0 20px', border: 'none', borderRadius: 4, background: '#1677ff', color: '#fff', cursor: loading ? 'not-allowed' : 'pointer', fontSize: 13, fontWeight: 600 }}>
             {loading ? '提交中...' : '确认提交'}
