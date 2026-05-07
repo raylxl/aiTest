@@ -8,6 +8,7 @@ export async function GET(request: Request) {
     await initDB();
 
     const { searchParams } = new URL(request.url);
+    const isExport = searchParams.get('export') === '1';
     const query: WaybillQuery = {
       external_code: searchParams.get('external_code') || '',
       sender_name: searchParams.get('sender_name') || '',
@@ -61,8 +62,10 @@ export async function GET(request: Request) {
     }
 
     const whereClause = conditions.length > 0 ? 'WHERE ' + conditions.join(' AND ') : 'WHERE 1=1';
+    const orderClause = 'ORDER BY created_at DESC';
+    const limitClause = isExport ? '' : `LIMIT ${pageSize} OFFSET ${offset}`;
     const countSql = `SELECT COUNT(*) as ct FROM waybills ${whereClause}`;
-    const dataSql = `SELECT * FROM waybills ${whereClause} ORDER BY created_at DESC LIMIT ${pageSize} OFFSET ${offset}`;
+    const dataSql = `SELECT * FROM waybills ${whereClause} ${orderClause} ${limitClause}`.trim();
 
     // 用 getNeonClient() 的 .query() 方法做参数化查询
     const neonSql = getNeonClient();

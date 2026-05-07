@@ -759,31 +759,49 @@ export default function UniversalImport() {
     }
   }, [previewData, listPage, fetchWaybillList, confirmModalOpen]);
 
-  // 运单列表导出
+  // 运单列表导出（调 API 获取全量数据）
   const handleListExport = useCallback(async () => {
-    if (waybillList.length === 0) {
-      showToast('没有可导出的数据，请先查询', 'warning');
-      return;
-    }
     setExportLoading(true);
     try {
+      const params = new URLSearchParams({ export: '1' });
+      if (listQuery.external_code) params.set('external_code', listQuery.external_code);
+      if (listQuery.sender_name) params.set('sender_name', listQuery.sender_name);
+      if (listQuery.sender_phone) params.set('sender_phone', listQuery.sender_phone);
+      if (listQuery.receiver_name) params.set('receiver_name', listQuery.receiver_name);
+      if (listQuery.receiver_phone) params.set('receiver_phone', listQuery.receiver_phone);
+      if (listQuery.start_date) params.set('start_date', listQuery.start_date);
+      if (listQuery.end_date) params.set('end_date', listQuery.end_date);
+
+      const res = await fetch(`/api/waybills?${params}`);
+      const json = await res.json();
+      if (!res.ok) {
+        showToast(json.error || '导出失败', 'error');
+        return;
+      }
+
+      const rows = json.data || [];
+      if (rows.length === 0) {
+        showToast('没有符合条件的数据', 'warning');
+        return;
+      }
+
       const XLSX = await import('xlsx');
-      const exportData = waybillList.map((row, i) => ({
+      const exportData = rows.map((row: Record<string, unknown>, i: number) => ({
         '序号': i + 1,
         'ID': row.id,
-        '外部编码': row.external_code || '',
-        '发件人姓名': row.sender_name,
-        '发件人电话': row.sender_phone,
-        '发件人地址': row.sender_address,
-        '收件人姓名': row.receiver_name,
-        '收件人电话': row.receiver_phone,
-        '收件人地址': row.receiver_address,
+        '外部编码': String(row.external_code || ''),
+        '发件人姓名': String(row.sender_name || ''),
+        '发件人电话': String(row.sender_phone || ''),
+        '发件人地址': String(row.sender_address || ''),
+        '收件人姓名': String(row.receiver_name || ''),
+        '收件人电话': String(row.receiver_phone || ''),
+        '收件人地址': String(row.receiver_address || ''),
         '重量(kg)': row.weight,
         '件数': row.quantity,
-        '温层': row.temp_layer,
-        '备注': row.remark || '',
-        '状态': row.status === 'submitted' ? '已提交' : row.status,
-        '创建时间': fmtDate(row.created_at),
+        '温层': String(row.temp_layer || ''),
+        '备注': String(row.remark || ''),
+        '状态': row.status === 'submitted' ? '已提交' : String(row.status || ''),
+        '创建时间': fmtDate(String(row.created_at || '')),
       }));
       const ws = XLSX.utils.json_to_sheet(exportData);
       ws['!cols'] = [
@@ -794,13 +812,13 @@ export default function UniversalImport() {
       const wb = XLSX.utils.book_new();
       XLSX.utils.book_append_sheet(wb, ws, '运单列表');
       XLSX.writeFile(wb, `waybill_list_${Date.now()}.xlsx`);
-      showToast(`导出成功，共 ${waybillList.length} 条`, 'success');
+      showToast(`导出成功，共 ${rows.length} 条`, 'success');
     } catch (e) {
       showToast('导出失败', 'error');
     } finally {
       setExportLoading(false);
     }
-  }, [waybillList]);
+  }, [listQuery]);
 
   // 导出Excel（前端生成）
   const handleExport = useCallback(async () => {
