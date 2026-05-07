@@ -195,12 +195,13 @@ export default function WaybillTable({ currentUserNickname = '系统', onMessage
       external_code: '', sender_name: '', sender_phone: '',
       receiver_name: '', receiver_phone: '', start_date: '', end_date: '',
     });
+    fetchData();
   };
 
   const totalPages = Math.ceil(total / pageSize);
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', flex: 1, minHeight: 0, overflow: 'hidden' }}>
+    <div style={{ display: 'flex', flexDirection: 'column', flex: 1, minHeight: 0 }}>
       {/* 消息提示 */}
       {msg && (
         <div style={{
@@ -293,7 +294,8 @@ export default function WaybillTable({ currentUserNickname = '系统', onMessage
       </div>
 
       {/* 表格 */}
-      <div style={{ background: '#fff', borderRadius: 4, border: '1px solid #e4edf7', flex: 1, overflow: 'auto', minHeight: 0 }}>
+      <div style={{ background: '#fff', borderRadius: 4, border: '1px solid #e4edf7', flex: 1, overflow: 'hidden', minHeight: 0 }}>
+        <div style={{ height: '100%', overflow: 'auto' }}>
         <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13, minWidth: 1200 }}>
           <thead style={{ position: 'sticky', top: 0, zIndex: 10 }}>
             <tr style={{ background: '#EFF5FF' }}>
@@ -418,6 +420,7 @@ export default function WaybillTable({ currentUserNickname = '系统', onMessage
           <button onClick={() => fetchData()} style={{ height: 28, padding: '0 12px', borderRadius: 4, border: '1px solid #00BEBE', background: '#00BEBE', color: '#fff', fontSize: 13, cursor: 'pointer', fontFamily: 'inherit' }}
             onMouseEnter={e => (e.currentTarget.style.background = '#00d4d4')}
             onMouseLeave={e => (e.currentTarget.style.background = '#00BEBE')}>跳转</button>
+        </div>
         </div>
       </div>
 
