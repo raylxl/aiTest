@@ -65,5 +65,36 @@ export async function initDB() {
       update_time     TIMESTAMPTZ DEFAULT NOW()
     )
   `;
+
+  // 运单表
+  await sql`
+    CREATE TABLE IF NOT EXISTS waybills (
+      id              SERIAL PRIMARY KEY,
+      external_code   VARCHAR(100) UNIQUE,
+      sender_name     VARCHAR(100) NOT NULL,
+      sender_phone    VARCHAR(20) NOT NULL,
+      sender_address  VARCHAR(500) NOT NULL,
+      receiver_name   VARCHAR(100) NOT NULL,
+      receiver_phone  VARCHAR(20) NOT NULL,
+      receiver_address VARCHAR(500) NOT NULL,
+      weight          DECIMAL(10,2) NOT NULL,
+      quantity        INTEGER NOT NULL,
+      temp_layer      VARCHAR(20) NOT NULL,
+      remark          VARCHAR(500) DEFAULT '',
+      status          VARCHAR(20) DEFAULT 'submitted',
+      created_at      TIMESTAMPTZ DEFAULT NOW()
+    )
+  `;
+
+  // 模板映射表
+  await sql`
+    CREATE TABLE IF NOT EXISTS template_mappings (
+      id             SERIAL PRIMARY KEY,
+      header_hash    VARCHAR(64) NOT NULL UNIQUE,
+      header_columns JSONB NOT NULL,
+      created_at    TIMESTAMPTZ DEFAULT NOW(),
+      updated_at     TIMESTAMPTZ DEFAULT NOW()
+    )
+  `;
 }
 

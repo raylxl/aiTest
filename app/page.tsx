@@ -5,6 +5,7 @@ import { getSession, setSession, clearSession, validateUsername, validatePasswor
 import type { FeeItem, QueryForm, MenuItem } from './components/types';
 import FeeTable from './components/FeeTable';
 import FeeRulesTable from './components/FeeRulesTable';
+import UniversalImport from './components/UniversalImport';
 
 // ============ 招财猫占位页 ============
 function MenuPlaceholder({ title, subtitle }: { title: string; subtitle?: string }) {
@@ -536,7 +537,7 @@ export default function FeeManager() {
             ) : activeMenu === 'ai-exam-20260507' ? (
               <MenuPlaceholder title="20260507" subtitle="AI考试" />
             ) : activeMenu === 'universal-import' ? (
-              <MenuPlaceholder title="万能导入" subtitle="通用Excel导入工具" />
+              <UniversalImport />
             ) : activeMenu === 'fee-rules' ? (
               <FeeRulesTable
                 currentUserNickname={currentNickname}
