@@ -24,7 +24,8 @@ const BILL_NODES = ['开单', '揽收网点扫描', '中转中心扫描', '派�
 
 const STATUS_OPTIONS = [
   { value: 'pending', label: '未审核' },
-  { value: 'approved', label: '已审核' }
+  { value: 'approved', label: '已审核' },
+  { value: 'rejected', label: '审核驳回' }
 ];
 
 // ============ SVG 图标 ============
@@ -314,7 +315,7 @@ export default function FeeRulesTable({ currentUserNickname, onMessage }: FeeRul
       if (editRow) {
         // 编辑
         const currentRow = data.find(r => r.id === editRow.id);
-        const newStatus = currentRow?.status === 'approved' ? 'approved' : 'pending';
+        const newStatus = currentRow?.status === 'approved' ? 'approved' : 'pending'; // rejected → pending（可重新提交审核）
         res = await fetch(`/api/fee-rules/${editRow.id}`, {
           method: 'PUT',
           headers: { 'Content-Type': 'application/json' },
@@ -407,7 +408,7 @@ export default function FeeRulesTable({ currentUserNickname, onMessage }: FeeRul
     openConfirm('approve');
   };
 
-  // 批量审核不通过
+  // 批量审核驳回
   const handleBatchReject = async () => {
     const unapprovedRows = selectedRows.filter(r => r.status === 'pending');
     if (unapprovedRows.length === 0) { showMsg('请选择未审核的数据', 'error'); return; }
@@ -452,16 +453,23 @@ export default function FeeRulesTable({ currentUserNickname, onMessage }: FeeRul
 
   // 渲染状态标签
   const renderStatus = (status: string) => {
+    const config: Record<string, { bg: string; color: string; border: string; label: string }> = {
+      approved: { bg: '#f6ffed', color: '#52c41a', border: '#b7eb8f', label: '已审核' },
+      pending: { bg: '#fffbe6', color: '#faad14', border: '#ffe58f', label: '未审核' },
+      rejected: { bg: '#fff2f0', color: '#ff4d4f', border: '#ffccc7', label: '审核驳回' },
+    };
+    const c = config[status] || config.pending;
     return (
       <span style={{
         padding: '2px 8px',
         borderRadius: 4,
         fontSize: 12,
-        background: status === 'approved' ? '#f6ffed' : '#fffbe6',
-        color: status === 'approved' ? '#52c41a' : '#faad14',
-        border: `1px solid ${status === 'approved' ? '#b7eb8f' : '#ffe58f'}`
+        background: c.bg,
+        color: c.color,
+        border: `1px solid ${c.border}`,
+        display: 'inline-block',
       }}>
-        {status === 'approved' ? '已审核' : '未审核'}
+        {c.label}
       </span>
     );
   };
@@ -469,7 +477,7 @@ export default function FeeRulesTable({ currentUserNickname, onMessage }: FeeRul
   return (
     <div style={{ padding: 16, flex: 1, overflow: 'auto' }}>
       {/* 标题栏 */}
-      <div style={{ padding: '14px 16px 12px', borderBottom: '1px solid #f0f0f0', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexShrink: 0 }}>
+      <div style={{ padding: '14px 16px 12px', borderBottom: '1px solid #E8EAED', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexShrink: 0 }}>
         <div>
           <div style={{ fontSize: 15, fontWeight: 600, color: '#262626', marginBottom: 2 }}>费用规则维护</div>
           <div style={{ fontSize: 12, color: '#8c8c8c' }}>管理系统中的费用规则配置，支持新增、编辑、删除及批量审核操作</div>
@@ -486,7 +494,7 @@ export default function FeeRulesTable({ currentUserNickname, onMessage }: FeeRul
       )}
 
       {/* 查询表单 */}
-      <div style={{ padding: '12px 16px', background: '#fafafa', borderBottom: '1px solid #f0f0f0' }}>
+      <div style={{ padding: '12px 16px', background: '#F5F7FA', borderBottom: '1px solid #E8EAED' }}>
         <div style={{ display: 'flex', flexWrap: 'wrap', gap: 12 }}>
           {/* 费用名称 */}
           <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
@@ -568,7 +576,7 @@ export default function FeeRulesTable({ currentUserNickname, onMessage }: FeeRul
           </div>
           {/* 查询按钮 */}
           <button onClick={() => { updatePage(1); fetchData(); }}
-            style={{ height: 32, padding: '0 16px', borderRadius: 4, border: 'none', background: '#1663c4', color: '#fff', fontSize: 13, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 6 }}>
+            style={{ height: 32, padding: '0 16px', borderRadius: 4, border: 'none', background: '#1677FF', color: '#fff', fontSize: 13, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 6 }}>
             <Icon name="search" size={13} /> 查询
           </button>
           <button onClick={() => { const empty = { feeName: '', settlementSubject: '', settlementFlow: '', incomeOrg: '', expenseOrg: '', billNode: '', settlementNode: '', startDate: '', status: '' }; setQuery(empty); fetchData(empty, 1); }}
@@ -582,32 +590,32 @@ export default function FeeRulesTable({ currentUserNickname, onMessage }: FeeRul
       <div style={{ marginBottom: 12, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
         <div style={{ display: 'flex', gap: 8, flexWrap: 'nowrap', flexShrink: 0 }}>
           <button onClick={handleAdd}
-            style={{ height: 32, padding: '0 16px', borderRadius: 4, border: 'none', background: '#1663c4', color: '#fff', fontSize: 13, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 6 }}>
+            style={{ height: 32, padding: '0 16px', borderRadius: 4, border: 'none', background: '#1677FF', color: '#fff', fontSize: 13, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 6 }}>
             <Icon name="plus" size={13} /> 新增
-          </button>
-          <button onClick={handleBatchDelete}
-            style={{ height: 32, padding: '0 16px', borderRadius: 4, border: '1px solid #ff4d4f', background: '#fff', color: '#ff4d4f', fontSize: 13, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 6 }}>
-            <Icon name="delete" size={13} /> 删除
           </button>
           <button onClick={handleBatchApprove}
             style={{ height: 32, padding: '0 16px', borderRadius: 4, border: '1px solid #52c41a', background: '#fff', color: '#52c41a', fontSize: 13, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 6 }}>
             <Icon name="check" size={13} /> 审核通过
           </button>
           <button onClick={handleBatchReject}
-            style={{ height: 32, padding: '0 16px', borderRadius: 4, border: '1px solid #faad14', background: '#fff', color: '#faad14', fontSize: 13, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 6 }}>
-            审核不通过
+            style={{ height: 32, padding: '0 16px', borderRadius: 4, border: '1px solid #FF4D4F', background: '#fff', color: '#FF4D4F', fontSize: 13, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 6 }}>
+            审核驳回
           </button>
-          <button onClick={handleExport}
-            style={{ height: 32, padding: '0 12px', borderRadius: 4, border: '1px solid #d9d9d9', background: '#fff', color: '#595959', fontSize: 13, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 6 }}>
-            <Icon name="download" size={13} /> 导出
+          <button onClick={handleBatchDelete}
+            style={{ height: 32, padding: '0 16px', borderRadius: 4, border: '1px solid #FF4D4F', background: '#fff', color: '#FF4D4F', fontSize: 13, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 6 }}>
+            <Icon name="delete" size={13} /> 删除
+          </button>
+          <button onClick={() => window.open('/api/fee-rules/template', '_blank')}
+            style={{ height: 32, padding: '0 10px', borderRadius: 4, border: '1px solid #d9d9d9', background: '#fff', color: '#595959', fontSize: 13, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 6 }}>
+            模版下载
           </button>
           <button onClick={() => fileInputRef.current?.click()} disabled={importLoading}
             style={{ height: 32, padding: '0 12px', borderRadius: 4, border: '1px solid #d9d9d9', background: '#fff', color: importLoading ? '#bfbfbf' : '#595959', fontSize: 13, cursor: importLoading ? 'not-allowed' : 'pointer', display: 'flex', alignItems: 'center', gap: 6 }}>
             <Icon name="upload" size={13} /> {importLoading ? '解析中...' : '导入'}
           </button>
-          <button onClick={() => window.open('/api/fee-rules/template', '_blank')}
-            style={{ height: 32, padding: '0 10px', borderRadius: 4, border: '1px solid #d9d9d9', background: '#fff', color: '#595959', fontSize: 13, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 6 }}>
-            <Icon name="download" size={13} />
+          <button onClick={handleExport}
+            style={{ height: 32, padding: '0 12px', borderRadius: 4, border: '1px solid #d9d9d9', background: '#fff', color: '#595959', fontSize: 13, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 6 }}>
+            <Icon name="download" size={13} /> 导出
           </button>
         </div>
         <div style={{ fontSize: 13, color: '#8c8c8c' }}>
@@ -617,32 +625,32 @@ export default function FeeRulesTable({ currentUserNickname, onMessage }: FeeRul
 
       {/* 数据表格 */}
       <div style={{ overflowX: 'auto', flex: 1, minHeight: 0 }}>
-        <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13, minWidth: 1100 }}>
+        <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13, minWidth: 1100, border: '1px solid #E8EAED', borderRadius: 4, overflow: 'hidden' }}>
           <thead>
-            <tr style={{ background: '#fafafa' }}>
-              <th style={{ padding: '10px 8px', borderBottom: '1px solid #f0f0f0', textAlign: 'center', width: 48 }}>
+            <tr style={{ background: '#EFF5FF' }}>
+              <th style={{ padding: '10px 12px', borderBottom: '1px solid #E8EAED', textAlign: 'center', width: 48 }}>
                 <input type="checkbox" checked={data.length > 0 && selectedRows.length === data.length}
-                  onChange={e => handleSelectAll(e.target.checked)} style={{ cursor: 'pointer' }} />
+                  onChange={e => handleSelectAll(e.target.checked)} style={{ cursor: 'pointer', accentColor: '#1677FF' }} />
               </th>
-              <th style={{ padding: '10px 8px', borderBottom: '1px solid #f0f0f0', textAlign: 'center', color: '#595959', fontWeight: 600, width: 56, whiteSpace: 'nowrap' }}>序号</th>
-              <th style={{ padding: '10px 8px', borderBottom: '1px solid #f0f0f0', textAlign: 'left', color: '#595959', fontWeight: 600, whiteSpace: 'nowrap' }}>费用名称</th>
-              <th style={{ padding: '10px 8px', borderBottom: '1px solid #f0f0f0', textAlign: 'left', color: '#595959', fontWeight: 600, whiteSpace: 'nowrap' }}>结算主体</th>
-              <th style={{ padding: '10px 8px', borderBottom: '1px solid #f0f0f0', textAlign: 'left', color: '#595959', fontWeight: 600, whiteSpace: 'nowrap' }}>结算流向</th>
-              <th style={{ padding: '10px 8px', borderBottom: '1px solid #f0f0f0', textAlign: 'left', color: '#595959', fontWeight: 600, whiteSpace: 'nowrap' }}>收入机构</th>
-              <th style={{ padding: '10px 8px', borderBottom: '1px solid #f0f0f0', textAlign: 'left', color: '#595959', fontWeight: 600, whiteSpace: 'nowrap' }}>支出机构</th>
-              <th style={{ padding: '10px 8px', borderBottom: '1px solid #f0f0f0', textAlign: 'left', color: '#595959', fontWeight: 600, whiteSpace: 'nowrap' }}>账单节点</th>
-              <th style={{ padding: '10px 8px', borderBottom: '1px solid #f0f0f0', textAlign: 'left', color: '#595959', fontWeight: 600, whiteSpace: 'nowrap' }}>结算节点</th>
-              <th style={{ padding: '10px 8px', borderBottom: '1px solid #f0f0f0', textAlign: 'left', color: '#595959', fontWeight: 600, whiteSpace: 'nowrap' }}>生效日期</th>
-              <th style={{ padding: '10px 8px', borderBottom: '1px solid #f0f0f0', textAlign: 'left', color: '#595959', fontWeight: 600, whiteSpace: 'nowrap' }}>失效日期</th>
-              <th style={{ padding: '10px 8px', borderBottom: '1px solid #f0f0f0', textAlign: 'left', color: '#595959', fontWeight: 600, whiteSpace: 'nowrap' }}>备注</th>
-              <th style={{ padding: '10px 8px', borderBottom: '1px solid #f0f0f0', textAlign: 'center', color: '#595959', fontWeight: 600, whiteSpace: 'nowrap' }}>审核状态</th>
-              <th style={{ padding: '10px 8px', borderBottom: '1px solid #f0f0f0', textAlign: 'center', color: '#595959', fontWeight: 600, whiteSpace: 'nowrap' }}>创建人</th>
-              <th style={{ padding: '10px 8px', borderBottom: '1px solid #f0f0f0', textAlign: 'center', color: '#595959', fontWeight: 600, whiteSpace: 'nowrap' }}>创建时间</th>
-              <th style={{ padding: '10px 8px', borderBottom: '1px solid #f0f0f0', textAlign: 'center', color: '#595959', fontWeight: 600, whiteSpace: 'nowrap' }}>修改人</th>
-              <th style={{ padding: '10px 8px', borderBottom: '1px solid #f0f0f0', textAlign: 'center', color: '#595959', fontWeight: 600, whiteSpace: 'nowrap' }}>修改时间</th>
-              <th style={{ padding: '10px 8px', borderBottom: '1px solid #f0f0f0', textAlign: 'center', color: '#595959', fontWeight: 600, whiteSpace: 'nowrap' }}>审核人</th>
-              <th style={{ padding: '10px 8px', borderBottom: '1px solid #f0f0f0', textAlign: 'center', color: '#595959', fontWeight: 600, whiteSpace: 'nowrap' }}>审核时间</th>
-              <th style={{ padding: '10px 8px', borderBottom: '1px solid #f0f0f0', textAlign: 'center', color: '#595959', fontWeight: 600, whiteSpace: 'nowrap' }}>操作</th>
+              <th style={{ padding: '10px 12px', borderBottom: '1px solid #E8EAED', textAlign: 'center', color: '#000', fontWeight: 600, width: 56, whiteSpace: 'nowrap' }}>序号</th>
+              <th style={{ padding: '10px 12px', borderBottom: '1px solid #E8EAED', textAlign: 'left', color: '#000', fontWeight: 600, whiteSpace: 'nowrap' }}>费用名称</th>
+              <th style={{ padding: '10px 12px', borderBottom: '1px solid #E8EAED', textAlign: 'left', color: '#000', fontWeight: 600, whiteSpace: 'nowrap' }}>结算主体</th>
+              <th style={{ padding: '10px 12px', borderBottom: '1px solid #E8EAED', textAlign: 'left', color: '#000', fontWeight: 600, whiteSpace: 'nowrap' }}>结算流向</th>
+              <th style={{ padding: '10px 12px', borderBottom: '1px solid #E8EAED', textAlign: 'left', color: '#000', fontWeight: 600, whiteSpace: 'nowrap' }}>收入机构</th>
+              <th style={{ padding: '10px 12px', borderBottom: '1px solid #E8EAED', textAlign: 'left', color: '#000', fontWeight: 600, whiteSpace: 'nowrap' }}>支出机构</th>
+              <th style={{ padding: '10px 12px', borderBottom: '1px solid #E8EAED', textAlign: 'left', color: '#000', fontWeight: 600, whiteSpace: 'nowrap' }}>账单节点</th>
+              <th style={{ padding: '10px 12px', borderBottom: '1px solid #E8EAED', textAlign: 'left', color: '#000', fontWeight: 600, whiteSpace: 'nowrap' }}>结算节点</th>
+              <th style={{ padding: '10px 12px', borderBottom: '1px solid #E8EAED', textAlign: 'left', color: '#000', fontWeight: 600, whiteSpace: 'nowrap' }}>生效日期</th>
+              <th style={{ padding: '10px 12px', borderBottom: '1px solid #E8EAED', textAlign: 'left', color: '#000', fontWeight: 600, whiteSpace: 'nowrap' }}>失效日期</th>
+              <th style={{ padding: '10px 12px', borderBottom: '1px solid #E8EAED', textAlign: 'left', color: '#000', fontWeight: 600, whiteSpace: 'nowrap' }}>备注</th>
+              <th style={{ padding: '10px 12px', borderBottom: '1px solid #E8EAED', textAlign: 'center', color: '#000', fontWeight: 600, whiteSpace: 'nowrap' }}>审核状态</th>
+              <th style={{ padding: '10px 12px', borderBottom: '1px solid #E8EAED', textAlign: 'center', color: '#000', fontWeight: 600, whiteSpace: 'nowrap' }}>创建人</th>
+              <th style={{ padding: '10px 12px', borderBottom: '1px solid #E8EAED', textAlign: 'center', color: '#000', fontWeight: 600, whiteSpace: 'nowrap' }}>创建时间</th>
+              <th style={{ padding: '10px 12px', borderBottom: '1px solid #E8EAED', textAlign: 'center', color: '#000', fontWeight: 600, whiteSpace: 'nowrap' }}>修改人</th>
+              <th style={{ padding: '10px 12px', borderBottom: '1px solid #E8EAED', textAlign: 'center', color: '#000', fontWeight: 600, whiteSpace: 'nowrap' }}>修改时间</th>
+              <th style={{ padding: '10px 12px', borderBottom: '1px solid #E8EAED', textAlign: 'center', color: '#000', fontWeight: 600, whiteSpace: 'nowrap' }}>审核人</th>
+              <th style={{ padding: '10px 12px', borderBottom: '1px solid #E8EAED', textAlign: 'center', color: '#000', fontWeight: 600, whiteSpace: 'nowrap' }}>审核时间</th>
+              <th style={{ padding: '10px 12px', borderBottom: '1px solid #E8EAED', textAlign: 'center', color: '#000', fontWeight: 600, whiteSpace: 'nowrap' }}>操作</th>
             </tr>
           </thead>
           <tbody>
@@ -650,58 +658,59 @@ export default function FeeRulesTable({ currentUserNickname, onMessage }: FeeRul
               <tr><td colSpan={19} style={{ padding: 48, textAlign: 'center', color: '#bfbfbf', fontSize: 14 }}>加载中...</td></tr>
             ) : data.length === 0 ? (
               <tr><td colSpan={19} style={{ padding: 48, textAlign: 'center', color: '#bfbfbf', fontSize: 14 }}>暂无数据</td></tr>
-            ) : data.map((row, index) => (
+            ) : data.map((row, index) => {
+              const isEven = index % 2 === 1;
+              return (
               <tr key={row.id}
-                style={{ background: index % 2 === 1 ? '#fafafa' : '#fff', cursor: 'pointer' }}
-                onMouseEnter={e => (e.currentTarget.style.background = '#f5f5f5')}
-                onMouseLeave={e => (e.currentTarget.style.background = index % 2 === 1 ? '#fafafa' : '#fff')}>
-                <td style={{ padding: '10px 8px', borderBottom: '1px solid #f0f0f0', textAlign: 'center' }}>
+                style={{ background: isEven ? '#F5F7FA' : '#FFF', cursor: 'pointer', transition: 'background 0.15s' }}
+                onMouseEnter={e => (e.currentTarget.style.background = '#ECF5FF')}
+                onMouseLeave={e => (e.currentTarget.style.background = isEven ? '#F5F7FA' : '#FFF')}>
+                <td style={{ padding: '10px 12px', borderBottom: '1px solid #E8EAED', textAlign: 'center' }}>
                   <input type="checkbox" checked={selectedRows.some(r => r.id === row.id)}
-                    onChange={e => handleSelectRow(row, e.target.checked)} style={{ cursor: 'pointer' }} />
+                    onChange={e => handleSelectRow(row, e.target.checked)} style={{ cursor: 'pointer', accentColor: '#1677FF' }} />
                 </td>
-                <td style={{ padding: '10px 8px', borderBottom: '1px solid #f0f0f0', textAlign: 'center', color: '#8c8c8c', maxWidth: 56, overflow: 'hidden' }}><Tooltip content={String(index + 1 + (page - 1) * pageSize)}>{index + 1 + (page - 1) * pageSize}</Tooltip></td>
-                <td style={{ padding: '10px 8px', borderBottom: '1px solid #f0f0f0', textAlign: 'left', fontWeight: 500, color: '#262626', maxWidth: 200, overflow: 'hidden' }}><Tooltip content={row.fee_name}>
-                {row.fee_name}
-              </Tooltip></td>
-                <td style={{ padding: '10px 8px', borderBottom: '1px solid #f0f0f0', textAlign: 'left', maxWidth: 150, overflow: 'hidden' }}><Tooltip content={row.settlement_subject}>{row.settlement_subject}</Tooltip></td>
-                <td style={{ padding: '10px 8px', borderBottom: '1px solid #f0f0f0', textAlign: 'left', maxWidth: 100, overflow: 'hidden' }}><Tooltip content={row.settlement_flow}>{row.settlement_flow}</Tooltip></td>
-                <td style={{ padding: '10px 8px', borderBottom: '1px solid #f0f0f0', textAlign: 'left', maxWidth: 120, overflow: 'hidden' }}><Tooltip content={row.income_org}>{row.income_org}</Tooltip></td>
-                <td style={{ padding: '10px 8px', borderBottom: '1px solid #f0f0f0', textAlign: 'left', maxWidth: 120, overflow: 'hidden' }}><Tooltip content={row.expense_org}>{row.expense_org}</Tooltip></td>
-                <td style={{ padding: '10px 8px', borderBottom: '1px solid #f0f0f0', textAlign: 'left', maxWidth: 100, overflow: 'hidden' }}><Tooltip content={row.bill_node}>{row.bill_node}</Tooltip></td>
-                <td style={{ padding: '10px 8px', borderBottom: '1px solid #f0f0f0', textAlign: 'left', maxWidth: 100, overflow: 'hidden' }}><Tooltip content={row.settlement_node}>{row.settlement_node}</Tooltip></td>
-                <td style={{ padding: '10px 8px', borderBottom: '1px solid #f0f0f0', textAlign: 'left', maxWidth: 100, overflow: 'hidden' }}><Tooltip content={row.start_date ? row.start_date.split('T')[0] : '-'}>{row.start_date ? row.start_date.split('T')[0] : '-'}</Tooltip></td>
-                <td style={{ padding: '10px 8px', borderBottom: '1px solid #f0f0f0', textAlign: 'left', maxWidth: 100, overflow: 'hidden' }}><Tooltip content={row.end_date ? row.end_date.split('T')[0] : '-'}>{row.end_date ? row.end_date.split('T')[0] : '-'}</Tooltip></td>
-                <td style={{ padding: '10px 8px', borderBottom: '1px solid #f0f0f0', textAlign: 'left', color: row.remark ? '#595959' : '#c0c0c0', maxWidth: 200, overflow: 'hidden' }}><Tooltip content={row.remark || ''}>{row.remark || '-'}</Tooltip></td>
-                <td style={{ padding: '10px 8px', borderBottom: '1px solid #f0f0f0', textAlign: 'center', maxWidth: 80, overflow: 'hidden' }}><Tooltip content={row.status === 'approved' ? '已审核' : '未审核'}>{renderStatus(row.status)}</Tooltip></td>
-                <td style={{ padding: '10px 8px', borderBottom: '1px solid #f0f0f0', textAlign: 'center', color: '#595959', maxWidth: 90, overflow: 'hidden' }}><Tooltip content={row.creator}>{row.creator}</Tooltip></td>
-                <td style={{ padding: '10px 8px', borderBottom: '1px solid #f0f0f0', textAlign: 'center', color: '#8c8c8c', fontSize: 12, maxWidth: 150, overflow: 'hidden' }}><Tooltip content={formatDateTime(row.create_time)}>{formatDateTime(row.create_time)}</Tooltip></td>
-                <td style={{ padding: '10px 8px', borderBottom: '1px solid #f0f0f0', textAlign: 'center', color: row.updater && row.updater !== row.creator ? '#595959' : '#c0c0c0', maxWidth: 90, overflow: 'hidden' }}><Tooltip content={row.updater && row.updater !== row.creator ? row.updater : ''}>{row.updater && row.updater !== row.creator ? row.updater : '-'}</Tooltip></td>
-                <td style={{ padding: '10px 8px', borderBottom: '1px solid #f0f0f0', textAlign: 'center', color: '#8c8c8c', fontSize: 12, maxWidth: 150, overflow: 'hidden' }}><Tooltip content={row.updater && row.updater !== row.creator && row.update_time ? formatDateTime(row.update_time) : ''}>{row.updater && row.updater !== row.creator && row.update_time ? formatDateTime(row.update_time) : '-'}</Tooltip></td>
-                <td style={{ padding: '10px 8px', borderBottom: '1px solid #f0f0f0', textAlign: 'center', color: '#595959', maxWidth: 90, overflow: 'hidden' }}><Tooltip content={row.audit_person || ''}>{row.audit_person || '-'}</Tooltip></td>
-                <td style={{ padding: '10px 8px', borderBottom: '1px solid #f0f0f0', textAlign: 'center', color: '#8c8c8c', fontSize: 12, maxWidth: 150, overflow: 'hidden' }}><Tooltip content={row.audit_time ? formatDateTime(row.audit_time) : ''}>{row.audit_time ? formatDateTime(row.audit_time) : '-'}</Tooltip></td>
-                <td style={{ padding: '10px 8px', borderBottom: '1px solid #f0f0f0', textAlign: 'center', whiteSpace: 'nowrap' }}>
+                <td style={{ padding: '10px 12px', borderBottom: '1px solid #E8EAED', textAlign: 'center', color: 'rgba(0,0,0,0.45)', maxWidth: 56, overflow: 'hidden' }}><Tooltip content={String(index + 1 + (page - 1) * pageSize)}>{index + 1 + (page - 1) * pageSize}</Tooltip></td>
+                <td style={{ padding: '10px 12px', borderBottom: '1px solid #E8EAED', textAlign: 'left', fontWeight: 500, color: 'rgba(0,0,0,0.8)', maxWidth: 200, overflow: 'hidden' }}><Tooltip content={row.fee_name}>{row.fee_name}</Tooltip></td>
+                <td style={{ padding: '10px 12px', borderBottom: '1px solid #E8EAED', textAlign: 'left', maxWidth: 150, overflow: 'hidden' }}><Tooltip content={row.settlement_subject}>{row.settlement_subject}</Tooltip></td>
+                <td style={{ padding: '10px 12px', borderBottom: '1px solid #E8EAED', textAlign: 'left', maxWidth: 100, overflow: 'hidden' }}><Tooltip content={row.settlement_flow}>{row.settlement_flow}</Tooltip></td>
+                <td style={{ padding: '10px 12px', borderBottom: '1px solid #E8EAED', textAlign: 'left', maxWidth: 120, overflow: 'hidden' }}><Tooltip content={row.income_org}>{row.income_org}</Tooltip></td>
+                <td style={{ padding: '10px 12px', borderBottom: '1px solid #E8EAED', textAlign: 'left', maxWidth: 120, overflow: 'hidden' }}><Tooltip content={row.expense_org}>{row.expense_org}</Tooltip></td>
+                <td style={{ padding: '10px 12px', borderBottom: '1px solid #E8EAED', textAlign: 'left', maxWidth: 100, overflow: 'hidden' }}><Tooltip content={row.bill_node}>{row.bill_node}</Tooltip></td>
+                <td style={{ padding: '10px 12px', borderBottom: '1px solid #E8EAED', textAlign: 'left', maxWidth: 100, overflow: 'hidden' }}><Tooltip content={row.settlement_node}>{row.settlement_node}</Tooltip></td>
+                <td style={{ padding: '10px 12px', borderBottom: '1px solid #E8EAED', textAlign: 'left', maxWidth: 100, overflow: 'hidden' }}><Tooltip content={row.start_date ? row.start_date.split('T')[0] : '-'}>{row.start_date ? row.start_date.split('T')[0] : '-'}</Tooltip></td>
+                <td style={{ padding: '10px 12px', borderBottom: '1px solid #E8EAED', textAlign: 'left', maxWidth: 100, overflow: 'hidden' }}><Tooltip content={row.end_date ? row.end_date.split('T')[0] : '-'}>{row.end_date ? row.end_date.split('T')[0] : '-'}</Tooltip></td>
+                <td style={{ padding: '10px 12px', borderBottom: '1px solid #E8EAED', textAlign: 'left', color: row.remark ? 'rgba(0,0,0,0.65)' : '#c0c0c0', maxWidth: 200, overflow: 'hidden' }}><Tooltip content={row.remark || ''}>{row.remark || '-'}</Tooltip></td>
+                <td style={{ padding: '10px 12px', borderBottom: '1px solid #E8EAED', textAlign: 'center', maxWidth: 80, overflow: 'hidden' }}><Tooltip content={row.status === 'approved' ? '已审核' : '未审核'}>{renderStatus(row.status)}</Tooltip></td>
+                <td style={{ padding: '10px 12px', borderBottom: '1px solid #E8EAED', textAlign: 'center', color: 'rgba(0,0,0,0.65)', maxWidth: 90, overflow: 'hidden' }}><Tooltip content={row.creator}>{row.creator}</Tooltip></td>
+                <td style={{ padding: '10px 12px', borderBottom: '1px solid #E8EAED', textAlign: 'center', color: 'rgba(0,0,0,0.45)', fontSize: 12, maxWidth: 150, overflow: 'hidden' }}><Tooltip content={formatDateTime(row.create_time)}>{formatDateTime(row.create_time)}</Tooltip></td>
+                <td style={{ padding: '10px 12px', borderBottom: '1px solid #E8EAED', textAlign: 'center', color: row.updater && row.updater !== row.creator ? 'rgba(0,0,0,0.65)' : '#c0c0c0', maxWidth: 90, overflow: 'hidden' }}><Tooltip content={row.updater && row.updater !== row.creator ? row.updater : ''}>{row.updater && row.updater !== row.creator ? row.updater : '-'}</Tooltip></td>
+                <td style={{ padding: '10px 12px', borderBottom: '1px solid #E8EAED', textAlign: 'center', color: 'rgba(0,0,0,0.45)', fontSize: 12, maxWidth: 150, overflow: 'hidden' }}><Tooltip content={row.updater && row.updater !== row.creator && row.update_time ? formatDateTime(row.update_time) : ''}>{row.updater && row.updater !== row.creator && row.update_time ? formatDateTime(row.update_time) : '-'}</Tooltip></td>
+                <td style={{ padding: '10px 12px', borderBottom: '1px solid #E8EAED', textAlign: 'center', color: 'rgba(0,0,0,0.65)', maxWidth: 90, overflow: 'hidden' }}><Tooltip content={row.audit_person || ''}>{row.audit_person || '-'}</Tooltip></td>
+                <td style={{ padding: '10px 12px', borderBottom: '1px solid #E8EAED', textAlign: 'center', color: 'rgba(0,0,0,0.45)', fontSize: 12, maxWidth: 150, overflow: 'hidden' }}><Tooltip content={row.audit_time ? formatDateTime(row.audit_time) : ''}>{row.audit_time ? formatDateTime(row.audit_time) : '-'}</Tooltip></td>
+                <td style={{ padding: '10px 12px', borderBottom: '1px solid #E8EAED', textAlign: 'center', whiteSpace: 'nowrap' }}>
                   <div style={{ display: 'flex', gap: 4, justifyContent: 'center' }}>
-                    <button onClick={() => handleEdit(row)} style={{ border: 'none', background: 'none', color: '#1663c4', cursor: 'pointer', fontSize: 13, display: 'flex', alignItems: 'center', gap: 2, fontFamily: 'inherit', padding: '2px 4px', transition: 'background 0.15s', borderRadius: 3 }}
-                      onMouseEnter={e => (e.currentTarget.style.background = '#e6f4ff')}
-                      onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}>
+                    <button onClick={() => handleEdit(row)} style={{ border: 'none', background: 'none', color: '#1677FF', cursor: 'pointer', fontSize: 13, display: 'flex', alignItems: 'center', gap: 2, fontFamily: 'inherit', padding: '2px 4px', transition: 'color 0.15s', borderRadius: 3 }}
+                      onMouseEnter={e => (e.currentTarget.style.color = '#4080FF')}
+                      onMouseLeave={e => (e.currentTarget.style.color = '#1677FF')}>
                       <Icon name="edit" size={12} />编辑
                     </button>
-                    <button onClick={() => handleDelete(row)} style={{ border: 'none', background: 'none', color: '#ff4d4f', cursor: 'pointer', fontSize: 13, display: 'flex', alignItems: 'center', gap: 2, fontFamily: 'inherit', padding: '2px 4px', transition: 'background 0.15s', borderRadius: 3 }}
-                      onMouseEnter={e => (e.currentTarget.style.background = '#fff1f0')}
-                      onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}>
+                    <button onClick={() => handleDelete(row)} style={{ border: 'none', background: 'none', color: '#FF4D4F', cursor: 'pointer', fontSize: 13, display: 'flex', alignItems: 'center', gap: 2, fontFamily: 'inherit', padding: '2px 4px', transition: 'color 0.15s', borderRadius: 3 }}
+                      onMouseEnter={e => (e.currentTarget.style.color = '#FF1F1F')}
+                      onMouseLeave={e => (e.currentTarget.style.color = '#FF4D4F')}>
                       <Icon name="delete" size={12} />删除
                     </button>
                   </div>
                 </td>
               </tr>
-            ))}
+              );
+            })}
           </tbody>
         </table>
       </div>
 
       {/* 分页 */}
-      <div style={{ padding: '10px 16px', borderTop: '1px solid #f0f0f0', display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: '#fafafa', flexShrink: 0, flexWrap: 'wrap', gap: 8 }}>
-        <span style={{ fontSize: 13, color: '#8c8c8c' }}>共 <strong style={{ color: '#262626' }}>{total}</strong> 条{selectedRows.length > 0 && <>, 已选中 <strong style={{ color: '#1663c4' }}>{selectedRows.length}</strong> 项</>}</span>
+      <div style={{ padding: '10px 16px', borderTop: '1px solid #E8EAED', display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: '#F5F7FA', flexShrink: 0, flexWrap: 'wrap', gap: 8 }}>
+        <span style={{ fontSize: 13, color: '#8c8c8c' }}>共 <strong style={{ color: '#262626' }}>{total}</strong> 条{selectedRows.length > 0 && <>, 已选中 <strong style={{ color: '#1677FF' }}>{selectedRows.length}</strong> 项</>}</span>
         <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
           <select value={pageSize} onChange={e => { setPageSize(Number(e.target.value)); updatePage(1); }}
             style={{ height: 26, padding: '0 20px 0 8px', border: '1px solid #d9d9d9', borderRadius: 4, fontSize: 13, outline: 'none', background: '#fff', fontFamily: 'inherit', cursor: 'pointer', appearance: 'none', backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 1024 1024'%3E%3Cpath fill='%23bfbfbf' d='M192 320l320 320 320-320z'/%3E%3C/svg%3E")`, backgroundRepeat: 'no-repeat', backgroundPosition: 'right 6px center', backgroundSize: 8, boxSizing: 'border-box' }}>
@@ -711,7 +720,7 @@ export default function FeeRulesTable({ currentUserNickname, onMessage }: FeeRul
             <option value={100}>100 条/页</option>
           </select>
           <button onClick={() => updatePage(p => Math.max(1, p - 1))} disabled={page <= 1} style={{ height: 26, width: 26, border: '1px solid #d9d9d9', borderRadius: 4, background: '#fff', cursor: page <= 1 ? 'not-allowed' : 'pointer', color: page <= 1 ? '#d9d9d9' : '#595959', display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: 'inherit', transition: 'all 0.15s', transform: 'rotate(180deg)' }}
-            onMouseEnter={e => { if (page > 1) { (e.currentTarget as HTMLButtonElement).style.borderColor = '#1663c4'; (e.currentTarget as HTMLButtonElement).style.color = '#1663c4'; } }}
+            onMouseEnter={e => { if (page > 1) { (e.currentTarget as HTMLButtonElement).style.borderColor = '#1677FF'; (e.currentTarget as HTMLButtonElement).style.color = '#1677FF'; } }}
             onMouseLeave={e => { if (page > 1) { (e.currentTarget as HTMLButtonElement).style.borderColor = '#d9d9d9'; (e.currentTarget as HTMLButtonElement).style.color = '#595959'; } }}>
             <Icon name="right" size={10} />
           </button>
@@ -721,15 +730,15 @@ export default function FeeRulesTable({ currentUserNickname, onMessage }: FeeRul
             const p = start + i;
             return p <= totalPages ? (
               <button key={p} onClick={() => updatePage(p)} style={{
-                height: 26, width: 26, border: `1px solid ${p === page ? '#1663c4' : '#d9d9d9'}`,
-                borderRadius: 4, background: p === page ? '#1663c4' : '#fff',
+                height: 26, width: 26, border: `1px solid ${p === page ? '#1677FF' : '#d9d9d9'}`,
+                borderRadius: 4, background: p === page ? '#1677FF' : '#fff',
                 color: p === page ? '#fff' : '#595959', fontSize: 12,
                 cursor: 'pointer', fontFamily: 'inherit', transition: 'all 0.15s'
               }}>{p}</button>
             ) : null;
           })}
           <button onClick={() => updatePage(p => Math.min(Math.max(1, Math.ceil(total / pageSize)), p + 1))} disabled={page >= Math.max(1, Math.ceil(total / pageSize))} style={{ height: 26, width: 26, border: '1px solid #d9d9d9', borderRadius: 4, background: '#fff', cursor: page >= Math.max(1, Math.ceil(total / pageSize)) ? 'not-allowed' : 'pointer', color: page >= Math.max(1, Math.ceil(total / pageSize)) ? '#d9d9d9' : '#595959', display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: 'inherit', transition: 'all 0.15s' }}
-            onMouseEnter={e => { if (page < Math.max(1, Math.ceil(total / pageSize))) { (e.currentTarget as HTMLButtonElement).style.borderColor = '#1663c4'; (e.currentTarget as HTMLButtonElement).style.color = '#1663c4'; } }}
+            onMouseEnter={e => { if (page < Math.max(1, Math.ceil(total / pageSize))) { (e.currentTarget as HTMLButtonElement).style.borderColor = '#1677FF'; (e.currentTarget as HTMLButtonElement).style.color = '#1677FF'; } }}
             onMouseLeave={e => { if (page < Math.max(1, Math.ceil(total / pageSize))) { (e.currentTarget as HTMLButtonElement).style.borderColor = '#d9d9d9'; (e.currentTarget as HTMLButtonElement).style.color = '#595959'; } }}>
             <Icon name="right" size={10} />
           </button>
@@ -856,7 +865,7 @@ export default function FeeRulesTable({ currentUserNickname, onMessage }: FeeRul
                 取消
               </button>
               <button onClick={handleSubmit} disabled={loading}
-                style={{ padding: '8px 24px', borderRadius: 4, border: 'none', background: loading ? '#73b3ff' : '#1663c4', fontSize: 13, cursor: loading ? 'not-allowed' : 'pointer', color: '#fff' }}>
+                style={{ padding: '8px 24px', borderRadius: 4, border: 'none', background: loading ? '#73b3ff' : '#1677FF', fontSize: 13, cursor: loading ? 'not-allowed' : 'pointer', color: '#fff' }}>
                 {loading ? '提交中...' : '确定'}
               </button>
             </div>
@@ -871,7 +880,7 @@ export default function FeeRulesTable({ currentUserNickname, onMessage }: FeeRul
       {importModalVisible && importPreview && (
         <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.45)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1100 }}>
           <div style={{ background: '#fff', borderRadius: 4, width: 1100, maxHeight: '88vh', display: 'flex', flexDirection: 'column', boxShadow: '0 6px 16px rgba(0,0,0,0.15)', overflow: 'hidden' }}>
-            <div style={{ padding: '14px 16px', borderBottom: '1px solid #f0f0f0', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexShrink: 0 }}>
+            <div style={{ padding: '14px 16px', borderBottom: '1px solid #E8EAED', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexShrink: 0 }}>
               <div style={{ fontSize: 15, fontWeight: 600, color: '#262626' }}>
                 <Icon name="upload" size={15} /> 导入预览
               </div>
@@ -881,7 +890,7 @@ export default function FeeRulesTable({ currentUserNickname, onMessage }: FeeRul
             </div>
 
             {!importResult && (
-              <div style={{ padding: '10px 16px', borderBottom: '1px solid #f0f0f0', display: 'flex', gap: 24, alignItems: 'center', flexShrink: 0, background: '#fafafa' }}>
+              <div style={{ padding: '10px 16px', borderBottom: '1px solid #E8EAED', display: 'flex', gap: 24, alignItems: 'center', flexShrink: 0, background: '#F5F7FA' }}>
                 <span style={{ fontSize: 13 }}>共 <strong>{importPreview.total}</strong> 条</span>
                 <span style={{ color: '#52c41a' }}>有效 <strong>{importPreview.validCount}</strong> 条</span>
                 {importPreview.errorCount > 0 && <span style={{ color: '#ff4d4f' }}>有误 <strong>{importPreview.errorCount}</strong> 条</span>}
@@ -890,7 +899,7 @@ export default function FeeRulesTable({ currentUserNickname, onMessage }: FeeRul
             )}
 
             {importResult && (
-              <div style={{ padding: '12px 16px', borderBottom: '1px solid #f0f0f0', flexShrink: 0 }}>
+              <div style={{ padding: '12px 16px', borderBottom: '1px solid #E8EAED', flexShrink: 0 }}>
                 <div style={{ color: '#52c41a', fontSize: 13 }}>✓ 成功导入 <strong>{importResult.inserted}</strong> 条</div>
                 {importResult.errors.length > 0 && (
                   <div style={{ fontSize: 12, color: '#ff4d4f', maxHeight: 80, overflowY: 'auto', marginTop: 8 }}>
@@ -902,40 +911,41 @@ export default function FeeRulesTable({ currentUserNickname, onMessage }: FeeRul
 
             {!importResult && (
               <div style={{ overflow: 'auto', flex: 1, minHeight: 0 }}>
-                <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12, minWidth: 900 }}>
+                <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12, minWidth: 900, border: '1px solid #E8EAED', borderRadius: 4, overflow: 'hidden' }}>
                   <thead>
-                    <tr style={{ background: '#fafafa', position: 'sticky', top: 0, zIndex: 1 }}>
-                      <th style={{ padding: '8px 6px', borderBottom: '1px solid #f0f0f0', textAlign: 'center', color: '#595959', fontWeight: 600, width: 50 }}>行号</th>
-                      <th style={{ padding: '8px 6px', borderBottom: '1px solid #f0f0f0', textAlign: 'center', color: '#595959', fontWeight: 600, width: 60 }}>状态</th>
-                      <th style={{ padding: '8px 6px', borderBottom: '1px solid #f0f0f0', textAlign: 'left', color: '#595959', fontWeight: 600, width: 160 }}>费用名称</th>
-                      <th style={{ padding: '8px 6px', borderBottom: '1px solid #f0f0f0', textAlign: 'left', color: '#595959', fontWeight: 600, width: 80 }}>结算主体</th>
-                      <th style={{ padding: '8px 6px', borderBottom: '1px solid #f0f0f0', textAlign: 'left', color: '#595959', fontWeight: 600, width: 130 }}>结算流向</th>
-                      <th style={{ padding: '8px 6px', borderBottom: '1px solid #f0f0f0', textAlign: 'left', color: '#595959', fontWeight: 600, width: 100 }}>收入机构</th>
-                      <th style={{ padding: '8px 6px', borderBottom: '1px solid #f0f0f0', textAlign: 'left', color: '#595959', fontWeight: 600, width: 100 }}>支出机构</th>
-                      <th style={{ padding: '8px 6px', borderBottom: '1px solid #f0f0f0', textAlign: 'left', color: '#595959', fontWeight: 600, width: 90 }}>账单节点</th>
-                      <th style={{ padding: '8px 6px', borderBottom: '1px solid #f0f0f0', textAlign: 'left', color: '#595959', fontWeight: 600, width: 90 }}>结算节点</th>
-                      <th style={{ padding: '8px 6px', borderBottom: '1px solid #f0f0f0', textAlign: 'left', color: '#595959', fontWeight: 600, width: 80 }}>生效日期</th>
-                      <th style={{ padding: '8px 6px', borderBottom: '1px solid #f0f0f0', textAlign: 'left', color: '#595959', fontWeight: 600, width: 200 }}>错误信息</th>
+                    <tr style={{ background: '#EFF5FF', position: 'sticky', top: 0, zIndex: 1 }}>
+                      <th style={{ padding: '8px 6px', borderBottom: '1px solid #E8EAED', textAlign: 'center', color: '#000', fontWeight: 600, width: 50 }}>行号</th>
+                      <th style={{ padding: '8px 6px', borderBottom: '1px solid #E8EAED', textAlign: 'center', color: '#000', fontWeight: 600, width: 60 }}>状态</th>
+                      <th style={{ padding: '8px 6px', borderBottom: '1px solid #E8EAED', textAlign: 'left', color: '#000', fontWeight: 600, width: 160 }}>费用名称</th>
+                      <th style={{ padding: '8px 6px', borderBottom: '1px solid #E8EAED', textAlign: 'left', color: '#000', fontWeight: 600, width: 80 }}>结算主体</th>
+                      <th style={{ padding: '8px 6px', borderBottom: '1px solid #E8EAED', textAlign: 'left', color: '#000', fontWeight: 600, width: 130 }}>结算流向</th>
+                      <th style={{ padding: '8px 6px', borderBottom: '1px solid #E8EAED', textAlign: 'left', color: '#000', fontWeight: 600, width: 100 }}>收入机构</th>
+                      <th style={{ padding: '8px 6px', borderBottom: '1px solid #E8EAED', textAlign: 'left', color: '#000', fontWeight: 600, width: 100 }}>支出机构</th>
+                      <th style={{ padding: '8px 6px', borderBottom: '1px solid #E8EAED', textAlign: 'left', color: '#000', fontWeight: 600, width: 90 }}>账单节点</th>
+                      <th style={{ padding: '8px 6px', borderBottom: '1px solid #E8EAED', textAlign: 'left', color: '#000', fontWeight: 600, width: 90 }}>结算节点</th>
+                      <th style={{ padding: '8px 6px', borderBottom: '1px solid #E8EAED', textAlign: 'left', color: '#000', fontWeight: 600, width: 80 }}>生效日期</th>
+                      <th style={{ padding: '8px 6px', borderBottom: '1px solid #E8EAED', textAlign: 'left', color: '#000', fontWeight: 600, width: 200 }}>错误信息</th>
                     </tr>
                   </thead>
                   <tbody>
                     {importPreview.preview.map((row, idx) => {
                       const hasError = row.errors.length > 0;
+                      const isEven = idx % 2 === 1;
                       return (
-                        <tr key={idx} style={{ background: hasError ? '#fff1f0' : (idx % 2 === 0 ? '#fff' : '#fafafa') }}>
-                          <td style={{ padding: '7px 6px', borderBottom: '1px solid #f0f0f0', textAlign: 'center', color: '#8c8c8c' }}>{row.row}</td>
-                          <td style={{ padding: '7px 6px', borderBottom: '1px solid #f0f0f0', textAlign: 'center' }}>
-                            {hasError ? <span style={{ color: '#ff4d4f', fontSize: 11 }}>✗</span> : <span style={{ color: '#52c41a', fontSize: 11 }}>✓</span>}
+                        <tr key={idx} style={{ background: hasError ? '#fff1f0' : (isEven ? '#F5F7FA' : '#FFF') }}>
+                          <td style={{ padding: '7px 6px', borderBottom: '1px solid #E8EAED', textAlign: 'center', color: 'rgba(0,0,0,0.45)' }}>{row.row}</td>
+                          <td style={{ padding: '7px 6px', borderBottom: '1px solid #E8EAED', textAlign: 'center' }}>
+                            {hasError ? <span style={{ color: '#FF4D4F', fontSize: 11 }}>✗</span> : <span style={{ color: '#52c41a', fontSize: 11 }}>✓</span>}
                           </td>
-                          <td style={{ padding: '7px 6px', borderBottom: '1px solid #f0f0f0', textAlign: 'left', fontSize: 12 }}><Tooltip content={row.fee_name}>{row.fee_name || '-'}</Tooltip></td>
-                          <td style={{ padding: '7px 6px', borderBottom: '1px solid #f0f0f0', textAlign: 'left', fontSize: 12 }}>{row.settlement_subject || '-'}</td>
-                          <td style={{ padding: '7px 6px', borderBottom: '1px solid #f0f0f0', textAlign: 'left', fontSize: 12 }}><Tooltip content={row.settlement_flow}>{row.settlement_flow || '-'}</Tooltip></td>
-                          <td style={{ padding: '7px 6px', borderBottom: '1px solid #f0f0f0', textAlign: 'left', fontSize: 12 }}>{row.income_org || '-'}</td>
-                          <td style={{ padding: '7px 6px', borderBottom: '1px solid #f0f0f0', textAlign: 'left', fontSize: 12 }}>{row.expense_org || '-'}</td>
-                          <td style={{ padding: '7px 6px', borderBottom: '1px solid #f0f0f0', textAlign: 'left', fontSize: 12 }}>{row.bill_node || '-'}</td>
-                          <td style={{ padding: '7px 6px', borderBottom: '1px solid #f0f0f0', textAlign: 'left', fontSize: 12 }}>{row.settlement_node || '-'}</td>
-                          <td style={{ padding: '7px 6px', borderBottom: '1px solid #f0f0f0', textAlign: 'left', fontSize: 12 }}>{row.start_date || '-'}</td>
-                          <td style={{ padding: '7px 6px', borderBottom: '1px solid #f0f0f0', textAlign: 'left', color: '#ff4d4f', fontSize: 11, maxWidth: 200 }}>
+                          <td style={{ padding: '7px 6px', borderBottom: '1px solid #E8EAED', textAlign: 'left', fontSize: 12 }}><Tooltip content={row.fee_name}>{row.fee_name || '-'}</Tooltip></td>
+                          <td style={{ padding: '7px 6px', borderBottom: '1px solid #E8EAED', textAlign: 'left', fontSize: 12 }}>{row.settlement_subject || '-'}</td>
+                          <td style={{ padding: '7px 6px', borderBottom: '1px solid #E8EAED', textAlign: 'left', fontSize: 12 }}><Tooltip content={row.settlement_flow}>{row.settlement_flow || '-'}</Tooltip></td>
+                          <td style={{ padding: '7px 6px', borderBottom: '1px solid #E8EAED', textAlign: 'left', fontSize: 12 }}>{row.income_org || '-'}</td>
+                          <td style={{ padding: '7px 6px', borderBottom: '1px solid #E8EAED', textAlign: 'left', fontSize: 12 }}>{row.expense_org || '-'}</td>
+                          <td style={{ padding: '7px 6px', borderBottom: '1px solid #E8EAED', textAlign: 'left', fontSize: 12 }}>{row.bill_node || '-'}</td>
+                          <td style={{ padding: '7px 6px', borderBottom: '1px solid #E8EAED', textAlign: 'left', fontSize: 12 }}>{row.settlement_node || '-'}</td>
+                          <td style={{ padding: '7px 6px', borderBottom: '1px solid #E8EAED', textAlign: 'left', fontSize: 12 }}>{row.start_date || '-'}</td>
+                          <td style={{ padding: '7px 6px', borderBottom: '1px solid #E8EAED', textAlign: 'left', color: '#FF4D4F', fontSize: 11, maxWidth: 200 }}>
                             {hasError ? <Tooltip content={row.errors.join('；')} maxWidth={220}>{row.errors.join('；')}</Tooltip> : '-'}
                           </td>
                         </tr>
@@ -946,19 +956,19 @@ export default function FeeRulesTable({ currentUserNickname, onMessage }: FeeRul
               </div>
             )}
 
-            <div style={{ padding: '10px 16px', borderTop: '1px solid #f0f0f0', display: 'flex', justifyContent: 'flex-end', gap: 8, flexShrink: 0 }}>
+            <div style={{ padding: '10px 16px', borderTop: '1px solid #E8EAED', display: 'flex', justifyContent: 'flex-end', gap: 8, flexShrink: 0 }}>
               {!importResult ? (
                 <>
                   <button onClick={() => { setImportModalVisible(false); setImportPreview(null); }}
                     style={{ padding: '8px 20px', border: '1px solid #d9d9d9', borderRadius: 4, background: '#fff', fontSize: 13, cursor: 'pointer', color: '#595959' }}>取消</button>
                   <button onClick={handleImportConfirm} disabled={importing || importPreview.validCount === 0}
-                    style={{ padding: '8px 24px', border: 'none', borderRadius: 4, background: importing || importPreview.validCount === 0 ? '#a0cfff' : '#1663c4', color: '#fff', fontSize: 13, cursor: importing || importPreview.validCount === 0 ? 'not-allowed' : 'pointer' }}>
+                    style={{ padding: '8px 24px', border: 'none', borderRadius: 4, background: importing || importPreview.validCount === 0 ? '#a0cfff' : '#1677FF', color: '#fff', fontSize: 13, cursor: importing || importPreview.validCount === 0 ? 'not-allowed' : 'pointer' }}>
                     {importing ? '导入中...' : `确认导入 (${importPreview.validCount} 条)`}
                   </button>
                 </>
               ) : (
                 <button onClick={() => { setImportModalVisible(false); setImportPreview(null); setImportResult(null); }}
-                  style={{ padding: '8px 24px', border: 'none', borderRadius: 4, background: '#1663c4', color: '#fff', fontSize: 13, cursor: 'pointer' }}>关闭</button>
+                  style={{ padding: '8px 24px', border: 'none', borderRadius: 4, background: '#1677FF', color: '#fff', fontSize: 13, cursor: 'pointer' }}>关闭</button>
               )}
             </div>
           </div>
@@ -971,7 +981,7 @@ export default function FeeRulesTable({ currentUserNickname, onMessage }: FeeRul
           confirmTarget.type === 'delete' ? '删除确认' :
           confirmTarget.type === 'batchDelete' ? '批量删除' :
           confirmTarget.type === 'approve' ? '审核通过确认' :
-          '审核不通过确认'
+          '审核驳回确认'
         }
         message={
           confirmTarget.type === 'delete' ? (
@@ -979,9 +989,9 @@ export default function FeeRulesTable({ currentUserNickname, onMessage }: FeeRul
           ) : confirmTarget.type === 'batchDelete' ? (
             <>确定删除选中的 <strong style={{ color: '#ff4d4f' }}>{selectedRows.length}</strong> 条数据吗？<br /><span style={{ color: '#8c8c8c', fontSize: 13 }}>删除后数据无法恢复，请谨慎操作。</span></>
           ) : confirmTarget.type === 'approve' ? (
-            <>确定对选中的 <strong style={{ color: '#1663c4' }}>{selectedRows.filter(r => r.status === 'pending').length}</strong> 条数据进行审核通过操作吗？</>
+            <>确定对选中的 <strong style={{ color: '#1677FF' }}>{selectedRows.filter(r => r.status === 'pending').length}</strong> 条数据进行审核通过操作吗？</>
           ) : (
-            <>确定对选中的 <strong style={{ color: '#fa8c16' }}>{selectedRows.filter(r => r.status === 'pending').length}</strong> 条数据进行审核不通过操作吗？<br /><span style={{ color: '#8c8c8c', fontSize: 13 }}>审核不通过后数据将无法恢复。</span></>
+            <>确定对选中的 <strong style={{ color: '#FF4D4F' }}>{selectedRows.filter(r => r.status === 'pending').length}</strong> 条数据进行审核驳回操作吗？<br /><span style={{ color: '#8c8c8c', fontSize: 13 }}>驳回后数据将保留，可重新编辑后提交审核。</span></>
           )
         }
         confirmText={

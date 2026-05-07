@@ -37,15 +37,16 @@ export async function POST(request: Request) {
     }
 
     if (action === 'reject') {
-      // 批量审核不通过（删除未审核的规则）
+      // 批量审核驳回（标记状态为 rejected）
       const rows: Record<string, unknown>[] = [];
       for (const id of ids) {
-        const deleted = await sql<Record<string, unknown>>`
-          DELETE FROM fee_rules WHERE id = ${id} AND status='pending' RETURNING *
+        const updated = await sql<Record<string, unknown>>`
+          UPDATE fee_rules SET status='rejected', updater=${updater}, update_time=NOW(), audit_person=${updater}, audit_time=NOW()
+          WHERE id = ${id} AND status='pending' RETURNING *
         `;
-        if (deleted.length > 0) rows.push(...deleted);
+        if (updated.length > 0) rows.push(...updated);
       }
-      return NextResponse.json({ message: `审核不通过，删除 ${rows.length} 条记录`, data: rows });
+      return NextResponse.json({ message: `审核驳回，${rows.length} 条记录已标记为驳回状态`, data: rows });
     }
 
     return NextResponse.json({ error: '未知操作' }, { status: 400 });

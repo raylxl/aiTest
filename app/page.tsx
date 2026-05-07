@@ -14,7 +14,7 @@ function MenuPlaceholder({ title, subtitle }: { title: string; subtitle?: string
       minHeight: 400, position: 'relative', overflow: 'hidden',
       background: 'radial-gradient(ellipse at center, #f0f5ff 0%, #e8f0fe 50%, #eff2f5 100%)',
     }}>
-      <div style={{ position: 'absolute', inset: 0, background: 'radial-gradient(circle at 50% 55%, rgba(22,99,196,0.08) 0%, transparent 65%)', pointerEvents: 'none' }} />
+      <div style={{ position: 'absolute', inset: 0, background: 'radial-gradient(circle at 50% 55%, rgba(0,190,190,0.08) 0%, transparent 65%)', pointerEvents: 'none' }} />
       {/* 旋转金币 */}
       {[...Array(8)].map((_, i) => (
         <div key={`coin-${i}`} style={{
@@ -66,7 +66,7 @@ function MenuPlaceholder({ title, subtitle }: { title: string; subtitle?: string
       </div>
       {/* 标题 */}
       <div style={{ textAlign: 'center', marginTop: 32, zIndex: 2 }}>
-        <div style={{ fontSize: 20, fontWeight: 700, color: '#1663c4', letterSpacing: 4, marginBottom: 8, textShadow: '0 2px 8px rgba(22,99,196,0.2)' }}>{title}</div>
+        <div style={{ fontSize: 20, fontWeight: 700, color: '#00BEBE', letterSpacing: 4, marginBottom: 8, textShadow: '0 2px 8px rgba(0,190,190,0.2)' }}>{title}</div>
         {subtitle && <div style={{ fontSize: 13, color: '#8c8c8c', letterSpacing: 1 }}>{subtitle}</div>}
       </div>
       <div style={{ position: 'absolute', bottom: 0, left: 0, right: 0, height: 4, background: 'linear-gradient(90deg, transparent, #ffd700, #ffd700, transparent)', opacity: 0.6 }} />
@@ -219,9 +219,9 @@ function MenuItemEl({ item, activeMenu, collapsed, expandedKeys, depth = 0, onSe
     height: itemHeight, display: 'flex', alignItems: 'center',
     padding: `0 16px 0 ${paddingLeft}px`, cursor: 'pointer', fontSize,
     fontWeight: isActive || isExpanded ? 500 : 400,
-    color: isActive ? '#1663c4' : depth === 0 ? '#262626' : '#595959',
-    background: isActive ? '#e6f4ff' : 'transparent',
-    borderRight: depth === 0 && isActive ? '3px solid #1663c4' : '3px solid transparent',
+    color: isActive ? '#fff' : depth === 0 ? 'rgba(255,255,255,0.85)' : 'rgba(255,255,255,0.65)',
+    background: isActive ? 'linear-gradient(to right, rgba(0,185,185,0.35), rgba(0,0,0,0))' : 'transparent',
+    borderLeft: isActive ? '3px solid rgb(0,185,185)' : '3px solid transparent',
     transition: 'background 0.12s', whiteSpace: 'nowrap' as const, overflow: 'hidden' as const,
     ...extra,
   });
@@ -229,20 +229,20 @@ function MenuItemEl({ item, activeMenu, collapsed, expandedKeys, depth = 0, onSe
   if (depth === 0) {
     if (!hasChildren) {
       return (
-        <div onClick={() => onSelect(item.key)} style={itemStyle()} onMouseEnter={e => { if (!isActive) { const s = e.currentTarget.style; s.background = '#f0f0f0'; } }} onMouseLeave={e => { if (!isActive) { const s = e.currentTarget.style; s.background = 'transparent'; } }}>
-          {item.icon && <span style={{ marginRight: 8, color: isActive ? '#1663c4' : '#8c8c8c', flexShrink: 0 }}><Icon name={item.icon} size={14} /></span>}
+        <div onClick={() => onSelect(item.key)} style={itemStyle()} onMouseEnter={e => { if (!isActive) { const s = e.currentTarget.style; s.background = 'rgba(255,255,255,0.08)'; } }} onMouseLeave={e => { if (!isActive) { const s = e.currentTarget.style; s.background = 'transparent'; } }}>
+          {item.icon && <span style={{ marginRight: 8, color: isActive ? 'rgb(0,185,185)' : '#8c8c8c', flexShrink: 0 }}><Icon name={item.icon} size={14} /></span>}
           {!collapsed && <span>{item.label}</span>}
         </div>
       );
     }
     return (
       <div>
-        <div onClick={() => onToggle(item.key)} style={itemStyle()} onMouseEnter={e => { if (!isActive && !isExpanded) { const s = e.currentTarget.style; s.background = '#f0f0f0'; } }} onMouseLeave={e => { if (!isActive && !isExpanded) { const s = e.currentTarget.style; s.background = 'transparent'; } }}>
-          {item.icon && <span style={{ marginRight: 8, color: isActive || isExpanded ? '#1663c4' : '#8c8c8c', flexShrink: 0 }}><Icon name={item.icon} size={14} /></span>}
-          {!collapsed && <><span style={{ flex: 1 }}>{item.label}</span><span style={{ fontSize: 10, color: isExpanded ? '#1663c4' : '#bfbfbf', marginLeft: 4, transition: 'transform 0.15s', transform: isExpanded ? 'rotate(0deg)' : 'rotate(-90deg)', display: 'inline-block', width: 10, textAlign: 'center' }}>▼</span></>}
+        <div onClick={() => onToggle(item.key)} style={itemStyle()} onMouseEnter={e => { if (!isActive && !isExpanded) { const s = e.currentTarget.style; s.background = 'rgba(255,255,255,0.08)'; } }} onMouseLeave={e => { if (!isActive && !isExpanded) { const s = e.currentTarget.style; s.background = 'transparent'; } }}>
+          {item.icon && <span style={{ marginRight: 8, color: isActive || isExpanded ? 'rgb(0,185,185)' : '#8c8c8c', flexShrink: 0 }}><Icon name={item.icon} size={14} /></span>}
+          {!collapsed && <><span style={{ flex: 1 }}>{item.label}</span><span style={{ fontSize: 10, color: isExpanded ? 'rgb(0,185,185)' : '#bfbfbf', marginLeft: 4, transition: 'transform 0.15s', transform: isExpanded ? 'rotate(0deg)' : 'rotate(-90deg)', display: 'inline-block', width: 10, textAlign: 'center' }}>▼</span></>}
         </div>
         {!collapsed && isExpanded && item.children && (
-          <div style={{ background: '#fafafa' }}>
+          <div style={{ background: '#00203a' }}>
             {item.children.map(child => <MenuItemEl key={child.key} item={child} activeMenu={activeMenu} collapsed={collapsed} expandedKeys={expandedKeys} depth={1} onSelect={onSelect} onToggle={onToggle} />)}
           </div>
         )}
@@ -252,8 +252,8 @@ function MenuItemEl({ item, activeMenu, collapsed, expandedKeys, depth = 0, onSe
 
   if (!hasChildren) {
     return (
-      <div onClick={() => onSelect(item.key)} style={itemStyle({ borderLeft: isActive ? '2px solid #1663c4' : '2px solid transparent' })} onMouseEnter={e => { if (!isActive) { const s = e.currentTarget.style; s.background = '#f0f0f0'; } }} onMouseLeave={e => { if (!isActive) { const s = e.currentTarget.style; s.background = 'transparent'; } }}>
-        {item.icon && <span style={{ marginRight: 8, color: isActive ? '#1663c4' : '#8c8c8c', flexShrink: 0 }}><Icon name={item.icon} size={13} /></span>}
+      <div onClick={() => onSelect(item.key)} style={itemStyle({ borderLeft: isActive ? '3px solid rgb(0,185,185)' : '3px solid transparent' })} onMouseEnter={e => { if (!isActive) { const s = e.currentTarget.style; s.background = 'rgba(255,255,255,0.06)'; } }} onMouseLeave={e => { if (!isActive) { const s = e.currentTarget.style; s.background = 'transparent'; } }}>
+        {item.icon && <span style={{ marginRight: 8, color: isActive ? 'rgb(0,185,185)' : '#8c8c8c', flexShrink: 0 }}><Icon name={item.icon} size={13} /></span>}
         <span>{item.label}</span>
       </div>
     );
@@ -261,13 +261,13 @@ function MenuItemEl({ item, activeMenu, collapsed, expandedKeys, depth = 0, onSe
 
   return (
     <div>
-      <div onClick={() => onToggle(item.key)} style={itemStyle()} onMouseEnter={e => { if (!isActive && !isExpanded) { const s = e.currentTarget.style; s.background = '#f0f0f0'; } }} onMouseLeave={e => { if (!isActive && !isExpanded) { const s = e.currentTarget.style; s.background = 'transparent'; } }}>
-        {item.icon && <span style={{ marginRight: 8, color: isActive || isExpanded ? '#1663c4' : '#8c8c8c', flexShrink: 0 }}><Icon name={item.icon} size={13} /></span>}
+      <div onClick={() => onToggle(item.key)} style={itemStyle()} onMouseEnter={e => { if (!isActive && !isExpanded) { const s = e.currentTarget.style; s.background = 'rgba(255,255,255,0.06)'; } }} onMouseLeave={e => { if (!isActive && !isExpanded) { const s = e.currentTarget.style; s.background = 'transparent'; } }}>
+        {item.icon && <span style={{ marginRight: 8, color: isActive || isExpanded ? 'rgb(0,185,185)' : 'rgba(255,255,255,0.5)', flexShrink: 0 }}><Icon name={item.icon} size={13} /></span>}
         <span style={{ flex: 1 }}>{item.label}</span>
-        <span style={{ fontSize: 10, color: isExpanded ? '#1663c4' : '#bfbfbf', marginLeft: 4, transition: 'transform 0.15s', transform: isExpanded ? 'rotate(0deg)' : 'rotate(-90deg)', display: 'inline-block', width: 10, textAlign: 'center' }}>▼</span>
+        <span style={{ fontSize: 10, color: isExpanded ? 'rgb(0,185,185)' : 'rgba(255,255,255,0.35)', marginLeft: 4, transition: 'transform 0.15s', transform: isExpanded ? 'rotate(0deg)' : 'rotate(-90deg)', display: 'inline-block', width: 10, textAlign: 'center' }}>▼</span>
       </div>
-      {!collapsed && isExpanded && item.children && (
-        <div style={{ background: '#f5f5f5' }}>
+        {!collapsed && isExpanded && item.children && (
+          <div style={{ background: '#001a2e' }}>
           {item.children.map(child => <MenuItemEl key={child.key} item={child} activeMenu={activeMenu} collapsed={collapsed} expandedKeys={expandedKeys} depth={2} onSelect={onSelect} onToggle={onToggle} />)}
         </div>
       )}
@@ -397,9 +397,9 @@ export default function FeeManager() {
   const currentNickname = currentUser?.nickname || '匿名用户';
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', height: '100vh', overflow: 'hidden', fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif', background: '#f5f5f5' }}>
-      {/* 顶部导航 */}
-      <header style={{ background: '#1a488a', height: 48, display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '0 12px', boxShadow: '0 1px 4px rgba(0,21,41,.25)', flexShrink: 0, position: 'relative', zIndex: 200 }}>
+    <div style={{ display: 'flex', flexDirection: 'column', height: '100vh', overflow: 'hidden', fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "PingFang SC", sans-serif', background: 'rgb(243,249,254)' }}>
+      {/* 顶部导航 — 鲸天系统渐变顶栏 */}
+      <header style={{ background: 'linear-gradient(90deg, rgb(1,190,190) 0%, rgb(0,77,114) 100%)', height: 56, display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '0 16px', boxShadow: '0 1px 4px rgba(0,21,41,.25)', flexShrink: 0, position: 'relative', zIndex: 200 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
           <button onClick={() => setCollapsed(!collapsed)} title={collapsed ? '展开菜单' : '折叠菜单'}
             style={{ background: 'none', border: 'none', color: '#fff', fontSize: 16, cursor: 'pointer', width: 32, height: 32, display: 'flex', alignItems: 'center', justifyContent: 'center', borderRadius: 4, transition: 'background 0.15s' }}
@@ -414,9 +414,9 @@ export default function FeeManager() {
           {/* 鲸鱼 Logo */}
           <svg width="26" height="26" viewBox="0 0 64 64" fill="none">
             <ellipse cx="32" cy="38" rx="26" ry="18" fill="rgba(255,255,255,0.9)"/>
-            <ellipse cx="32" cy="38" rx="20" ry="14" fill="#1a488a"/>
+            <ellipse cx="32" cy="38" rx="20" ry="14" fill="#00BEBE"/>
             <circle cx="24" cy="34" r="3" fill="rgba(255,255,255,0.9)"/>
-            <circle cx="23" cy="33" r="1.5" fill="#1a488a"/>
+            <circle cx="23" cy="33" r="1.5" fill="#00BEBE"/>
             <path d="M8 34 Q2 26 10 22 Q18 18 24 26" fill="rgba(255,255,255,0.85)"/>
             <path d="M48 28 Q56 22 58 30 Q58 36 52 32" fill="rgba(255,255,255,0.85)"/>
             <path d="M12 44 Q6 50 12 54 Q20 58 30 54 Q40 58 48 54 Q56 50 50 44" fill="rgba(255,255,255,0.9)"/>
@@ -442,7 +442,7 @@ export default function FeeManager() {
                 style={{ display: 'flex', alignItems: 'center', gap: 6, cursor: 'pointer', padding: '0 8px', borderRadius: 4, height: 32, transition: 'background 0.15s' }}
                 onMouseEnter={e => (e.currentTarget.style.background = 'rgba(255,255,255,0.15)')}
                 onMouseLeave={e => (e.currentTarget.style.background = 'none')}>
-                <div style={{ width: 24, height: 24, borderRadius: '50%', background: currentUser.role === 'admin' ? '#e6f4ff' : getAvatarColor(currentUser.username), color: '#1663c4', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 11, fontWeight: 600, flexShrink: 0 }}>{currentUser.nickname[0].toUpperCase()}</div>
+                <div style={{ width: 24, height: 24, borderRadius: '50%', background: currentUser.role === 'admin' ? '#e6f4ff' : getAvatarColor(currentUser.username), color: '#00BEBE', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 11, fontWeight: 600, flexShrink: 0 }}>{currentUser.nickname[0].toUpperCase()}</div>
                 <span style={{ color: '#fff', fontSize: 13 }}>{currentUser.nickname}</span>
                 <Icon name="arrowDown" size={9} />
               </div>
@@ -451,7 +451,7 @@ export default function FeeManager() {
                   <div style={{ padding: '10px 16px', borderBottom: '1px solid #f0f0f0' }}>
                     <div style={{ fontSize: 13, fontWeight: 600, color: '#262626' }}>{currentUser.nickname}</div>
                     <div style={{ fontSize: 12, color: '#8c8c8c', marginTop: 2 }}>@{currentUser.username}</div>
-                    <div style={{ marginTop: 4 }}><span style={{ fontSize: 11, padding: '1px 6px', borderRadius: 2, background: currentUser.role === 'admin' ? '#e6f4ff' : '#f5f5f5', color: currentUser.role === 'admin' ? '#1663c4' : '#595959' }}>{currentUser.role === 'admin' ? '管理员' : '普通用户'}</span></div>
+                    <div style={{ marginTop: 4 }}><span style={{ fontSize: 11, padding: '1px 6px', borderRadius: 2, background: currentUser.role === 'admin' ? '#e6f4ff' : '#f5f5f5', color: currentUser.role === 'admin' ? '#00BEBE' : '#595959' }}>{currentUser.role === 'admin' ? '管理员' : '普通用户'}</span></div>
                   </div>
                   {['个人信息', '修改密码'].map(item => (
                     <div key={item} style={{ padding: '9px 16px', fontSize: 13, color: '#262626', cursor: 'pointer', transition: 'background 0.15s' }} onMouseEnter={e => (e.currentTarget.style.background = '#f5f5f5')} onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}>{item}</div>
@@ -467,7 +467,7 @@ export default function FeeManager() {
               <button onClick={() => setLoginModalVisible(true)} style={{ height: 28, padding: '0 12px', border: '1px solid rgba(255,255,255,0.5)', borderRadius: 4, background: 'rgba(255,255,255,0.1)', color: '#fff', cursor: 'pointer', fontSize: 12, fontFamily: 'inherit', transition: 'all 0.15s', fontWeight: 500 }}
                 onMouseEnter={e => { const b = e.currentTarget as HTMLButtonElement; b.style.background = 'rgba(255,255,255,0.2)'; b.style.borderColor = '#fff'; }}
                 onMouseLeave={e => { const b = e.currentTarget as HTMLButtonElement; b.style.background = 'rgba(255,255,255,0.1)'; b.style.borderColor = 'rgba(255,255,255,0.5)'; }}>登录</button>
-              <button onClick={() => setRegisterModalVisible(true)} style={{ height: 28, padding: '0 12px', border: 'none', borderRadius: 4, background: '#fff', color: '#1663c4', cursor: 'pointer', fontSize: 12, fontFamily: 'inherit', transition: 'all 0.15s', fontWeight: 600 }}
+              <button onClick={() => setRegisterModalVisible(true)} style={{ height: 28, padding: '0 12px', border: 'none', borderRadius: 4, background: '#fff', color: '#00BEBE', cursor: 'pointer', fontSize: 12, fontFamily: 'inherit', transition: 'all 0.15s', fontWeight: 600 }}
                 onMouseEnter={e => (e.currentTarget.style.background = '#f0f0f0')}
                 onMouseLeave={e => (e.currentTarget.style.background = '#fff')}>注册</button>
             </div>
@@ -478,13 +478,13 @@ export default function FeeManager() {
       {/* 主体 */}
       <div style={{ display: 'flex', flex: 1, overflowX: 'auto', overflowY: 'hidden' }}>
         {/* 侧边栏 */}
-        <aside style={{ background: '#fff', borderRight: '1px solid #f0f0f0', width: collapsed ? 60 : 200, overflowY: 'auto', overflowX: 'hidden', flexShrink: 0, transition: 'width 0.2s ease', display: 'flex', flexDirection: 'column' }}>
+        <aside style={{ background: '#00263c', borderRight: '1px solid #004466', width: collapsed ? 60 : 220, overflowY: 'auto', overflowX: 'hidden', flexShrink: 0, transition: 'width 0.2s ease', display: 'flex', flexDirection: 'column' }}>
           {collapsed ? (
             <div style={{ padding: '8px 0' }}>
               {MENU_DATA.map(item => (
                 <div key={item.key} onClick={() => { if (item.children) { setCollapsed(false); setExpandedKeys(prev => new Set([...prev, item.key])); } handleSelect(item.key); }} title={item.label}
-                  style={{ height: 44, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', color: activeMenu === item.key ? '#1663c4' : '#8c8c8c', transition: 'background 0.12s', background: activeMenu === item.key ? '#e6f4ff' : 'transparent' }}
-                  onMouseEnter={e => { if (activeMenu !== item.key) (e.currentTarget as HTMLDivElement).style.background = '#f0f0f0'; }}
+                  style={{ height: 44, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', color: activeMenu === item.key ? '#fff' : 'rgba(255,255,255,0.9)', transition: 'background 0.12s', background: activeMenu === item.key ? 'rgba(0,190,190,0.3)' : 'transparent' }}
+                  onMouseEnter={e => { if (activeMenu !== item.key) (e.currentTarget as HTMLDivElement).style.background = 'rgba(255,255,255,0.08)'; }}
                   onMouseLeave={e => { if (activeMenu !== item.key) (e.currentTarget as HTMLDivElement).style.background = 'transparent'; }}>
                   {item.icon ? <Icon name={item.icon} size={16} /> : <span style={{ fontSize: 12 }}>{item.label[0]}</span>}
                 </div>
@@ -511,7 +511,7 @@ export default function FeeManager() {
           </div>
 
           {/* 内容卡片 */}
-          <div style={{ background: '#fff', borderRadius: 4, flex: 1, border: '1px solid #e8e8e8', overflow: 'auto', display: 'flex', flexDirection: 'column' }}>
+          <div style={{ background: '#fff', borderRadius: 4, flex: 1, border: '1px solid #e4edf7', overflow: 'auto', display: 'flex', flexDirection: 'column' }}>
             {activeMenu === 'fee-type-cc' ? (
               <FeeTable
                 data={data} setData={setData} selectedRows={selectedRows} setSelectedRows={setSelectedRows}
@@ -540,7 +540,7 @@ export default function FeeManager() {
         <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.45)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000 }}
           onClick={e => { if (e.target === e.currentTarget) setLoginModalVisible(false); }}>
           <div style={{ background: '#fff', borderRadius: 8, width: 400, boxShadow: '0 8px 24px rgba(0,0,0,0.2)', overflow: 'hidden' }}>
-            <div style={{ padding: '20px 24px 16px', borderBottom: '1px solid #f0f0f0', background: '#1663c4', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <div style={{ padding: '20px 24px 16px', borderBottom: '1px solid #f0f0f0', background: '#00BEBE', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
               <div><div style={{ fontSize: 16, fontWeight: 600, color: '#fff' }}>用户登录</div><div style={{ fontSize: 12, color: 'rgba(255,255,255,0.7)', marginTop: 2 }}>中通冷链 - 费用管理系统</div></div>
               <button onClick={() => setLoginModalVisible(false)} style={{ background: 'none', border: 'none', color: 'rgba(255,255,255,0.8)', fontSize: 18, cursor: 'pointer', padding: 4, lineHeight: 1 }}
                 onMouseEnter={e => (e.currentTarget.style.color = '#fff')} onMouseLeave={e => (e.currentTarget.style.color = 'rgba(255,255,255,0.8)')}><Icon name="close" size={16} /></button>
@@ -551,7 +551,7 @@ export default function FeeManager() {
                 <div style={{ fontSize: 13, color: '#595959', marginBottom: 6, fontWeight: 500 }}>账号</div>
                 <input value={loginForm.username} onChange={e => setLoginForm(f => ({ ...f, username: e.target.value }))} onKeyDown={e => e.key === 'Enter' && handleLoginSubmit()} placeholder="请输入账号" autoFocus
                   style={{ width: '100%', height: 36, padding: '0 12px', borderRadius: 4, border: `1px solid ${authErrors.username ? '#ff4d4f' : '#d9d9d9'}`, fontSize: 13, outline: 'none', color: '#262626', background: '#fff', fontFamily: 'inherit', boxSizing: 'border-box', transition: 'border-color 0.15s' }}
-                  onFocus={e => (e.target.style.borderColor = authErrors.username ? '#ff4d4f' : '#1663c4')}
+                  onFocus={e => (e.target.style.borderColor = authErrors.username ? '#ff4d4f' : '#00BEBE')}
                   onBlur={e => (e.target.style.borderColor = authErrors.username ? '#ff4d4f' : '#d9d9d9')} />
                 {authErrors.username && <div style={{ fontSize: 12, color: '#ff4d4f', marginTop: 4 }}>{authErrors.username}</div>}
               </div>
@@ -559,22 +559,22 @@ export default function FeeManager() {
                 <div style={{ fontSize: 13, color: '#595959', marginBottom: 6, fontWeight: 500 }}>密码</div>
                 <input type="password" value={loginForm.password} onChange={e => setLoginForm(f => ({ ...f, password: e.target.value }))} onKeyDown={e => e.key === 'Enter' && handleLoginSubmit()} placeholder="请输入密码"
                   style={{ width: '100%', height: 36, padding: '0 12px', borderRadius: 4, border: `1px solid ${authErrors.password ? '#ff4d4f' : '#d9d9d9'}`, fontSize: 13, outline: 'none', color: '#262626', background: '#fff', fontFamily: 'inherit', boxSizing: 'border-box', transition: 'border-color 0.15s' }}
-                  onFocus={e => (e.target.style.borderColor = authErrors.password ? '#ff4d4f' : '#1663c4')}
+                  onFocus={e => (e.target.style.borderColor = authErrors.password ? '#ff4d4f' : '#00BEBE')}
                   onBlur={e => (e.target.style.borderColor = authErrors.password ? '#ff4d4f' : '#d9d9d9')} />
                 {authErrors.password && <div style={{ fontSize: 12, color: '#ff4d4f', marginTop: 4 }}>{authErrors.password}</div>}
               </div>
-              <div style={{ marginBottom: 16, padding: '8px 12px', background: '#f5f5f5', borderRadius: 4, fontSize: 12, color: '#8c8c8c' }}><div>管理员账号: <strong style={{ color: '#1663c4' }}>admin</strong> &nbsp;密码: <strong style={{ color: '#1663c4' }}>123456</strong></div></div>
+              <div style={{ marginBottom: 16, padding: '8px 12px', background: '#f5f5f5', borderRadius: 4, fontSize: 12, color: '#8c8c8c' }}><div>管理员账号: <strong style={{ color: '#00BEBE' }}>admin</strong> &nbsp;密码: <strong style={{ color: '#00BEBE' }}>123456</strong></div></div>
               <div style={{ display: 'flex', gap: 8 }}>
                 <button onClick={() => setLoginModalVisible(false)} style={{ flex: 1, height: 36, border: '1px solid #d9d9d9', borderRadius: 4, background: '#fff', cursor: 'pointer', fontSize: 13, color: '#595959', fontFamily: 'inherit', transition: 'all 0.15s' }}
-                  onMouseEnter={e => { const b = e.currentTarget as HTMLButtonElement; b.style.borderColor = '#1663c4'; b.style.color = '#1663c4'; }}
+                  onMouseEnter={e => { const b = e.currentTarget as HTMLButtonElement; b.style.borderColor = '#00BEBE'; b.style.color = '#00BEBE'; }}
                   onMouseLeave={e => { const b = e.currentTarget as HTMLButtonElement; b.style.borderColor = '#d9d9d9'; b.style.color = '#595959'; }}>取消</button>
-                <button onClick={handleLoginSubmit} disabled={authLoading} style={{ flex: 2, height: 36, border: 'none', borderRadius: 4, background: authLoading ? '#73b3ff' : '#1663c4', color: '#fff', cursor: authLoading ? 'not-allowed' : 'pointer', fontSize: 13, fontWeight: 600, fontFamily: 'inherit', transition: 'background 0.15s', boxShadow: '0 2px 0 rgba(22,99,196,0.1)' }}
-                  onMouseEnter={e => { if (!authLoading) (e.currentTarget as HTMLButtonElement).style.background = '#3880d0'; }}
-                  onMouseLeave={e => { if (!authLoading) (e.currentTarget as HTMLButtonElement).style.background = '#1663c4'; }}>
+                <button onClick={handleLoginSubmit} disabled={authLoading} style={{ flex: 2, height: 36, border: 'none', borderRadius: 4, background: authLoading ? '#80d8d8' : '#00BEBE', color: '#fff', cursor: authLoading ? 'not-allowed' : 'pointer', fontSize: 13, fontWeight: 600, fontFamily: 'inherit', transition: 'background 0.15s', boxShadow: '0 2px 0 rgba(0,190,190,0.1)' }}
+                  onMouseEnter={e => { if (!authLoading) (e.currentTarget as HTMLButtonElement).style.background = '#00d4d4'; }}
+                  onMouseLeave={e => { if (!authLoading) (e.currentTarget as HTMLButtonElement).style.background = '#00BEBE'; }}>
                   {authLoading ? '登录中...' : '登录'}
                 </button>
               </div>
-              <div style={{ textAlign: 'center', marginTop: 16, fontSize: 13, color: '#8c8c8c' }}>还没有账号？{' '}<span onClick={() => { setLoginModalVisible(false); setRegisterModalVisible(true); }} style={{ color: '#1663c4', cursor: 'pointer', fontWeight: 500 }}>立即注册</span></div>
+              <div style={{ textAlign: 'center', marginTop: 16, fontSize: 13, color: '#8c8c8c' }}>还没有账号？{' '}<span onClick={() => { setLoginModalVisible(false); setRegisterModalVisible(true); }} style={{ color: '#00BEBE', cursor: 'pointer', fontWeight: 500 }}>立即注册</span></div>
             </div>
           </div>
         </div>
@@ -585,7 +585,7 @@ export default function FeeManager() {
         <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.45)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000 }}
           onClick={e => { if (e.target === e.currentTarget) setRegisterModalVisible(false); }}>
           <div style={{ background: '#fff', borderRadius: 8, width: 420, boxShadow: '0 8px 24px rgba(0,0,0,0.2)', overflow: 'hidden' }}>
-            <div style={{ padding: '20px 24px 16px', borderBottom: '1px solid #f0f0f0', background: '#1663c4', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <div style={{ padding: '20px 24px 16px', borderBottom: '1px solid #f0f0f0', background: '#00BEBE', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
               <div><div style={{ fontSize: 16, fontWeight: 600, color: '#fff' }}>用户注册</div><div style={{ fontSize: 12, color: 'rgba(255,255,255,0.7)', marginTop: 2 }}>创建您的费用管理系统账号</div></div>
               <button onClick={() => setRegisterModalVisible(false)} style={{ background: 'none', border: 'none', color: 'rgba(255,255,255,0.8)', fontSize: 18, cursor: 'pointer', padding: 4, lineHeight: 1 }}
                 onMouseEnter={e => (e.currentTarget.style.color = '#fff')} onMouseLeave={e => (e.currentTarget.style.color = 'rgba(255,255,255,0.8)')}><Icon name="close" size={16} /></button>
@@ -603,22 +603,22 @@ export default function FeeManager() {
                     onKeyDown={field === 'confirmPassword' ? (e: React.KeyboardEvent) => { if (e.key === 'Enter') handleRegisterSubmit(); } : undefined}
                     placeholder={placeholder as string} autoFocus={field === 'username'}
                     style={{ width: '100%', height: 34, padding: '0 12px', borderRadius: 4, border: `1px solid ${err ? '#ff4d4f' : '#d9d9d9'}`, fontSize: 13, outline: 'none', color: '#262626', background: '#fff', fontFamily: 'inherit', boxSizing: 'border-box', transition: 'border-color 0.15s' }}
-                    onFocus={e => (e.target.style.borderColor = err ? '#ff4d4f' : '#1663c4')}
+                    onFocus={e => (e.target.style.borderColor = err ? '#ff4d4f' : '#00BEBE')}
                     onBlur={e => (e.target.style.borderColor = err ? '#ff4d4f' : '#d9d9d9')} />
                   {err && <div style={{ fontSize: 12, color: '#ff4d4f', marginTop: 4 }}>{err as string}</div>}
                 </div>
               ))}
               <div style={{ display: 'flex', gap: 8 }}>
                 <button onClick={() => setRegisterModalVisible(false)} style={{ flex: 1, height: 36, border: '1px solid #d9d9d9', borderRadius: 4, background: '#fff', cursor: 'pointer', fontSize: 13, color: '#595959', fontFamily: 'inherit', transition: 'all 0.15s' }}
-                  onMouseEnter={e => { const b = e.currentTarget as HTMLButtonElement; b.style.borderColor = '#1663c4'; b.style.color = '#1663c4'; }}
+                  onMouseEnter={e => { const b = e.currentTarget as HTMLButtonElement; b.style.borderColor = '#00BEBE'; b.style.color = '#00BEBE'; }}
                   onMouseLeave={e => { const b = e.currentTarget as HTMLButtonElement; b.style.borderColor = '#d9d9d9'; b.style.color = '#595959'; }}>取消</button>
-                <button onClick={handleRegisterSubmit} disabled={authLoading} style={{ flex: 2, height: 36, border: 'none', borderRadius: 4, background: authLoading ? '#73b3ff' : '#1663c4', color: '#fff', cursor: authLoading ? 'not-allowed' : 'pointer', fontSize: 13, fontWeight: 600, fontFamily: 'inherit', transition: 'background 0.15s', boxShadow: '0 2px 0 rgba(22,99,196,0.1)' }}
-                  onMouseEnter={e => { if (!authLoading) (e.currentTarget as HTMLButtonElement).style.background = '#3880d0'; }}
-                  onMouseLeave={e => { if (!authLoading) (e.currentTarget as HTMLButtonElement).style.background = '#1663c4'; }}>
+                <button onClick={handleRegisterSubmit} disabled={authLoading} style={{ flex: 2, height: 36, border: 'none', borderRadius: 4, background: authLoading ? '#80d8d8' : '#00BEBE', color: '#fff', cursor: authLoading ? 'not-allowed' : 'pointer', fontSize: 13, fontWeight: 600, fontFamily: 'inherit', transition: 'background 0.15s', boxShadow: '0 2px 0 rgba(0,190,190,0.1)' }}
+                  onMouseEnter={e => { if (!authLoading) (e.currentTarget as HTMLButtonElement).style.background = '#00d4d4'; }}
+                  onMouseLeave={e => { if (!authLoading) (e.currentTarget as HTMLButtonElement).style.background = '#00BEBE'; }}>
                   {authLoading ? '注册中...' : '注册'}
                 </button>
               </div>
-              <div style={{ textAlign: 'center', marginTop: 16, fontSize: 13, color: '#8c8c8c' }}>已有账号？{' '}<span onClick={() => { setRegisterModalVisible(false); setLoginModalVisible(true); }} style={{ color: '#1663c4', cursor: 'pointer', fontWeight: 500 }}>立即登录</span></div>
+              <div style={{ textAlign: 'center', marginTop: 16, fontSize: 13, color: '#8c8c8c' }}>已有账号？{' '}<span onClick={() => { setRegisterModalVisible(false); setLoginModalVisible(true); }} style={{ color: '#00BEBE', cursor: 'pointer', fontWeight: 500 }}>立即登录</span></div>
             </div>
           </div>
         </div>
