@@ -70,7 +70,10 @@ export interface SubmitResult {
 // 运单列表查询参数
 export interface WaybillQuery {
   external_code?: string;
+  sender_name?: string;
+  sender_phone?: string;
   receiver_name?: string;
+  receiver_phone?: string;
   start_date?: string;
   end_date?: string;
   page?: number;

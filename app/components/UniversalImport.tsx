@@ -312,7 +312,7 @@ export default function UniversalImport() {
   const [listLoading, setListLoading] = useState(false);
   const [listPage, setListPage] = useState(1);
   const [listTotal, setListTotal] = useState(0);
-  const [listQuery, setListQuery] = useState({ external_code: '', receiver_name: '', start_date: '', end_date: '' });
+  const [listQuery, setListQuery] = useState({ external_code: '', sender_name: '', sender_phone: '', receiver_name: '', receiver_phone: '', start_date: '', end_date: '' });
   const [selectedWaybillIds, setSelectedWaybillIds] = useState<Set<number>>(new Set());
   const [deleteLoading, setDeleteLoading] = useState(false);
 
@@ -477,7 +477,10 @@ export default function UniversalImport() {
         page: String(page),
         pageSize: '10',
         ...(listQuery.external_code && { external_code: listQuery.external_code }),
+        ...(listQuery.sender_name && { sender_name: listQuery.sender_name }),
+        ...(listQuery.sender_phone && { sender_phone: listQuery.sender_phone }),
         ...(listQuery.receiver_name && { receiver_name: listQuery.receiver_name }),
+        ...(listQuery.receiver_phone && { receiver_phone: listQuery.receiver_phone }),
         ...(listQuery.start_date && { start_date: listQuery.start_date }),
         ...(listQuery.end_date && { end_date: listQuery.end_date }),
       });
@@ -933,7 +936,10 @@ export default function UniversalImport() {
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))', gap: 12 }}>
                 {[
                   { label: '外部编码', key: 'external_code', placeholder: '输入外部编码' },
+                  { label: '发件人姓名', key: 'sender_name', placeholder: '输入发件人姓名' },
+                  { label: '发件人电话', key: 'sender_phone', placeholder: '输入发件人电话' },
                   { label: '收件人姓名', key: 'receiver_name', placeholder: '输入收件人姓名' },
+                  { label: '收件人电话', key: 'receiver_phone', placeholder: '输入收件人电话' },
                   { label: '开始日期', key: 'start_date', placeholder: '开始日期', type: 'date' },
                   { label: '结束日期', key: 'end_date', placeholder: '结束日期', type: 'date' },
                 ].map(f => (
@@ -954,7 +960,7 @@ export default function UniversalImport() {
                 <button onClick={() => fetchWaybillList(1)} style={{ height: 32, padding: '0 16px', border: 'none', borderRadius: 4, background: '#00BEBE', color: '#fff', cursor: 'pointer', fontSize: 13 }}
                   onMouseEnter={e => (e.currentTarget.style.background = '#00c4c4')}
                   onMouseLeave={e => (e.currentTarget.style.background = '#00BEBE')}>查询</button>
-                <button onClick={() => { setListQuery({ external_code: '', receiver_name: '', start_date: '', end_date: '' }); }}
+                <button onClick={() => { setListQuery({ external_code: '', sender_name: '', sender_phone: '', receiver_name: '', receiver_phone: '', start_date: '', end_date: '' }); }}
                   style={{ height: 32, padding: '0 16px', border: '1px solid #d9d9d9', borderRadius: 4, background: '#fff', color: '#595959', cursor: 'pointer', fontSize: 13 }}>重置</button>
                 <button
                   onClick={handleBatchDelete}
