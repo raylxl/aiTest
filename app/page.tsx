@@ -250,8 +250,8 @@ function MenuItemEl({ item, activeMenu, collapsed, expandedKeys, depth = 0, onSe
 // ============ 主组件 ============
 export default function FeeManager() {
   const [collapsed, setCollapsed] = useState(false);
-  const [activeMenu, setActiveMenu] = useState('fee-rules');
-  const [expandedKeys, setExpandedKeys] = useState<Set<string>>(new Set(['cl-finance', 'cl-finance-base']));
+  const [activeMenu, setActiveMenu] = useState('universal-import');
+  const [expandedKeys, setExpandedKeys] = useState<Set<string>>(new Set(['cl-finance', 'cl-finance-base', 'ai-exam', 'ai-exam-20260507']));
   const [data, setData] = useState<FeeItem[]>([]);
   const [selectedRows, setSelectedRows] = useState<FeeItem[]>([]);
   const [query, setQuery] = useState<QueryForm>({ feeCode: '', feeName: '', businessDomain: '', priceType: '' });
