@@ -95,7 +95,7 @@ const MENU_ITEM_MAP: Record<string, { title: string; subtitle?: string }> = {
   'user-center': { title: '用户中心' }, 'app-set': { title: '应用设置' }, 'app-btn': { title: '应用按钮' }, 'menu-ctrl': { title: '菜单管理' }, tenant: { title: '租户管理' }, 'tenant-id': { title: '租户身份' }, org: { title: '组织管理' }, role: { title: '角色管理' }, staff: { title: '员工管理' }, 'user-ctrl': { title: '用户管理' }, post: { title: '岗位管理' }, 'post-role': { title: '岗位角色权限管理' }, 'task-center': { title: '任务中心' }, 'export-tpl': { title: '导出模板设置' }, 'export-task': { title: '导出任务' }, 'ext-test': { title: '外链测试' },
   base: { title: '基础管理' }, 'net-freight': { title: '网络货运' }, 'freight-finance': { title: '货运财务管理' }, waybill: { title: '运单管理' }, 'cl-price': { title: '仓链报价管理' }, 'smart-office': { title: '智能办公' }, 'biz-center': { title: '经营管理中心' }, 'cl-workbench': { title: '仓链重构' }, 'freight-net': { title: '网络货运' }, system: { title: '系统管理' },
   'fee-rules': { title: '费用规则维护' },
-  'ai-exam': { title: 'AI考试' },
+  'ai-exam-20260507': { title: '20260507' },
 };
 
 // ============ SVG 图标 ============
@@ -146,56 +146,15 @@ function Icon({ name, size = 14 }: { name: string; size?: number }) {
 // ============ 菜单数据 ============
 const MENU_DATA: MenuItem[] = [
   { key: 'home', label: '首页', icon: 'home' },
-  { key: 'ai-exam', label: 'AI考试', icon: 'exam' },
-  {
-    key: 'base', label: '基础管理', icon: 'setting',
-    children: [
-      { key: 'biz-base', label: '业务基础数据', icon: 'office', children: [
-        { key: 'fence', label: '网点围栏管理' }, { key: 'fence-audit', label: '围栏审核管理' },
-        { key: 'outlet-new', label: '新营业网点' }, { key: 'sales-fence', label: '业务员围栏' },
-        { key: 'biz-config', label: '业务配置' }, { key: 'biz-dict', label: '业务字典' },
-      ]},
-      { key: 'net-freight', label: '网络货运', icon: 'truck', children: [
-        { key: 'base-price', label: '基础报价' }, { key: 'price-manage', label: '价格管理' },
-      ]},
-      { key: 'trans-ops', label: '运营运输管理', icon: 'tool' },
-      { key: 'freight-finance', label: '货运财务管理', icon: 'money', children: [{ key: 'freight-bill', label: '账单管理' }] },
-      { key: 'ops-manage', label: '运营操作管理', icon: 'copy' },
-      { key: 'waybill', label: '运单管理', icon: 'document', children: [{ key: 'handover', label: '出港交接单' }] },
-      { key: 'it-center', label: 'IT管理中心', icon: 'odometer' },
-      { key: 'data-monitor', label: '数据监控', icon: 'dataLine' },
-      { key: 'cl-report', label: '仓链报表', icon: 'trend' },
-      { key: 'ty-bigdata', label: '天易大数据平台', icon: 'grid' },
-      { key: 'cl-price', label: '仓链报价管理', icon: 'tag', children: [{ key: 'base-quote', label: '基础报价' }, { key: 'price-ctrl', label: '价格管理' }] },
-      { key: 'smart-office', label: '智能办公', icon: 'school', children: [
-        { key: 'attend', label: '考勤管理' }, { key: 'attend-stat', label: '考勤统计' },
-        { key: 'replenish', label: '补卡申请' }, { key: 'leave', label: '请假申请' }, { key: 'field', label: '外勤管理' },
-      ]},
-    ]
-  },
-  { key: 'biz-center', label: '经营管理中心', icon: 'shop', children: [
-    { key: 'pda-ops', label: 'PDA操作管理', icon: 'mobile' },
-    { key: 'service-quality', label: '服务质量', icon: 'star' },
-    { key: 'cl-refactor', label: '仓链重构', icon: 'build' },
-    { key: 'cl-app', label: '中通冷链业务员APP（鲸小宝）', icon: 'app' },
-  ]},
-  { key: 'oms', label: 'OMS订单中心', icon: 'order' },
-  { key: 'cl-workbench', label: '仓链重构', icon: 'clipboard', children: [
-    { key: 'workbench', label: '工作台' }, { key: 'quality-platform', label: '服务质量平台' },
-    { key: 'test-007', label: '测试007' }, { key: 'test-sub2', label: '测试二级目录2' },
-  ]},
-  { key: 'warehouse', label: '仓储中心', icon: 'warehouse' },
   { key: 'cl-finance', label: '冷链财务管理', icon: 'wallet', children: [
     { key: 'cl-finance-base', label: '基础数据', icon: 'office', children: [
       { key: 'fee-type-cc', label: '费用类型维护', icon: 'priceTag' },
       { key: 'fee-rules', label: '费用规则维护', icon: 'priceTag' },
     ]},
   ]},
-  { key: 'cl-bill', label: '仓链账单管理', icon: 'clipboardText' },
-  { key: 'freight-net', label: '网络货运', icon: 'truck', children: [
-    { key: 'project', label: '项目管理' }, { key: 'finance-platform', label: '财务中台' }, { key: 'more-tenant', label: '更多租户' },
+  { key: 'ai-exam', label: 'AI考试', icon: 'exam', children: [
+    { key: 'ai-exam-20260507', label: '20260507', icon: 'document' },
   ]},
-  { key: 'data-alert', label: '数据预警', icon: 'warning' },
   { key: 'system', label: '系统管理', icon: 'setting', children: [
     { key: 'user-center', label: '用户中心' }, { key: 'app-set', label: '应用设置' }, { key: 'app-btn', label: '应用按钮' },
     { key: 'menu-ctrl', label: '菜单管理' }, { key: 'tenant', label: '租户管理' }, { key: 'tenant-id', label: '租户身份' },
@@ -204,6 +163,11 @@ const MENU_DATA: MenuItem[] = [
     { key: 'task-center', label: '任务中心' }, { key: 'export-tpl', label: '导出模板设置' }, { key: 'export-task', label: '导出任务' },
     { key: 'ext-test', label: '外链测试' },
   ]},
+];
+
+// 隐藏的菜单项（不在侧边栏展示，但数据保留方便后续恢复）
+const HIDDEN_MENUS = [
+  'base', 'biz-center', 'oms', 'cl-workbench', 'warehouse', 'cl-bill', 'freight-net', 'data-alert',
 ];
 
 // ============ 菜单项组件 ============
@@ -514,6 +478,8 @@ export default function FeeManager() {
             <span style={{ color: '#d9d9d9', fontSize: 12 }}>/</span>
             {activeMenu === 'ai-exam' ? (
               <><a href="#" style={{ color: '#8c8c8c', textDecoration: 'none' }}>首页</a><span style={{ color: '#d9d9d9', fontSize: 12 }}>/</span><span style={{ color: '#262626' }}>AI考试</span></>
+            ) : activeMenu === 'ai-exam-20260507' ? (
+              <><a href="#" style={{ color: '#8c8c8c', textDecoration: 'none' }}>首页</a><span style={{ color: '#d9d9d9', fontSize: 12 }}>/</span><a href="#" style={{ color: '#8c8c8c', textDecoration: 'none' }}>AI考试</a><span style={{ color: '#d9d9d9', fontSize: 12 }}>/</span><span style={{ color: '#262626' }}>20260507</span></>
             ) : activeMenu === 'fee-type-cc' ? (
               <><a href="#" style={{ color: '#8c8c8c', textDecoration: 'none' }}>冷链财务管理</a><span style={{ color: '#d9d9d9', fontSize: 12 }}>/</span><a href="#" style={{ color: '#8c8c8c', textDecoration: 'none' }}>基础数据</a><span style={{ color: '#d9d9d9', fontSize: 12 }}>/</span><span style={{ color: '#262626' }}>费用类型维护</span></>
             ) : activeMenu === 'fee-rules' ? (
@@ -559,6 +525,8 @@ export default function FeeManager() {
                 </div>
                 <div style={{ fontSize: 13, color: '#bfbfbf' }}>节后开考，冲刺备考中 💪</div>
               </div>
+            ) : activeMenu === 'ai-exam-20260507' ? (
+              <MenuPlaceholder title="20260507" subtitle="AI考试" />
             ) : activeMenu === 'fee-rules' ? (
               <FeeRulesTable
                 currentUserNickname={currentNickname}
