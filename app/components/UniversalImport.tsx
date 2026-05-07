@@ -935,12 +935,28 @@ export default function UniversalImport() {
                   </div>
                 ))}
               </div>
-              <div style={{ marginTop: 12, display: 'flex', gap: 8 }}>
+              <div style={{ marginTop: 12, display: 'flex', gap: 8, alignItems: 'center' }}>
                 <button onClick={() => fetchWaybillList(1)} style={{ height: 32, padding: '0 16px', border: 'none', borderRadius: 4, background: '#00BEBE', color: '#fff', cursor: 'pointer', fontSize: 13 }}
                   onMouseEnter={e => (e.currentTarget.style.background = '#00c4c4')}
                   onMouseLeave={e => (e.currentTarget.style.background = '#00BEBE')}>查询</button>
                 <button onClick={() => { setListQuery({ external_code: '', receiver_name: '', start_date: '', end_date: '' }); }}
                   style={{ height: 32, padding: '0 16px', border: '1px solid #d9d9d9', borderRadius: 4, background: '#fff', color: '#595959', cursor: 'pointer', fontSize: 13 }}>重置</button>
+                <button
+                  onClick={handleBatchDelete}
+                  disabled={deleteLoading || selectedWaybillIds.size === 0}
+                  style={{
+                    height: 32, padding: '0 14px', border: selectedWaybillIds.size > 0 ? 'none' : '1px solid #ffccc7', borderRadius: 4,
+                    background: selectedWaybillIds.size > 0 ? '#ff4d4f' : '#fff', color: selectedWaybillIds.size > 0 ? '#fff' : '#ff4d4f',
+                    cursor: deleteLoading || selectedWaybillIds.size === 0 ? 'not-allowed' : 'pointer',
+                    fontSize: 13, display: 'flex', alignItems: 'center', gap: 4,
+                    opacity: deleteLoading ? 0.6 : 1,
+                  }}
+                  onMouseEnter={e => { if (!deleteLoading && selectedWaybillIds.size > 0) (e.currentTarget as HTMLButtonElement).style.background = '#ff7875'; }}
+                  onMouseLeave={e => { if (!deleteLoading && selectedWaybillIds.size > 0) (e.currentTarget as HTMLButtonElement).style.background = '#ff4d4f'; }}
+                >
+                  <Icon name="delete" size={13} />
+                  {deleteLoading ? '删除中...' : `批量删除${selectedWaybillIds.size > 0 ? ` (${selectedWaybillIds.size})` : ''}`}
+                </button>
               </div>
             </div>
 
@@ -953,23 +969,6 @@ export default function UniversalImport() {
                     <span style={{ marginLeft: 12, fontSize: 13, color: '#1677ff' }}>已选 {selectedWaybillIds.size} 条</span>
                   )}
                 </div>
-                {selectedWaybillIds.size > 0 && (
-                  <button
-                    onClick={handleBatchDelete}
-                    disabled={deleteLoading}
-                    style={{
-                      height: 30, padding: '0 14px', border: 'none', borderRadius: 4,
-                      background: '#ff4d4f', color: '#fff', cursor: deleteLoading ? 'not-allowed' : 'pointer',
-                      fontSize: 13, display: 'flex', alignItems: 'center', gap: 4,
-                      opacity: deleteLoading ? 0.6 : 1,
-                    }}
-                    onMouseEnter={e => { if (!deleteLoading) (e.currentTarget as HTMLButtonElement).style.background = '#ff7875'; }}
-                    onMouseLeave={e => { if (!deleteLoading) (e.currentTarget as HTMLButtonElement).style.background = '#ff4d4f'; }}
-                  >
-                    <Icon name="delete" size={13} />
-                    {deleteLoading ? '删除中...' : `批量删除${selectedWaybillIds.size > 0 ? ` (${selectedWaybillIds.size})` : ''}`}
-                  </button>
-                )}
               </div>
               <div style={{ overflowX: 'auto' }}>
                 <table style={{ width: 'max-content', minWidth: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
@@ -985,14 +984,13 @@ export default function UniversalImport() {
                       {['ID', '外部编码', '发件人', '发件人电话', '发件人地址', '收件人', '收件人电话', '收件人地址', '重量', '件数', '温层', '备注', '状态', '创建时间'].map(h => (
                         <th key={h} style={{ padding: '8px 10px', textAlign: 'left', borderBottom: '1px solid #e8e8e8', whiteSpace: 'nowrap', fontWeight: 600, color: '#595959' }}>{h}</th>
                       ))}
-                      <th style={{ padding: '8px 10px', textAlign: 'center', borderBottom: '1px solid #e8e8e8', whiteSpace: 'nowrap', fontWeight: 600, color: '#595959', width: 60 }}>操作</th>
                     </tr>
                   </thead>
                   <tbody>
                     {listLoading ? (
-                      <tr><td colSpan={16} style={{ padding: 40, textAlign: 'center', color: '#8c8c8c' }}>加载中...</td></tr>
+                      <tr><td colSpan={15} style={{ padding: 40, textAlign: 'center', color: '#8c8c8c' }}>加载中...</td></tr>
                     ) : waybillList.length === 0 ? (
-                      <tr><td colSpan={16} style={{ padding: 40, textAlign: 'center', color: '#8c8c8c' }}>暂无数据</td></tr>
+                      <tr><td colSpan={15} style={{ padding: 40, textAlign: 'center', color: '#8c8c8c' }}>暂无数据</td></tr>
                     ) : waybillList.map(w => (
                       <tr key={w.id} style={{ borderBottom: '1px solid #f0f0f0', background: selectedWaybillIds.has(w.id) ? '#fff1f0' : '#fff' }}
                         onMouseEnter={e => { if (!selectedWaybillIds.has(w.id)) e.currentTarget.style.background = '#fafafa'; }}
@@ -1020,23 +1018,6 @@ export default function UniversalImport() {
                           <span style={{ padding: '2px 8px', borderRadius: 4, fontSize: 12, background: '#f6ffed', color: '#52c41a' }}>已提交</span>
                         </td>
                         <td style={{ padding: '8px 10px', color: '#8c8c8c', whiteSpace: 'nowrap' }}>{w.created_at ? new Date(w.created_at).toLocaleString('zh-CN') : '-'}</td>
-                        <td style={{ padding: '8px 10px', textAlign: 'center' }}>
-                          <button
-                            onClick={() => handleSingleDelete(w.id)}
-                            disabled={deleteLoading}
-                            style={{
-                              background: 'none', border: '1px solid #ffccc7', borderRadius: 4,
-                              color: '#ff4d4f', cursor: deleteLoading ? 'not-allowed' : 'pointer',
-                              fontSize: 12, padding: '2px 8px', display: 'inline-flex', alignItems: 'center', gap: 3,
-                              opacity: deleteLoading ? 0.5 : 1,
-                            }}
-                            onMouseEnter={e => { if (!deleteLoading) { (e.currentTarget as HTMLButtonElement).style.background = '#fff1f0'; (e.currentTarget as HTMLButtonElement).style.borderColor = '#ff4d4f'; } }}
-                            onMouseLeave={e => { if (!deleteLoading) { (e.currentTarget as HTMLButtonElement).style.background = 'none'; (e.currentTarget as HTMLButtonElement).style.borderColor = '#ffccc7'; } }}
-                          >
-                            <Icon name="delete" size={11} />
-                            删除
-                          </button>
-                        </td>
                       </tr>
                     ))}
                   </tbody>
