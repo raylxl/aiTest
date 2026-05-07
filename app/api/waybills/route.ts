@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import sql, { initDB } from '@/lib/db';
+import sql, { initDB, getNeonClient } from '@/lib/db';
 import type { WaybillQuery } from '@/lib/waybill-types';
 
 // GET /api/waybills - 获取运单列表
@@ -24,40 +24,55 @@ export async function GET(request: Request) {
     const pageSize = Math.min(100, Math.max(1, query.pageSize || 10));
     const offset = (page - 1) * pageSize;
 
-    const ext = query.external_code?.trim() || '';
-    const sname = query.sender_name?.trim() || '';
-    const sphone = query.sender_phone?.trim() || '';
-    const rname = query.receiver_name?.trim() || '';
-    const rphone = query.receiver_phone?.trim() || '';
-    const sdate = query.start_date?.trim() || '';
-    const edate = query.end_date?.trim() || '';
+    // SQL 注入防护：LIKE 值转义单引号
+    const like = (v: string) => v.replace(/'/g, "''") + '%';
 
-    // 动态构建查询：只拼接有值的条件，避免空值传给 PG
-    let total = 0;
-    let data: Record<string, unknown>[] = [];
+    // 收集有值的条件（避免空值传给 PG 导致类型强转错误）
+    const conditions: string[] = [];
+    const params: unknown[] = [];
 
-    // 构建基表
-    const baseWhere = [];
-    if (ext)   baseWhere.push(sql` AND external_code ILIKE ${'%' + ext + '%'}`);
-    if (sname)  baseWhere.push(sql` AND sender_name ILIKE ${'%' + sname + '%'}`);
-    if (sphone) baseWhere.push(sql` AND sender_phone ILIKE ${'%' + sphone + '%'}`);
-    if (rname)  baseWhere.push(sql` AND receiver_name ILIKE ${'%' + rname + '%'}`);
-    if (rphone) baseWhere.push(sql` AND receiver_phone ILIKE ${'%' + rphone + '%'}`);
-    if (sdate)  baseWhere.push(sql` AND created_at >= ${sdate}::date`);
-    if (edate)  baseWhere.push(sql` AND created_at <= ${edate + ' 23:59:59'}::timestamp`);
+    if (query.external_code) {
+      params.push(like(query.external_code.trim()));
+      conditions.push(`external_code ILIKE $${params.length}`);
+    }
+    if (query.sender_name) {
+      params.push(like(query.sender_name.trim()));
+      conditions.push(`sender_name ILIKE $${params.length}`);
+    }
+    if (query.sender_phone) {
+      params.push(like(query.sender_phone.trim()));
+      conditions.push(`sender_phone ILIKE $${params.length}`);
+    }
+    if (query.receiver_name) {
+      params.push(like(query.receiver_name.trim()));
+      conditions.push(`receiver_name ILIKE $${params.length}`);
+    }
+    if (query.receiver_phone) {
+      params.push(like(query.receiver_phone.trim()));
+      conditions.push(`receiver_phone ILIKE $${params.length}`);
+    }
+    if (query.start_date) {
+      params.push(query.start_date.trim());
+      conditions.push(`created_at >= $${params.length}::date`);
+    }
+    if (query.end_date) {
+      params.push(query.end_date.trim() + ' 23:59:59');
+      conditions.push(`created_at <= $${params.length}::timestamp`);
+    }
 
-    const whereFrag = baseWhere.length > 0
-      ? sql`WHERE 1=1 ${baseWhere[0]}${baseWhere.slice(1).reduce((a, b) => sql`${a} ${b}`, sql``)}`
-      : sql`WHERE 1=1`;
+    const whereClause = conditions.length > 0 ? 'WHERE ' + conditions.join(' AND ') : 'WHERE 1=1';
+    const countSql = `SELECT COUNT(*) as ct FROM waybills ${whereClause}`;
+    const dataSql = `SELECT * FROM waybills ${whereClause} ORDER BY created_at DESC LIMIT ${pageSize} OFFSET ${offset}`;
 
-    const countRows = await sql`SELECT COUNT(*) as ct FROM waybills ${whereFrag}`;
-    total = parseInt(String((countRows[0] as { ct: unknown })?.ct || '0'));
+    // 用 getNeonClient() 的 .query() 方法做参数化查询
+    const neonSql = getNeonClient();
+    const countResult = await neonSql.query(countSql, params) as unknown as Array<{ ct: unknown }>;
+    const total = parseInt(String(countResult[0]?.ct || '0'));
 
-    const dataRows = await sql`SELECT * FROM waybills ${whereFrag} ORDER BY created_at DESC LIMIT ${pageSize} OFFSET ${offset}`;
-    data = dataRows as Record<string, unknown>[];
+    const dataResult = await neonSql.query(dataSql, params) as unknown as Array<Record<string, unknown>>;
 
     return NextResponse.json({
-      data,
+      data: dataResult,
       total,
       page,
       pageSize,
@@ -80,7 +95,6 @@ export async function DELETE(request: Request) {
       return NextResponse.json({ error: '缺少 ids 参数' }, { status: 400 });
     }
 
-    const { getNeonClient } = await import('@/lib/db');
     const neonSql = getNeonClient();
     const idList = ids.map((id) => String(id)).join(',');
     const result = await neonSql`DELETE FROM waybills WHERE id IN (${neonSql.unsafe(idList)}) RETURNING id` as unknown as Array<{ id: number }>;
