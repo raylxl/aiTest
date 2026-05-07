@@ -450,7 +450,7 @@ export default function FeeTable({
             <IconCat name="right" size={10} />
           </button>
           <span style={{ fontSize: 13, color: 'rgba(0,0,0,0.45)' }}>跳至<input value={page} onChange={e => { const v = parseInt(e.target.value); if (!isNaN(v) && v >= 1 && v <= Math.ceil(filtered.length / pageSize)) setPage(v); }}
-            style={{ width: 40, height: 28, margin: '0 4px', padding: '0 4px', border: '1px solid #dcdfe6', borderRadius: 4, textAlign: 'center', fontSize: 13, outline: 'none', fontFamily: 'inherit', color: 'rgba(0,0,0,0.8)', fontFamily: 'inherit', boxSizing: 'border-box' }} />页</span>
+            style={{ width: 40, height: 28, margin: '0 4px', padding: '0 4px', border: '1px solid #dcdfe6', borderRadius: 4, textAlign: 'center', fontSize: 13, outline: 'none', fontFamily: 'inherit', color: 'rgba(0,0,0,0.8)', boxSizing: 'border-box' }} />页</span>
         </div>
       </div>
 
