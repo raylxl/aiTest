@@ -189,6 +189,7 @@ export const COLUMN_ALIAS_MAP: Record<string, string> = {
   '件数': 'quantity',
   '数量': 'quantity',
   'qty': 'quantity',
+  'Qty': 'quantity',
   'QTY': 'quantity',
   'count': 'quantity',
   'Count': 'quantity',

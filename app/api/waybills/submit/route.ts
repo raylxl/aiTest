@@ -36,13 +36,13 @@ function validateRow(row: WaybillRow, rowIndex: number): ValidationError[] {
     }
   }
 
-  const weight = parseFloat(String(row.weight));
-  if (row.weight !== '' && (isNaN(weight) || weight <= 0)) {
+  const weight = parseFloat(String(row.weight || '').trim());
+  if (row.weight !== '' && row.weight !== undefined && (isNaN(weight) || weight <= 0)) {
     errors.push({ row: rowIndex, field: '重量(kg)', value: String(row.weight), message: '必须为正数' });
   }
 
-  const qty = parseInt(String(row.quantity));
-  if (row.quantity !== '' && (isNaN(qty) || qty <= 0 || !Number.isInteger(qty))) {
+  const qty = parseInt(String(row.quantity || '').trim());
+  if (row.quantity !== '' && row.quantity !== undefined && (isNaN(qty) || qty <= 0 || !Number.isInteger(qty))) {
     errors.push({ row: rowIndex, field: '件数', value: String(row.quantity), message: '必须为正整数' });
   }
 
