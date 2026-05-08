@@ -86,22 +86,27 @@ export async function POST(request: Request) {
 
     if (Array.isArray(rawRows) && rawRows.length > 0) {
       // ========== 模式1：真正的重新映射（用新映射解析原始数据）==========
+      // 按 Excel 行号建立 existingRow 的索引（用户删除行后 rows < rawRows）
+      const rowByIndex = new Map<number, WaybillRow>();
+      for (const r of rows) {
+        rowByIndex.set(r._rowIndex, r);
+      }
+
       for (let i = 0; i < rawRows.length; i++) {
         const rawRow = rawRows[i] as unknown[];
-        const existingRow = rows[i] as WaybillRow | undefined;
-        const rowIndex = (existingRow?._rowIndex) ?? (i + 2); // 保留原始行号
+        const rowIndex = i + 2; // Excel 行号从 2 开始（表头行=1）
+        const existingRow = rowByIndex.get(rowIndex); // 按行号匹配，支持删除行
 
         // 用新映射提取字段
         const fieldMap = remapRow(rawRow, rawHeaders, newMapping, isGrouped);
 
-        // 重新校验（用新映射提取的字段值）
+        // 重新校验
         const { errors, isValid } = validateRowFields(fieldMap, rowIndex, currentBatchCodes);
         if (!isValid) totalErrors++;
 
-        // 保留原选中状态，其余字段用新映射重新解析的值
         remappedRows.push({
           _rowIndex: rowIndex,
-          _selected: existingRow?._selected ?? true,
+          _selected: existingRow ? (existingRow._selected !== false) : true,
           external_code: fieldMap.external_code || '',
           sender_name: fieldMap.sender_name || '',
           sender_phone: fieldMap.sender_phone || '',
@@ -114,7 +119,7 @@ export async function POST(request: Request) {
           temp_layer: fieldMap.temp_layer || '',
           remark: fieldMap.remark || '',
           _errors: errors,
-          _warnings: {},
+          _warnings: existingRow ? (existingRow._warnings ?? {}) : {},
           _isValid: isValid,
         });
       }
