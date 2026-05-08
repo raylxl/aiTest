@@ -45,8 +45,9 @@ function validateRowFields(row: Record<string, string>, rowIndex: number, curren
 function remapRow(rawRow: unknown[], headers: string[], newMapping: Record<string, string>, isGrouped: boolean): Record<string, string> {
   const mapped: Record<string, string> = {};
   if (isGrouped) {
+    // 分组模式：优先用列索引路径 group_col_X，回退到字段名路径
     for (let colIdx = 0; colIdx < rawRow.length; colIdx++) {
-      const fk = newMapping[`group_col_${colIdx}`];
+      const fk = newMapping[`group_col_${colIdx}`] || newMapping[headers[colIdx] || ''];
       if (fk) mapped[fk] = String(rawRow[colIdx] ?? '').trim();
     }
   } else {

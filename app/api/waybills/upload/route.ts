@@ -47,7 +47,7 @@ function jaccardSimilarity(a: string[], b: string[]): number {
 }
 
 // 检测哪一行是表头（跳过头部的说明行）
-function findHeaderRow(rawData: unknown[][], maxSkip = 5): { headerRow: number; headers: string[]; isGrouped: boolean } {
+function findHeaderRow(rawData: unknown[][], maxSkip = 10): { headerRow: number; headers: string[]; isGrouped: boolean } {
   // 先检查是否有分组标题行（第0行是分组标题，第1行是字段名）
   if (rawData.length >= 2) {
     const row0 = rawData[0] as unknown[];
@@ -254,13 +254,16 @@ export async function POST(request: Request) {
     // 数据从第2行开始
     if (isGrouped && rawData.length > headerRow + 1) {
       // 重新生成 headers 为字段名行（用于显示）
-      // 映射使用列索引作为 key：group_col_0, group_col_1, ...
+      // 映射同时用字段名和列索引作为 key，确保两种解析路径都能找到
       const fieldRow = headers; // headers 已经是字段名行（第1行）
       const newMapping: Record<string, string> = {};
       for (let i = 0; i < fieldRow.length; i++) {
         const fn = normalizeKey(fieldRow[i]);
         const fk = findFieldKey(fn);
-        if (fk) newMapping[`group_col_${i}`] = fk;
+        if (fk) {
+          newMapping[`group_col_${i}`] = fk; // 列索引路径（解析数据用）
+          newMapping[fn] = fk;               // 字段名路径（备用）
+        }
       }
       // 合并映射
       mapping = { ...mapping, ...newMapping };
@@ -307,8 +310,10 @@ export async function POST(request: Request) {
       // 表可能不存在，忽略
     }
 
-    // 解析数据行
-    const dataRows = rawData.slice(headerRow + 1);
+    // 解析数据行（跳过表头后所有全空行）
+    const dataRows = rawData.slice(headerRow + 1).filter(row =>
+      (row as unknown[]).some(c => String(c ?? '').trim() !== '')
+    );
     if (dataRows.length === 0) {
       return NextResponse.json({ error: 'Excel 文件中没有有效数据行' }, { status: 400 });
     }
