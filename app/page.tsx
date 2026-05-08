@@ -101,6 +101,7 @@ const MENU_ITEM_MAP: Record<string, { title: string; subtitle?: string }> = {
   'fee-type-cc': { title: '费用类型维护' },
   'ai-exam-20260507': { title: '20260507' },
   'universal-import': { title: '万能导入' },
+  'template-learning': { title: '模板学习记录' },
 };
 
 // ============ SVG 图标 ============
@@ -114,6 +115,9 @@ const MENU_DATA: MenuItem[] = [
       { key: 'fee-type-cc', label: '费用类型维护', icon: 'priceTag' },
       { key: 'fee-rules', label: '费用规则维护', icon: 'priceTag' },
     ]},
+    { key: 'universal-import', label: '万能导入', icon: 'upload' },
+    { key: 'waybill', label: '已导入运单', icon: 'truck' },
+    { key: 'template-learning', label: '模板学习记录', icon: 'book' },
   ]},
   { key: 'ai-exam', label: 'AI考试', icon: 'exam', children: [
     { key: 'ai-exam-20260507', label: '20260507', icon: 'document', children: [
@@ -133,7 +137,7 @@ const MENU_DATA: MenuItem[] = [
 
 // 隐藏的菜单项（不在侧边栏展示，但数据保留方便后续恢复）
 const HIDDEN_MENUS = [
-  'base', 'biz-center', 'oms', 'cl-workbench', 'warehouse', 'cl-bill', 'freight-net', 'data-alert', 'waybill',
+  'base', 'biz-center', 'oms', 'cl-workbench', 'warehouse', 'cl-bill', 'freight-net', 'data-alert',
 ];
 
 // ============ 菜单项组件 ============
@@ -467,13 +471,15 @@ export default function FeeManager() {
             ) : activeMenu === 'ai-exam-20260507' ? (
               <><a href="#" style={{ color: '#8c8c8c', textDecoration: 'none' }}>首页</a><span style={{ color: '#d9d9d9', fontSize: 12 }}>/</span><a href="#" style={{ color: '#8c8c8c', textDecoration: 'none' }}>AI考试</a><span style={{ color: '#d9d9d9', fontSize: 12 }}>/</span><span style={{ color: '#262626' }}>20260507</span></>
             ) : activeMenu === 'universal-import' ? (
-              <><a href="#" style={{ color: '#8c8c8c', textDecoration: 'none' }}>首页</a><span style={{ color: '#d9d9d9', fontSize: 12 }}>/</span><a href="#" style={{ color: '#8c8c8c', textDecoration: 'none' }}>AI考试</a><span style={{ color: '#d9d9d9', fontSize: 12 }}>/</span><a href="#" style={{ color: '#8c8c8c', textDecoration: 'none' }}>20260507</a><span style={{ color: '#d9d9d9', fontSize: 12 }}>/</span><span style={{ color: '#262626' }}>万能导入</span></>
+              <><a href="#" style={{ color: '#8c8c8c', textDecoration: 'none' }}>冷链财务管理</a><span style={{ color: '#d9d9d9', fontSize: 12 }}>/</span><span style={{ color: '#262626' }}>万能导入</span></>
             ) : activeMenu === 'fee-type-cc' ? (
               <><a href="#" style={{ color: '#8c8c8c', textDecoration: 'none' }}>冷链财务管理</a><span style={{ color: '#d9d9d9', fontSize: 12 }}>/</span><a href="#" style={{ color: '#8c8c8c', textDecoration: 'none' }}>基础数据</a><span style={{ color: '#d9d9d9', fontSize: 12 }}>/</span><span style={{ color: '#262626' }}>费用类型维护</span></>
             ) : activeMenu === 'fee-rules' ? (
               <><a href="#" style={{ color: '#8c8c8c', textDecoration: 'none' }}>冷链财务管理</a><span style={{ color: '#d9d9d9', fontSize: 12 }}>/</span><a href="#" style={{ color: '#8c8c8c', textDecoration: 'none' }}>基础数据</a><span style={{ color: '#d9d9d9', fontSize: 12 }}>/</span><span style={{ color: '#262626' }}>费用规则维护</span></>
             ) : activeMenu === 'waybill' ? (
-              <><a href="#" style={{ color: '#8c8c8c', textDecoration: 'none' }}>首页</a><span style={{ color: '#d9d9d9', fontSize: 12 }}>/</span><span style={{ color: '#262626' }}>已导入运单</span></>
+              <><a href="#" style={{ color: '#8c8c8c', textDecoration: 'none' }}>冷链财务管理</a><span style={{ color: '#d9d9d9', fontSize: 12 }}>/</span><span style={{ color: '#262626' }}>已导入运单</span></>
+            ) : activeMenu === 'template-learning' ? (
+              <><a href="#" style={{ color: '#8c8c8c', textDecoration: 'none' }}>冷链财务管理</a><span style={{ color: '#d9d9d9', fontSize: 12 }}>/</span><span style={{ color: '#262626' }}>模板学习记录</span></>
             ) : <span style={{ color: '#262626' }}>{MENU_ITEM_MAP[activeMenu]?.title || activeMenu}</span>}
           </div>
 
@@ -529,6 +535,8 @@ export default function FeeManager() {
                 currentUserNickname={currentNickname}
                 onMessage={(t, y) => { setMsg({ text: t, type: y }); setTimeout(() => setMsg(null), 3000); }}
               />
+            ) : activeMenu === 'template-learning' ? (
+              <MenuPlaceholder title="模板学习记录" subtitle="冷链财务管理" />
             ) : (
               <MenuPlaceholder title={MENU_ITEM_MAP[activeMenu]?.title || activeMenu} subtitle={MENU_ITEM_MAP[activeMenu]?.subtitle} />
             )}

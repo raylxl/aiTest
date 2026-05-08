@@ -117,5 +117,31 @@ export async function initDB() {
       // 字段可能已是 TEXT 或表结构差异，忽略错误
     }
   }
+
+  // Migration 002: template_mappings 表扩展（支持多表 + 模板名称）
+  const [m002] = await sql`SELECT id FROM schema_migrations WHERE version = '002' LIMIT 1`;
+  if (!m002) {
+    try {
+      // 1. 新增 table_name 列（默认 'waybills'，现有数据兼容）
+      await sql`ALTER TABLE template_mappings ADD COLUMN IF NOT EXISTS table_name VARCHAR(50) NOT NULL DEFAULT 'waybills'`;
+      // 2. 新增 name 列（模板名称，方便识别）
+      await sql`ALTER TABLE template_mappings ADD COLUMN IF NOT EXISTS name VARCHAR(200)`;
+      // 3. 新增 column_hash 列（列名字符串 hash，费用类型用）
+      await sql`ALTER TABLE template_mappings ADD COLUMN IF NOT EXISTS column_hash VARCHAR(100)`;
+      // 4. 移除原 header_hash 的唯一约束（改为复合唯一）
+      await sql`ALTER TABLE template_mappings DROP CONSTRAINT IF EXISTS template_mappings_header_hash_key`;
+      // 5. 重建唯一约束 (table_name, column_hash) — 费用类型用
+      await sql`ALTER TABLE template_mappings ADD CONSTRAINT template_mappings_table_col_hash_key UNIQUE (table_name, column_hash)`;
+      // 6. 旧数据迁移：waybills 的 header_columns 中提取 column_hash
+      await sql`
+        UPDATE template_mappings
+        SET column_hash = header_hash, table_name = 'waybills'
+        WHERE table_name = 'waybills' AND column_hash IS NULL
+      `;
+      await sql`INSERT INTO schema_migrations (version) VALUES ('002')`;
+    } catch {
+      // 迁移可能部分成功，忽略错误
+    }
+  }
 }
 

@@ -30,10 +30,13 @@ function Toast({ text, type, onClose }: { text: string; type: 'success' | 'error
 
 // ============ EditableCell 组件 ============
 function EditableCell({
-  value, rowIndex, field, onChange, error, warning, options
+  value, rowIndex, field, onChange, error, warning, options, onTabNext, totalFields, fieldIndex,
 }: {
-  value: string; rowIndex: number; field: string; onChange: (rowIdx: number, field: string, value: string) => void;
+  value: string; rowIndex: number; field: string;
+  onChange: (rowIdx: number, field: string, value: string) => void;
   error?: string; warning?: string; options?: readonly string[];
+  onTabNext?: (rowIdx: number, fieldIdx: number, shiftKey: boolean) => void;
+  totalFields?: number; fieldIndex?: number;
 }) {
   const [editing, setEditing] = useState(false);
   const [editVal, setEditVal] = useState(value);
@@ -46,6 +49,25 @@ function EditableCell({
     if (editVal !== value) onChange(rowIndex, field, editVal);
   };
 
+  // 通用键盘处理：Enter/Tab 提交并跳转，Shift+Tab 后退
+  const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement | HTMLSelectElement>) => {
+    if (e.key === 'Enter') {
+      commitEdit();
+      if (totalFields !== undefined && fieldIndex !== undefined && onTabNext) {
+        onTabNext(rowIndex, fieldIndex, false);
+      }
+    } else if (e.key === 'Tab') {
+      e.preventDefault();
+      commitEdit();
+      if (totalFields !== undefined && fieldIndex !== undefined && onTabNext) {
+        onTabNext(rowIndex, fieldIndex, e.shiftKey);
+      }
+    } else if (e.key === 'Escape') {
+      setEditVal(value);
+      setEditing(false);
+    }
+  };
+
   const hasWarning = !!warning && !error;
   const bg = error ? '#fff1f0' : hasWarning ? '#fffbe6' : value ? '#fff' : '#fafafa';
   const borderColor = error ? '#ffccc7' : hasWarning ? '#ffd591' : 'transparent';
@@ -55,6 +77,7 @@ function EditableCell({
     return editing ? (
       <select
         value={editVal} onChange={e => { setEditVal(e.target.value); onChange(rowIndex, field, e.target.value); setEditing(false); }}
+        onKeyDown={handleKeyDown}
         autoFocus style={{ width: '100%', height: 32, border: '1px solid #00BEBE', borderRadius: 4, padding: '0 6px', fontSize: 13, outline: 'none', background: '#fff' }}
       >
         <option value="">请选择</option>
@@ -74,7 +97,7 @@ function EditableCell({
   return editing ? (
     <input
       ref={inputRef} value={editVal} onChange={e => setEditVal(e.target.value)}
-      onBlur={commitEdit} onKeyDown={e => { if (e.key === 'Enter') commitEdit(); if (e.key === 'Escape') { setEditVal(value); setEditing(false); } }}
+      onBlur={commitEdit} onKeyDown={handleKeyDown}
       style={{ width: '100%', height: 32, border: '1px solid #00BEBE', borderRadius: 4, padding: '0 6px', fontSize: 13, outline: 'none', boxSizing: 'border-box' }}
     />
   ) : (
@@ -428,7 +451,67 @@ export default function UniversalImport() {
   const TABLE_MAX_HEIGHT = 600; // 表格最大高度（px）
   const [tableHeight, setTableHeight] = useState(TABLE_MIN_HEIGHT);
   const tableContainerRef = useRef<HTMLDivElement>(null);
+  const tableRef = useRef<HTMLDivElement>(null); // 用于 Tab 导航：指向外层 grid 容器
   const [dismissAutoApply, setDismissAutoApply] = useState(false); // 是否已撤销自动应用
+
+  // Tab/Enter 导航：聚焦到指定行列的单元格
+  const focusCell = useCallback((targetRow: number, targetFieldIdx: number) => {
+    if (!tableRef.current) return;
+    const container = tableRef.current;
+    // container 下面结构：div(表头) + div(撑高占位)
+    // 占位 div 内每个子 div 是一行，含 EditableCell
+    const spacer = container.querySelector(':scope > div:last-child') as HTMLElement | null;
+    if (!spacer) return;
+    const rowDivs = spacer.querySelectorAll(':scope > div');
+    // rowDiv: checkbox | 行号 | SYSTEM_FIELDS×EditableCell | delete
+    // EditableCell 在 col index 2 ~ 2+N-1
+    const cellIndex = 2 + targetFieldIdx;
+    const targetRowDiv = rowDivs[targetRow];
+    if (!targetRowDiv) return;
+    const cells = targetRowDiv.querySelectorAll(':scope > div');
+    const targetCell = cells[cellIndex];
+    if (!targetCell) return;
+    // 找到 cell 内的 input 或 select 并聚焦，同时触发编辑态
+    const input = targetCell.querySelector('input') as HTMLInputElement | null;
+    const select = targetCell.querySelector('select') as HTMLSelectElement | null;
+    const displayDiv = targetCell.querySelector('div') as HTMLElement | null;
+    if (input) {
+      input.focus();
+      // 选中文本便于直接覆盖
+      input.select();
+    } else if (select) {
+      select.focus();
+    } else if (displayDiv) {
+      displayDiv.click();
+    }
+  }, []);
+
+  // onTabNext 回调：计算下一个单元格的行列索引，然后 focusCell
+  const handleTabNext = useCallback((rowIdx: number, fieldIdx: number, shiftKey: boolean) => {
+    const totalFields = SYSTEM_FIELDS.length;
+    let nextFieldIdx: number;
+    let nextRowIdx: number;
+    if (shiftKey) {
+      // Shift+Tab：后退
+      if (fieldIdx > 0) {
+        nextFieldIdx = fieldIdx - 1;
+        nextRowIdx = rowIdx;
+      } else {
+        nextFieldIdx = totalFields - 1;
+        nextRowIdx = Math.max(0, rowIdx - 1);
+      }
+    } else {
+      // Tab：前进
+      if (fieldIdx < totalFields - 1) {
+        nextFieldIdx = fieldIdx + 1;
+        nextRowIdx = rowIdx;
+      } else {
+        nextFieldIdx = 0;
+        nextRowIdx = Math.min(previewData.length - 1, rowIdx + 1);
+      }
+    }
+    focusCell(nextRowIdx, nextFieldIdx);
+  }, [focusCell, previewData.length]);
 
   // 计算所有错误/警告（前置到这里，供 hooks 引用）
   const computedAllErrors: Array<{ row: number; field: string; msg: string }> = [];
@@ -1245,7 +1328,9 @@ export default function UniversalImport() {
                         style={{ overflowX: 'auto', maxHeight: tableHeight }}
                         onScroll={e => setScrollTop(e.currentTarget.scrollTop)}
                       >
-                        <div style={{
+                        <div
+                          ref={tableRef}
+                          style={{
                           display: 'grid',
                           gridTemplateColumns: '40px 60px repeat(' + SYSTEM_FIELDS.length + ', minmax(120px, 1fr)) 60px',
                           minWidth: 'max-content',
@@ -1289,7 +1374,7 @@ export default function UniversalImport() {
                                     <input type="checkbox" checked={row._selected !== false} onChange={() => toggleRow(rowIdx)} style={{ cursor: 'pointer', width: 16, height: 16 }} />
                                   </div>
                                   <div style={{ padding: '4px 8px', textAlign: 'center', color: '#8c8c8c', borderBottom: '1px solid #f0f0f0', borderRight: '1px solid #f0f0f0', whiteSpace: 'nowrap', lineHeight: ROW_HEIGHT + 'px' }}>{row._rowIndex}</div>
-                                  {SYSTEM_FIELDS.map(f => (
+                                  {SYSTEM_FIELDS.map((f, fi) => (
                                     <div key={f.key} style={{ padding: '2px 4px', borderBottom: '1px solid #f0f0f0', borderRight: '1px solid #f0f0f0' }}>
                                       <EditableCell
                                         value={String(row[f.key as keyof WaybillRow] || '')}
@@ -1299,6 +1384,9 @@ export default function UniversalImport() {
                                         error={row._errors?.[f.key]}
                                         warning={row._warnings?.[f.key]}
                                         options={f.options as readonly string[] | undefined}
+                                        onTabNext={handleTabNext}
+                                        totalFields={SYSTEM_FIELDS.length}
+                                        fieldIndex={fi}
                                       />
                                     </div>
                                   ))}
