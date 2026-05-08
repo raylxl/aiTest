@@ -130,10 +130,10 @@ function validateRow(
   existingCodes: Set<string>,
   currentBatchCodes: Map<string, number>
 ): { errors: Record<string, string>; isValid: boolean } {
-  // 字段容错：trim 所有值，去除首尾空格
+  // 字段容错：trim + 清理 Excel 数字格式的 .0 后缀（手机号 13800138001.0 等）
   const trimmedRow: Record<string, string> = {};
   for (const [key, val] of Object.entries(row)) {
-    trimmedRow[key] = String(val || '').trim();
+    trimmedRow[key] = String(val || '').trim().replace(/\.0+$/, '');
   }
 
   const errors: Record<string, string> = {};
@@ -279,7 +279,7 @@ export async function POST(request: Request) {
 
     let savedMapping: Record<string, string> | null = null;
     let savedTemplateName = '';
-    const SIMILARITY_THRESHOLD = 0.75;
+    const SIMILARITY_THRESHOLD = 0.60;
 
     try {
       // Step 1: 精确匹配（header_hash 完全一致）

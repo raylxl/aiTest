@@ -650,7 +650,7 @@ export default function FeeTable({
     validCount: number;
     errorCount: number;
     preview: Array<{ row: number; fee_code: string; fee_name: string; business_domain: string; price_types: string[]; remark: string; creator: string; errors: string[] }>;
-    allRows: Array<{ fee_code: string; fee_name: string; business_domain: string; price_types: string[]; remark: string; creator: string }>;
+    allRows: Array<{ row: number; fee_code: string; fee_name: string; business_domain: string; price_types: string[]; remark: string; creator: string }>;
   } | null>(null);
   const [importLoading, setImportLoading] = useState(false);
   const [importing, setImporting] = useState(false);
@@ -772,7 +772,7 @@ export default function FeeTable({
     try {
       const validRows = importPreview.allRows
         .filter(r => r.fee_code && r.fee_name && r.business_domain)
-        .map(r => ({ fee_code: r.fee_code, fee_name: r.fee_name, business_domain: r.business_domain, price_types: r.price_types, remark: r.remark, creator: r.creator || currentUserNickname }));
+        .map((r, idx) => ({ fee_code: r.fee_code, fee_name: r.fee_name, business_domain: r.business_domain, price_types: r.price_types, remark: r.remark, creator: r.creator || currentUserNickname, _submitIdx: r.row ?? idx + 2 }));
 
       const total = validRows.length;
       const BATCH_SIZE = 100;

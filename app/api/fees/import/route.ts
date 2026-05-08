@@ -251,6 +251,7 @@ export async function PUT(request: Request) {
         price_types: string[];
         remark: string;
         creator: string;
+        _submitIdx?: number; // 原始 Excel 行号（用于错误提示）
       }>;
       action?: 'insert' | 'skip';
       creator?: string;

@@ -39,27 +39,43 @@ export async function GET(request: Request) {
     const startDate = searchParams.get('start_date') || '';
     const endDate = searchParams.get('end_date') || '';
 
-    // 根据是否有条件选择不同的查询
-    let rows: Waybill[] = [];
+    // 统一构建 WHERE 条件，支持多条件同时生效
+    const conditions: string[] = [];
+    const params: unknown[] = [];
+    const like = (v: string) => '%' + v.replace(/'/g, "''") + '%';
+
     if (extCode) {
-      rows = await neon`SELECT * FROM waybills WHERE external_code ILIKE ${'%' + extCode + '%'} ORDER BY created_at DESC LIMIT 10000` as unknown as Waybill[];
-    } else if (senderName) {
-      rows = await neon`SELECT * FROM waybills WHERE sender_name ILIKE ${'%' + senderName + '%'} ORDER BY created_at DESC LIMIT 10000` as unknown as Waybill[];
-    } else if (senderPhone) {
-      rows = await neon`SELECT * FROM waybills WHERE sender_phone ILIKE ${'%' + senderPhone + '%'} ORDER BY created_at DESC LIMIT 10000` as unknown as Waybill[];
-    } else if (recvName) {
-      rows = await neon`SELECT * FROM waybills WHERE receiver_name ILIKE ${'%' + recvName + '%'} ORDER BY created_at DESC LIMIT 10000` as unknown as Waybill[];
-    } else if (recvPhone) {
-      rows = await neon`SELECT * FROM waybills WHERE receiver_phone ILIKE ${'%' + recvPhone + '%'} ORDER BY created_at DESC LIMIT 10000` as unknown as Waybill[];
-    } else if (startDate && endDate) {
-      rows = await neon`SELECT * FROM waybills WHERE created_at >= ${startDate + ' 00:00:00'} AND created_at <= ${endDate + ' 23:59:59'} ORDER BY created_at DESC LIMIT 10000` as unknown as Waybill[];
-    } else if (startDate) {
-      rows = await neon`SELECT * FROM waybills WHERE created_at >= ${startDate + ' 00:00:00'} ORDER BY created_at DESC LIMIT 10000` as unknown as Waybill[];
-    } else if (endDate) {
-      rows = await neon`SELECT * FROM waybills WHERE created_at <= ${endDate + ' 23:59:59'} ORDER BY created_at DESC LIMIT 10000` as unknown as Waybill[];
-    } else {
-      rows = await neon`SELECT * FROM waybills ORDER BY created_at DESC LIMIT 10000` as unknown as Waybill[];
+      params.push(like(extCode.trim()));
+      conditions.push(`external_code ILIKE $${params.length}`);
     }
+    if (senderName) {
+      params.push(like(senderName.trim()));
+      conditions.push(`sender_name ILIKE $${params.length}`);
+    }
+    if (senderPhone) {
+      params.push(like(senderPhone.trim()));
+      conditions.push(`sender_phone ILIKE $${params.length}`);
+    }
+    if (recvName) {
+      params.push(like(recvName.trim()));
+      conditions.push(`receiver_name ILIKE $${params.length}`);
+    }
+    if (recvPhone) {
+      params.push(like(recvPhone.trim()));
+      conditions.push(`receiver_phone ILIKE $${params.length}`);
+    }
+    if (startDate) {
+      params.push(startDate.trim());
+      conditions.push(`created_at >= $${params.length}::date`);
+    }
+    if (endDate) {
+      params.push(endDate.trim() + ' 23:59:59');
+      conditions.push(`created_at <= $${params.length}::timestamp`);
+    }
+
+    const whereClause = conditions.length > 0 ? 'WHERE ' + conditions.join(' AND ') : '';
+    const sqlText = `SELECT * FROM waybills ${whereClause} ORDER BY created_at DESC LIMIT 10000`;
+    const rows = await neon.query(sqlText, params) as unknown as Waybill[];
 
     if (!rows || rows.length === 0) {
       return NextResponse.json({ error: '没有可导出的数据' }, { status: 400 });

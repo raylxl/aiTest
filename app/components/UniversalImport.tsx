@@ -102,7 +102,7 @@ function EditableCell({
 // ============ MappingPanel 组件 ============
 function MappingPanel({
   headers, mapping, pendingMapping, setPendingMapping,
-  onReapply, onSaveTemplate, hasSavedMapping, templateName, templateMatchNote, onReset
+  onReapply, onSaveTemplate, hasSavedMapping, templateName, templateMatchNote, onReset, disabled
 }: {
   headers: string[];
   mapping: Record<string, string>;
@@ -114,6 +114,7 @@ function MappingPanel({
   templateName: string;
   templateMatchNote: string;
   onReset: () => void;
+  disabled?: boolean;
 }) {
   const [collapsed, setCollapsed] = useState(false);
   const currentMapping = Object.keys(pendingMapping).length > 0 ? pendingMapping : mapping;
@@ -208,14 +209,16 @@ function MappingPanel({
 
           <div style={{ marginTop: 10, display: 'flex', gap: 8 }}>
             <button
-              onClick={() => onReapply(currentMapping)}
-              style={{ height: 32, padding: '0 16px', border: '1px solid #00BEBE', borderRadius: 4, background: '#00BEBE', color: '#fff', cursor: 'pointer', fontSize: 13, fontWeight: 500 }}
+              onClick={() => !disabled && onReapply(currentMapping)}
+              disabled={disabled}
+              style={{ height: 32, padding: '0 16px', border: '1px solid #00BEBE', borderRadius: 4, background: disabled ? '#d9d9d9' : '#00BEBE', color: disabled ? '#8c8c8c' : '#fff', cursor: disabled ? 'not-allowed' : 'pointer', fontSize: 13, fontWeight: 500 }}
             >
-              🔄 重新解析数据
+              {disabled ? '⟳ 重新解析中...' : '🔄 重新解析数据'}
             </button>
             <button
-              onClick={() => onSaveTemplate(currentMapping)}
-              style={{ height: 32, padding: '0 16px', border: '1px solid #d9d9d9', borderRadius: 4, background: '#fff', color: '#595959', cursor: 'pointer', fontSize: 13 }}
+              onClick={() => !disabled && onSaveTemplate(currentMapping)}
+              disabled={disabled}
+              style={{ height: 32, padding: '0 16px', border: '1px solid #d9d9d9', borderRadius: 4, background: disabled ? '#f5f5f5' : '#fff', color: disabled ? '#bfbfbf' : '#595959', cursor: disabled ? 'not-allowed' : 'pointer', fontSize: 13 }}
             >
               💾 保存为模板
             </button>
@@ -421,7 +424,31 @@ export default function UniversalImport() {
   const [scrollTop, setScrollTop] = useState(0);
   const ROW_HEIGHT = 42; // 每行高度（px）
   const BUFFER = 8;      // 上下各多渲染 N 行缓冲
+  const TABLE_MIN_HEIGHT = 400; // 表格最小高度（px）
+  const TABLE_MAX_HEIGHT = 600; // 表格最大高度（px）
+  const [tableHeight, setTableHeight] = useState(TABLE_MIN_HEIGHT);
+  const tableContainerRef = useRef<HTMLDivElement>(null);
   const [dismissAutoApply, setDismissAutoApply] = useState(false); // 是否已撤销自动应用
+
+  // 计算所有错误/警告（前置到这里，供 hooks 引用）
+  const computedAllErrors: Array<{ row: number; field: string; msg: string }> = [];
+  for (const row of previewData) {
+    if (row._errors) {
+      for (const [f, msg] of Object.entries(row._errors)) {
+        const label = SYSTEM_FIELDS.find(sf => sf.key === f)?.label || f;
+        computedAllErrors.push({ row: row._rowIndex, field: label, msg });
+      }
+    }
+  }
+  const computedAllWarnings: Array<{ row: number; field: string; msg: string }> = [];
+  for (const row of previewData) {
+    if (row._warnings) {
+      for (const [f, msg] of Object.entries(row._warnings)) {
+        const label = SYSTEM_FIELDS.find(sf => sf.key === f)?.label || f;
+        computedAllWarnings.push({ row: row._rowIndex, field: label, msg });
+      }
+    }
+  }
 
   // 运单列表
   const [waybillList, setWaybillList] = useState<Waybill[]>([]);
@@ -440,6 +467,30 @@ export default function UniversalImport() {
     setTimeout(() => setToast(null), 3000);
   };
 
+  // 行跳转高亮
+  const [highlightedRow, setHighlightedRow] = useState<number | null>(null);
+  // 错误面板：有错误时默认展开，用户手动关闭后保持关闭
+  const [errorPanelOpen, setErrorPanelOpen] = useState(false);
+
+  // 初始化错误面板状态（有错误时默认展开）
+  useEffect(() => {
+    if (computedAllErrors.length > 0 || computedAllWarnings.length > 0) setErrorPanelOpen(true);
+  }, []); // 仅首次渲染时自动展开
+
+  // 滚动到指定行（通过容器 scrollTo）
+  const scrollToRow = useCallback((rowIndex: number) => {
+    const container = tableContainerRef.current;
+    if (!container) return;
+    const targetTop = rowIndex * ROW_HEIGHT;
+    const containerTop = container.scrollTop;
+    const containerHeight = container.clientHeight;
+    if (targetTop < containerTop || targetTop > containerTop + containerHeight - ROW_HEIGHT) {
+      container.scrollTo({ top: targetTop - containerHeight / 2 + ROW_HEIGHT / 2, behavior: 'smooth' });
+    }
+    setHighlightedRow(rowIndex);
+    setTimeout(() => setHighlightedRow(null), 1500);
+  }, []);
+
   // 当前激活的 tab
   const [activeTab, setActiveTab] = useState<'import' | 'list'>('import');
 
@@ -447,27 +498,11 @@ export default function UniversalImport() {
   const allSelected = previewData.length > 0 && previewData.every(r => r._selected !== false);
   const someSelected = previewData.some(r => r._selected !== false);
 
-  // 所有错误列表
-  const allErrors: Array<{ row: number; field: string; msg: string }> = [];
-  for (const row of previewData) {
-    if (row._errors) {
-      for (const [f, msg] of Object.entries(row._errors)) {
-        const label = SYSTEM_FIELDS.find(sf => sf.key === f)?.label || f;
-        allErrors.push({ row: row._rowIndex, field: label, msg });
-      }
-    }
-  }
+  // 所有错误列表（引用前置计算结果）
+  const allErrors = computedAllErrors;
 
-  // 所有警告列表
-  const allWarnings: Array<{ row: number; field: string; msg: string }> = [];
-  for (const row of previewData) {
-    if (row._warnings) {
-      for (const [f, msg] of Object.entries(row._warnings)) {
-        const label = SYSTEM_FIELDS.find(sf => sf.key === f)?.label || f;
-        allWarnings.push({ row: row._rowIndex, field: label, msg });
-      }
-    }
-  }
+  // 所有警告列表（引用前置计算结果）
+  const allWarnings = computedAllWarnings;
 
   // 文件上传处理（含真实进度：先解析总行数，再模拟进度条）
   const handleFileUpload = useCallback(async (file: File) => {
@@ -482,6 +517,8 @@ export default function UniversalImport() {
     setPendingMapping({});
 
     let progressInterval: ReturnType<typeof setInterval> | null = null;
+    let fallbackInterval: ReturnType<typeof setInterval> | null = null;
+    let uploadDone = false; // 标记上传是否已完成（onprogress是否触发过）
 
     try {
       // Step 1：快速前端解析，获取总行数
@@ -512,37 +549,53 @@ export default function UniversalImport() {
         return;
       }
 
-      // Step 2：启动模拟进度条，显示"前端解析进度"
-      let simPct = 0;
+      // Step 2：前端解析进度（基于实际数据行数，0→25%）
+      // 解析是同步的，在 setTimeout 里用实际总行数做倒计时模拟
+      let rowsParsed = 0;
+      const ROWS_PER_TICK = Math.max(1, Math.ceil(totalRows / 25)); // 每 tick 解析的行数，25 tick 刚好到 25%
       progressInterval = setInterval(() => {
-        setUploadProgress(prev => {
-          if (prev >= 30) return prev; // 模拟进度只到30%，后续由XHR接管
-          const next = prev + Math.ceil((30 - prev) / 8);
-          const current = Math.min(Math.round(next * totalRows / 30), totalRows);
-          const pct = Math.round(current / totalRows * 100);
-          setUploadProgressText(`正在解析文件... ${current}/${totalRows} 条 (${pct}%)`);
-          return Math.min(next, 30);
-        });
-      }, 200);
+        rowsParsed = Math.min(rowsParsed + ROWS_PER_TICK, totalRows);
+        const pct = Math.round((rowsParsed / totalRows) * 25);
+        setUploadProgress(pct);
+        setUploadProgressText(`正在解析文件... ${rowsParsed}/${totalRows} 条`);
+        if (rowsParsed >= totalRows) {
+          clearInterval(progressInterval!);
+        }
+      }, 60); // 60ms/tick，25 tick ≈ 1.5s 覆盖常见解析耗时
 
-      // Step 3：XHR 真实上传进度（fetch 不支持 upload.onprogress）
+      // Step 3：XHR 真实上传进度（覆盖 25%~92%，服务器处理占 92%~100%）
       const json = await new Promise<Record<string, unknown>>((resolve, reject) => {
         const xhr = new XMLHttpRequest();
         const formData = new FormData();
         formData.append('file', file);
 
+        let fallbackTick = 0;
+
         xhr.upload.onprogress = (e) => {
           if (e.lengthComputable) {
-            // 上传进度: 30%~95%
+            uploadDone = true;
+            if (fallbackInterval) { clearInterval(fallbackInterval); fallbackInterval = null; }
+            // 上传进度: 25%~92%
             const uploadPct = Math.round((e.loaded / e.total) * 100);
-            const displayPct = Math.round(30 + uploadPct * 0.65);
-            setUploadProgress(displayPct);
+            const displayPct = Math.round(25 + uploadPct * 0.67);
+            setUploadProgress(Math.min(displayPct, 92));
             setUploadProgressText(`正在上传... ${displayPct}%`);
           }
         };
 
+        // 兜底：如果 onprogress 没触发（文件小/连接快），用时间模拟（每 100ms +2%）
+        fallbackInterval = setInterval(() => {
+          if (uploadDone) { clearInterval(fallbackInterval!); fallbackInterval = null; return; }
+          fallbackTick++;
+          const displayPct = Math.min(25 + fallbackTick * 2, 92);
+          setUploadProgress(displayPct);
+          setUploadProgressText(`正在上传... ${displayPct}%`);
+          if (fallbackTick >= 33) { clearInterval(fallbackInterval!); fallbackInterval = null; }
+        }, 100);
+
         xhr.onload = () => {
-          if (progressInterval) clearInterval(progressInterval);
+          if (progressInterval) { clearInterval(progressInterval); progressInterval = null; }
+          if (fallbackInterval) { clearInterval(fallbackInterval); fallbackInterval = null; }
           try {
             const data = JSON.parse(xhr.responseText);
             if (xhr.status >= 200 && xhr.status < 300) {
@@ -556,7 +609,8 @@ export default function UniversalImport() {
         };
 
         xhr.onerror = () => {
-          if (progressInterval) clearInterval(progressInterval);
+          if (progressInterval) { clearInterval(progressInterval); progressInterval = null; }
+          if (fallbackInterval) { clearInterval(fallbackInterval); fallbackInterval = null; }
           reject(new Error('网络错误，上传失败'));
         };
 
@@ -590,7 +644,8 @@ export default function UniversalImport() {
     } catch (e) {
       showToast('上传失败：' + (e instanceof Error ? e.message : String(e)), 'error');
     } finally {
-      if (progressInterval) clearInterval(progressInterval);
+      if (progressInterval) { clearInterval(progressInterval); progressInterval = null; }
+      if (fallbackInterval) { clearInterval(fallbackInterval); fallbackInterval = null; }
       setUploading(false);
       setUploadProgress(0);
       // 延迟清除文本，让用户看到 100%
@@ -805,13 +860,27 @@ export default function UniversalImport() {
       if (listQuery.end_date) params.set('end_date', listQuery.end_date);
 
       const res = await fetch(`/api/waybills/export?${params}`);
+
+      // 先克隆一份，避免读取 body 多次导致消费后无法再读
+      const clone = res.clone();
+      let blob: Blob;
+      try {
+        blob = await clone.blob();
+      } catch {
+        blob = new Blob();
+      }
+
+      // 尝试解析错误信息（仅当 HTTP 状态非 200 时）
       if (!res.ok) {
-        const err = await res.json().catch(() => ({ error: '导出失败' }));
-        showToast(err.error || '导出失败', 'error');
+        try {
+          const err = await res.json().catch(() => ({ error: '导出失败' }));
+          showToast((err as { error?: string }).error || '导出失败', 'error');
+        } catch {
+          showToast('导出失败', 'error');
+        }
         return;
       }
 
-      const blob = await res.blob();
       if (blob.size === 0) {
         showToast('没有符合条件的数据', 'warning');
         return;
@@ -879,6 +948,15 @@ export default function UniversalImport() {
   useEffect(() => {
     if (activeTab === 'list') fetchWaybillList(1);
   }, [activeTab]);
+
+  // 动态计算表格高度（基于预览数据量，最多 TABLE_MAX_HEIGHT）
+  useEffect(() => {
+    if (previewData.length === 0) return;
+    // 数据量 < 10 行时，按实际高度展示（最小 TABLE_MIN_HEIGHT）
+    // 数据量 >= 10 行时，最多展示 TABLE_MAX_HEIGHT
+    const idealHeight = Math.min(previewData.length * ROW_HEIGHT + 80, TABLE_MAX_HEIGHT);
+    setTableHeight(Math.max(idealHeight, TABLE_MIN_HEIGHT));
+  }, [previewData.length]);
 
   // 删除行
   const deleteRow = useCallback((rowIndex: number) => {
@@ -972,6 +1050,15 @@ export default function UniversalImport() {
       <style>{`
         @keyframes fadeInDown { from { opacity: 0; transform: translateX(-50%) translateY(-10px); } to { opacity: 1; transform: translateX(-50%) translateY(0); } }
         @keyframes spin { to { transform: rotate(360deg); } }
+        @keyframes rowHighlight {
+          0%   { box-shadow: inset 0 0 0 2px #ff4d4f, 0 0 0 0 rgba(255,77,79,0.4); }
+          50%  { box-shadow: inset 0 0 0 2px #ff4d4f, 0 0 16px 4px rgba(255,77,79,0.5); }
+          100% { box-shadow: inset 0 0 0 2px transparent, 0 0 0 0 transparent; }
+        }
+        @keyframes panelSlideIn {
+          from { opacity: 0; transform: translateX(12px); }
+          to   { opacity: 1; transform: translateX(0); }
+        }
       `}</style>
 
       {toast && <Toast text={toast.text} type={toast.type} onClose={() => setToast(null)} />}
@@ -1062,6 +1149,7 @@ export default function UniversalImport() {
                 pendingMapping={pendingMapping}
                 setPendingMapping={setPendingMapping}
                 onReapply={handleReapplyMapping}
+                disabled={uploading}
                 onSaveTemplate={handleSaveTemplate}
                 hasSavedMapping={hasSavedMapping}
                 templateName={templateName}
@@ -1103,184 +1191,269 @@ export default function UniversalImport() {
               </div>
             )}
 
-            {/* 预览表格 */}
+            {/* 预览表格（表格区 + 右侧错误汇总侧边面板） */}
             {previewData.length > 0 && (
-              <div style={{ background: '#fff', borderRadius: 8, border: '1px solid #e8e8e8', overflow: 'hidden' }}>
-                {/* 操作栏 */}
-                <div style={{ padding: '12px 16px', borderBottom: '1px solid #f0f0f0', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 8 }}>
-                  <div style={{ fontSize: 14, fontWeight: 600, color: '#262626' }}>
-                    数据预览
-                    <span style={{ fontWeight: 400, fontSize: 13, color: '#8c8c8c', marginLeft: 8 }}>
-                      共 {previewData.length} 行（含 {invalidCount} 个错误行）
-                      {previewData.length > 50 && (
-                        <span style={{ marginLeft: 6, color: '#8c8c8c', fontWeight: 400 }}>
-                          | 当前显示 {Math.max(1, Math.floor(scrollTop / ROW_HEIGHT) + 1)}–{Math.min(previewData.length, Math.floor(scrollTop / ROW_HEIGHT) + Math.ceil(500 / ROW_HEIGHT))} 行
-                        </span>
+              <div style={{ display: 'flex', gap: 12, alignItems: 'flex-start' }}>
+                {/* 左侧：预览表格主区域 */}
+                <div style={{ flex: 1, background: '#fff', borderRadius: 8, border: '1px solid #e8e8e8', overflow: 'hidden', minWidth: 0 }}>
+                  {/* 操作栏 */}
+                  <div style={{ padding: '12px 16px', borderBottom: '1px solid #f0f0f0', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 8 }}>
+                    <div style={{ fontSize: 14, fontWeight: 600, color: '#262626' }}>
+                      数据预览
+                      <span style={{ fontWeight: 400, fontSize: 13, color: '#8c8c8c', marginLeft: 8 }}>
+                        共 {previewData.length} 行（含 {invalidCount} 个错误行）
+                        {previewData.length > 50 && (
+                          <span style={{ marginLeft: 6, color: '#8c8c8c', fontWeight: 400 }}>
+                            | 当前显示 {Math.max(1, Math.floor(scrollTop / ROW_HEIGHT) + 1)}–{Math.min(previewData.length, Math.floor(scrollTop / ROW_HEIGHT) + Math.ceil(500 / ROW_HEIGHT))} 行
+                          </span>
+                        )}
+                      </span>
+                    </div>
+                    <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                      {allErrors.length > 0 && (
+                        <button
+                          onClick={() => setErrorPanelOpen(v => !v)}
+                          style={{ height: 30, padding: '0 12px', border: '1px solid #ff4d4f', borderRadius: 4, background: errorPanelOpen ? '#fff2f0' : '#fff', cursor: 'pointer', fontSize: 13, color: '#ff4d4f', display: 'flex', alignItems: 'center', gap: 4 }}>
+                          {errorPanelOpen ? '✕ 收起面板' : `⚠ 查看错误 (${allErrors.length})`}
+                        </button>
                       )}
-                    </span>
+                      <button onClick={addEmptyRow} style={{ height: 30, padding: '0 12px', border: '1px solid #d9d9d9', borderRadius: 4, background: '#fff', cursor: 'pointer', fontSize: 13, color: '#595959', display: 'flex', alignItems: 'center', gap: 4 }}
+                        onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.borderColor = '#00BEBE'; (e.currentTarget as HTMLButtonElement).style.color = '#00BEBE'; }}
+                        onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.borderColor = '#d9d9d9'; (e.currentTarget as HTMLButtonElement).style.color = '#595959'; }}>
+                        <Icon name="plus" size={12} /> 新增行
+                      </button>
+                      <button onClick={handleExport} disabled={exportLoading}
+                        style={{ height: 30, padding: '0 12px', border: '1px solid #d9d9d9', borderRadius: 4, background: exportLoading ? '#d9d9d9' : '#fff', cursor: exportLoading ? 'not-allowed' : 'pointer', fontSize: 13, color: exportLoading ? '#8c8c8c' : '#595959', display: 'flex', alignItems: 'center', gap: 4 }}
+                        onMouseEnter={e => { if (!exportLoading) { (e.currentTarget as HTMLButtonElement).style.borderColor = '#00BEBE'; (e.currentTarget as HTMLButtonElement).style.color = '#00BEBE'; } }}
+                        onMouseLeave={e => { if (!exportLoading) { (e.currentTarget as HTMLButtonElement).style.borderColor = '#d9d9d9'; (e.currentTarget as HTMLButtonElement).style.color = '#595959'; } }}>
+                        {exportLoading ? '导出中...' : <><Icon name="download" size={12} /> 导出Excel</>}
+                      </button>
+                    </div>
                   </div>
-                  <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-                    <button onClick={addEmptyRow} style={{ height: 30, padding: '0 12px', border: '1px solid #d9d9d9', borderRadius: 4, background: '#fff', cursor: 'pointer', fontSize: 13, color: '#595959', display: 'flex', alignItems: 'center', gap: 4 }}
-                      onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.borderColor = '#00BEBE'; (e.currentTarget as HTMLButtonElement).style.color = '#00BEBE'; }}
-                      onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.borderColor = '#d9d9d9'; (e.currentTarget as HTMLButtonElement).style.color = '#595959'; }}>
-                      <Icon name="plus" size={12} /> 新增行
-                    </button>
-                    <button onClick={handleExport} disabled={exportLoading}
-                      style={{ height: 30, padding: '0 12px', border: '1px solid #d9d9d9', borderRadius: 4, background: exportLoading ? '#d9d9d9' : '#fff', cursor: exportLoading ? 'not-allowed' : 'pointer', fontSize: 13, color: exportLoading ? '#8c8c8c' : '#595959', display: 'flex', alignItems: 'center', gap: 4 }}
-                      onMouseEnter={e => { if (!exportLoading) { (e.currentTarget as HTMLButtonElement).style.borderColor = '#00BEBE'; (e.currentTarget as HTMLButtonElement).style.color = '#00BEBE'; } }}
-                      onMouseLeave={e => { if (!exportLoading) { (e.currentTarget as HTMLButtonElement).style.borderColor = '#d9d9d9'; (e.currentTarget as HTMLButtonElement).style.color = '#595959'; } }}>
-                      {exportLoading ? '导出中...' : <><Icon name="download" size={12} /> 导出Excel</>}
-                    </button>
+
+                  {/* 表格（虚拟滚动）：CSS Grid 实现 sticky header + 虚拟 body */}
+                  {(() => {
+                    const startIdx = Math.max(0, Math.floor(scrollTop / ROW_HEIGHT) - BUFFER);
+                    const visibleCount = Math.ceil(tableHeight / ROW_HEIGHT) + BUFFER * 2;
+                    const endIdx = Math.min(previewData.length, startIdx + visibleCount);
+                    const visibleRows = previewData.slice(startIdx, endIdx);
+                    const totalHeight = previewData.length * ROW_HEIGHT;
+
+                    return (
+                      <div
+                        ref={tableContainerRef}
+                        style={{ overflowX: 'auto', maxHeight: tableHeight }}
+                        onScroll={e => setScrollTop(e.currentTarget.scrollTop)}
+                      >
+                        <div style={{
+                          display: 'grid',
+                          gridTemplateColumns: '40px 60px repeat(' + SYSTEM_FIELDS.length + ', minmax(120px, 1fr)) 60px',
+                          minWidth: 'max-content',
+                          fontSize: 13,
+                        }}>
+                          {/* 表头行（sticky） */}
+                          <div style={{ display: 'contents' }}>
+                            <div style={{
+                              padding: '8px', textAlign: 'center', borderBottom: '2px solid #e8e8e8',
+                              borderRight: '1px solid #f0f0f0', fontWeight: 600, color: '#595959',
+                              background: '#fafafa', position: 'sticky', top: 0, left: 0, zIndex: 3,
+                            }}>
+                              <input type="checkbox" checked={allSelected} onChange={toggleAll} style={{ cursor: 'pointer', width: 16, height: 16 }} />
+                            </div>
+                            <div style={{ padding: '8px', textAlign: 'center', borderBottom: '2px solid #e8e8e8', borderRight: '1px solid #f0f0f0', fontWeight: 600, color: '#595959', background: '#fafafa', position: 'sticky', top: 0, zIndex: 2 }}>行号</div>
+                            {SYSTEM_FIELDS.map((f, fi) => (
+                              <div key={f.key} style={{ padding: '8px', borderBottom: '2px solid #e8e8e8', borderRight: '1px solid #f0f0f0', fontWeight: 600, color: f.required ? '#cf1322' : '#595959', background: '#fafafa', position: 'sticky', top: 0, zIndex: 2, whiteSpace: 'nowrap' }}>
+                                {f.label}{f.required && <span style={{ color: '#ff4d4f', marginLeft: 2 }}>*</span>}
+                              </div>
+                            ))}
+                            <div style={{ padding: '8px', borderBottom: '2px solid #e8e8e8', fontWeight: 600, color: '#595959', background: '#fafafa', position: 'sticky', top: 0, zIndex: 2 }}>操作</div>
+                          </div>
+
+                          {/* 虚拟滚动占位（撑满滚动高度） */}
+                          <div style={{ gridColumn: '1 / -1', height: totalHeight, position: 'relative' }}>
+                            {visibleRows.map((row, vIdx) => {
+                              const rowIdx = startIdx + vIdx;
+                              const isErr = !row._isValid;
+                              const isHighlighted = highlightedRow === rowIdx;
+                              return (
+                                <div key={rowIdx} style={{
+                                  display: 'grid',
+                                  gridTemplateColumns: '40px 60px repeat(' + SYSTEM_FIELDS.length + ', minmax(120px, 1fr)) 60px',
+                                  minWidth: 'max-content',
+                                  position: 'absolute', top: rowIdx * ROW_HEIGHT,
+                                  width: '100%', height: ROW_HEIGHT,
+                                  background: isHighlighted ? '#fff0f0' : isErr ? '#fff1f0' : '#fff',
+                                  ...(isHighlighted ? { animation: 'rowHighlight 1.5s ease-out forwards' } : {}),
+                                }}>
+                                  <div style={{ padding: '4px 8px', textAlign: 'center', borderBottom: '1px solid #f0f0f0' }}>
+                                    <input type="checkbox" checked={row._selected !== false} onChange={() => toggleRow(rowIdx)} style={{ cursor: 'pointer', width: 16, height: 16 }} />
+                                  </div>
+                                  <div style={{ padding: '4px 8px', textAlign: 'center', color: '#8c8c8c', borderBottom: '1px solid #f0f0f0', borderRight: '1px solid #f0f0f0', whiteSpace: 'nowrap', lineHeight: ROW_HEIGHT + 'px' }}>{row._rowIndex}</div>
+                                  {SYSTEM_FIELDS.map(f => (
+                                    <div key={f.key} style={{ padding: '2px 4px', borderBottom: '1px solid #f0f0f0', borderRight: '1px solid #f0f0f0' }}>
+                                      <EditableCell
+                                        value={String(row[f.key as keyof WaybillRow] || '')}
+                                        rowIndex={rowIdx}
+                                        field={f.key}
+                                        onChange={handleCellChange}
+                                        error={row._errors?.[f.key]}
+                                        warning={row._warnings?.[f.key]}
+                                        options={f.options as readonly string[] | undefined}
+                                      />
+                                    </div>
+                                  ))}
+                                  <div style={{ padding: '4px 8px', borderBottom: '1px solid #f0f0f0', lineHeight: ROW_HEIGHT + 'px' }}>
+                                    <button onClick={() => deleteRow(rowIdx)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#ff4d4f', fontSize: 16, padding: 4 }} title="删除此行">×</button>
+                                  </div>
+                                </div>
+                              );
+                            })}
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })()}
+
+                  {/* 提交区 */}
+                  <div style={{ padding: '12px 16px', borderTop: '1px solid #e8e8e8', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 12 }}>
+                    <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+                      <div style={{ fontSize: 13, color: '#8c8c8c' }}>
+                        已选 <strong style={{ color: invalidCount > 0 ? '#ff4d4f' : '#52c41a' }}>{totalSelected}</strong> 行，其中 {invalidCount > 0 ? <strong style={{ color: '#ff4d4f' }}>{invalidCount} 行有错误</strong> : <strong style={{ color: '#52c41a' }}>全部有效</strong>}
+                      </div>
+                      {invalidCount > 0 && (
+                        <button
+                          onClick={() => {
+                            const firstErrRowIdx = previewData.findIndex(r => !r._isValid);
+                            if (firstErrRowIdx !== -1) scrollToRow(firstErrRowIdx);
+                          }}
+                          style={{ height: 26, padding: '0 10px', border: '1px solid #ff4d4f', borderRadius: 4, background: '#fff', cursor: 'pointer', fontSize: 12, color: '#ff4d4f', display: 'flex', alignItems: 'center', gap: 4 }}>
+                          📍 定位首个错误
+                        </button>
+                      )}
+                    </div>
+                    <div style={{ display: 'flex', gap: 8 }}>
+                      {submitting && (
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: 4, minWidth: 200 }}>
+                          <ProgressBar value={submitProgress} label={submitProgressText || '提交中...'} />
+                          <div style={{ fontSize: 12, color: '#8c8c8c', textAlign: 'right' }}>
+                            {submitProgressText}
+                          </div>
+                        </div>
+                      )}
+                      <button
+                        onClick={() => setConfirmModalOpen(true)}
+                        disabled={submitting || invalidCount > 0 || totalSelected === 0}
+                        style={{
+                          height: 36, padding: '0 24px', border: 'none', borderRadius: 4,
+                          background: (submitting || invalidCount > 0 || totalSelected === 0) ? '#d9d9d9' : '#1677ff',
+                          color: '#fff', cursor: (submitting || invalidCount > 0 || totalSelected === 0) ? 'not-allowed' : 'pointer',
+                          fontSize: 14, fontWeight: 600,
+                        }}>
+                        {submitting ? '提交中...' : '确认导入'}
+                      </button>
+                    </div>
                   </div>
+
+                  {/* 提交结果 */}
+                  {submitResult && (
+                    <div style={{ margin: '0 16px 12px', padding: '12px 16px', background: submitResult.failed > 0 ? '#fff2f0' : '#f6ffed', borderRadius: 6, border: `1px solid ${submitResult.failed > 0 ? '#ffccc7' : '#b7eb8f'}`, fontSize: 14 }}>
+                      <strong style={{ color: submitResult.failed > 0 ? '#ff4d4f' : '#52c41a' }}>
+                        提交完成：成功 {submitResult.success} 条，失败 {submitResult.failed} 条
+                      </strong>
+                    </div>
+                  )}
                 </div>
 
-                {/* 错误总览 */}
-                {allErrors.length > 0 && (
-                  <div style={{ margin: '12px 16px 0', padding: '10px 12px', background: '#fff2f0', borderRadius: 6, border: '1px solid #ffccc7', fontSize: 13 }}>
-                    <div style={{ fontWeight: 600, color: '#ff4d4f', marginBottom: 6 }}>⚠ 错误汇总（共 {allErrors.length} 个）</div>
-                    <div style={{ maxHeight: 120, overflow: 'auto' }}>
-                      {allErrors.slice(0, 50).map((e, i) => (
-                        <div key={i} style={{ color: '#cf1322', marginBottom: 2 }}>
-                          <strong>第{e.row}行</strong> {e.field}：{e.msg}
-                        </div>
-                      ))}
-                      {allErrors.length > 50 && <div style={{ color: '#8c8c8c', fontSize: 12 }}>...还有 {allErrors.length - 50} 个错误</div>}
+                {/* 右侧：错误汇总面板（可折叠侧边栏） */}
+                {errorPanelOpen && (allErrors.length > 0 || allWarnings.length > 0) && (
+                  <div
+                    style={{
+                      width: 280, flexShrink: 0,
+                      background: '#fff', borderRadius: 8, border: '1px solid #e8e8e8',
+                      overflow: 'hidden',
+                      display: 'flex', flexDirection: 'column',
+                      position: 'sticky', top: 0, maxHeight: tableHeight + 80,
+                      animation: 'panelSlideIn 0.25s ease-out',
+                    }}
+                  >
+                    {/* 面板头部 */}
+                    <div style={{
+                      padding: '10px 14px', borderBottom: '1px solid #f0f0f0',
+                      background: '#fafafa', display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+                    }}>
+                      <span style={{ fontSize: 13, fontWeight: 600, color: '#262626' }}>
+                        📋 校验结果
+                        {allErrors.length > 0 && <span style={{ color: '#ff4d4f', marginLeft: 4 }}>{allErrors.length}个错误</span>}
+                        {allWarnings.length > 0 && <span style={{ color: '#d46b08', marginLeft: 4 }}>{allWarnings.length}个警告</span>}
+                      </span>
+                      <button
+                        onClick={() => setErrorPanelOpen(false)}
+                        style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#8c8c8c', fontSize: 16, padding: 0, lineHeight: 1 }}>
+                        ×
+                      </button>
                     </div>
-                  </div>
-                )}
 
-                {/* 警告总览 */}
-                {allWarnings.length > 0 && (
-                  <div style={{ margin: '12px 16px 0', padding: '10px 12px', background: '#fffbe6', borderRadius: 6, border: '1px solid #ffd591', fontSize: 13 }}>
-                    <div style={{ fontWeight: 600, color: '#d46b08', marginBottom: 6 }}>⚠ 警告提示（共 {allWarnings.length} 个，不影响提交）</div>
-                    <div style={{ maxHeight: 100, overflow: 'auto' }}>
-                      {allWarnings.slice(0, 50).map((w, i) => (
-                        <div key={i} style={{ color: '#d46b08', marginBottom: 2 }}>
-                          <strong>第{w.row}行</strong> {w.field}：{w.msg}
-                        </div>
-                      ))}
-                      {allWarnings.length > 50 && <div style={{ color: '#8c8c8c', fontSize: 12 }}>...还有 {allWarnings.length - 50} 个警告</div>}
-                    </div>
-                  </div>
-                )}
-
-                {/* 表格（虚拟滚动）：CSS Grid 实现 sticky header + 虚拟 body */}
-                {(() => {
-                  const containerHeight = 500; // maxHeight
-                  const startIdx = Math.max(0, Math.floor(scrollTop / ROW_HEIGHT) - BUFFER);
-                  const visibleCount = Math.ceil(containerHeight / ROW_HEIGHT) + BUFFER * 2;
-                  const endIdx = Math.min(previewData.length, startIdx + visibleCount);
-                  const visibleRows = previewData.slice(startIdx, endIdx);
-                  const totalHeight = previewData.length * ROW_HEIGHT;
-
-                  return (
-                    <div
-                      style={{ overflowX: 'auto', maxHeight: 500 }}
-                      onScroll={e => setScrollTop(e.currentTarget.scrollTop)}
-                    >
-                      <div style={{
-                        display: 'grid',
-                        gridTemplateColumns: '40px 60px repeat(' + SYSTEM_FIELDS.length + ', minmax(120px, 1fr)) 60px',
-                        minWidth: 'max-content',
-                        fontSize: 13,
-                      }}>
-                        {/* 表头行（sticky） */}
-                        <div style={{
-                          display: 'contents',
-                        }}>
-                          <div style={{
-                            padding: '8px', textAlign: 'center', borderBottom: '2px solid #e8e8e8',
-                            borderRight: '1px solid #f0f0f0', fontWeight: 600, color: '#595959',
-                            background: '#fafafa', position: 'sticky', top: 0, left: 0, zIndex: 3,
-                          }}>
-                            <input type="checkbox" checked={allSelected} onChange={toggleAll} style={{ cursor: 'pointer', width: 16, height: 16 }} />
+                    {/* 错误列表 */}
+                    <div style={{ flex: 1, overflow: 'auto', padding: '8px 0' }}>
+                      {allErrors.length > 0 && (
+                        <div style={{ padding: '0 12px 8px' }}>
+                          <div style={{ fontSize: 12, fontWeight: 600, color: '#ff4d4f', marginBottom: 6 }}>
+                            ❌ 错误（共 {allErrors.length} 个）
                           </div>
-                          <div style={{ padding: '8px', textAlign: 'center', borderBottom: '2px solid #e8e8e8', borderRight: '1px solid #f0f0f0', fontWeight: 600, color: '#595959', background: '#fafafa', position: 'sticky', top: 0, zIndex: 2 }}>行号</div>
-                          {SYSTEM_FIELDS.map((f, fi) => (
-                            <div key={f.key} style={{ padding: '8px', borderBottom: '2px solid #e8e8e8', borderRight: '1px solid #f0f0f0', fontWeight: 600, color: f.required ? '#cf1322' : '#595959', background: '#fafafa', position: 'sticky', top: 0, zIndex: 2, whiteSpace: 'nowrap' }}>
-                              {f.label}{f.required && <span style={{ color: '#ff4d4f', marginLeft: 2 }}>*</span>}
-                            </div>
-                          ))}
-                          <div style={{ padding: '8px', borderBottom: '2px solid #e8e8e8', fontWeight: 600, color: '#595959', background: '#fafafa', position: 'sticky', top: 0, zIndex: 2 }}>操作</div>
-                        </div>
-
-                        {/* 虚拟滚动占位（撑满滚动高度） */}
-                        <div style={{ gridColumn: '1 / -1', height: totalHeight, position: 'relative' }}>
-                          {visibleRows.map((row, vIdx) => {
-                            const rowIdx = startIdx + vIdx;
-                            const isErr = !row._isValid;
+                          {allErrors.map((e, i) => {
+                            // 找到对应行在 previewData 中的索引
+                            const rowIdx = previewData.findIndex(r => r._rowIndex === e.row);
                             return (
-                              <div key={rowIdx} style={{
-                                display: 'grid',
-                                gridTemplateColumns: '40px 60px repeat(' + SYSTEM_FIELDS.length + ', minmax(120px, 1fr)) 60px',
-                                minWidth: 'max-content',
-                                position: 'absolute', top: rowIdx * ROW_HEIGHT,
-                                width: '100%', height: ROW_HEIGHT,
-                                background: isErr ? '#fff1f0' : '#fff',
-                              }}>
-                                <div style={{ padding: '4px 8px', textAlign: 'center', borderBottom: '1px solid #f0f0f0' }}>
-                                  <input type="checkbox" checked={row._selected !== false} onChange={() => toggleRow(rowIdx)} style={{ cursor: 'pointer', width: 16, height: 16 }} />
-                                </div>
-                                <div style={{ padding: '4px 8px', textAlign: 'center', color: '#8c8c8c', borderBottom: '1px solid #f0f0f0', borderRight: '1px solid #f0f0f0', whiteSpace: 'nowrap', lineHeight: ROW_HEIGHT + 'px' }}>{row._rowIndex}</div>
-                                {SYSTEM_FIELDS.map(f => (
-                                  <div key={f.key} style={{ padding: '2px 4px', borderBottom: '1px solid #f0f0f0', borderRight: '1px solid #f0f0f0' }}>
-                                    <EditableCell
-                                      value={String(row[f.key as keyof WaybillRow] || '')}
-                                      rowIndex={rowIdx}
-                                      field={f.key}
-                                      onChange={handleCellChange}
-                                      error={row._errors?.[f.key]}
-                                      warning={row._warnings?.[f.key]}
-                                      options={f.options as readonly string[] | undefined}
-                                    />
-                                  </div>
-                                ))}
-                                <div style={{ padding: '4px 8px', borderBottom: '1px solid #f0f0f0', lineHeight: ROW_HEIGHT + 'px' }}>
-                                  <button onClick={() => deleteRow(rowIdx)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#ff4d4f', fontSize: 16, padding: 4 }} title="删除此行">×</button>
-                                </div>
+                              <div
+                                key={i}
+                                onClick={() => { if (rowIdx !== -1) scrollToRow(rowIdx); }}
+                                style={{
+                                  padding: '6px 8px', marginBottom: 4, borderRadius: 4,
+                                  background: '#fff2f0', border: '1px solid #ffccc7',
+                                  fontSize: 12, color: '#cf1322', cursor: 'pointer',
+                                  lineHeight: 1.5,
+                                  transition: 'background 0.15s',
+                                }}
+                                onMouseEnter={e2 => { (e2.currentTarget as HTMLDivElement).style.background = '#ffe7e6'; }}
+                                onMouseLeave={e2 => { (e2.currentTarget as HTMLDivElement).style.background = '#fff2f0'; }}
+                                title={`点击跳转到第 ${e.row} 行`}
+                              >
+                                <div><strong>第{e.row}行</strong> · {e.field}</div>
+                                <div style={{ color: '#ff4d4f' }}>{e.msg}</div>
                               </div>
                             );
                           })}
+                          {allErrors.length > 50 && (
+                            <div style={{ fontSize: 11, color: '#8c8c8c', textAlign: 'center', padding: '4px 0' }}>
+                              ...还有 {allErrors.length - 50} 个错误
+                            </div>
+                          )}
                         </div>
-                      </div>
+                      )}
+
+                      {allWarnings.length > 0 && (
+                        <div style={{ padding: '0 12px' }}>
+                          <div style={{ fontSize: 12, fontWeight: 600, color: '#d46b08', marginBottom: 6 }}>
+                            ⚠ 警告（共 {allWarnings.length} 个，不影响提交）
+                          </div>
+                          {allWarnings.slice(0, 50).map((w, i) => (
+                            <div key={i} style={{
+                              padding: '5px 8px', marginBottom: 4, borderRadius: 4,
+                              background: '#fffbe6', border: '1px solid #ffd591',
+                              fontSize: 12, color: '#d46b08', lineHeight: 1.5,
+                            }}>
+                              <div><strong>第{w.row}行</strong> · {w.field}</div>
+                              <div>{w.msg}</div>
+                            </div>
+                          ))}
+                          {allWarnings.length > 50 && (
+                            <div style={{ fontSize: 11, color: '#8c8c8c', textAlign: 'center', padding: '4px 0' }}>
+                              ...还有 {allWarnings.length - 50} 个警告
+                            </div>
+                          )}
+                        </div>
+                      )}
                     </div>
-                  );
-                })()}
-
-                {/* 提交区 */}
-                <div style={{ padding: '12px 16px', borderTop: '1px solid #e8e8e8', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 12 }}>
-                  <div style={{ fontSize: 13, color: '#8c8c8c' }}>
-                    已选 <strong style={{ color: invalidCount > 0 ? '#ff4d4f' : '#52c41a' }}>{totalSelected}</strong> 行，其中 {invalidCount > 0 ? <strong style={{ color: '#ff4d4f' }}>{invalidCount} 行有错误</strong> : <strong style={{ color: '#52c41a' }}>全部有效</strong>}
-                  </div>
-                  <div style={{ display: 'flex', gap: 8 }}>
-                    {submitting && (
-                      <div style={{ display: 'flex', flexDirection: 'column', gap: 4, minWidth: 200 }}>
-                        <ProgressBar value={submitProgress} label={submitProgressText || '提交中...'} />
-                        <div style={{ fontSize: 12, color: '#8c8c8c', textAlign: 'right' }}>
-                          {submitProgressText}
-                        </div>
-                      </div>
-                    )}
-                    <button
-                      onClick={() => setConfirmModalOpen(true)}
-                      disabled={submitting || invalidCount > 0 || totalSelected === 0}
-                      style={{
-                        height: 36, padding: '0 24px', border: 'none', borderRadius: 4,
-                        background: (submitting || invalidCount > 0 || totalSelected === 0) ? '#d9d9d9' : '#1677ff',
-                        color: '#fff', cursor: (submitting || invalidCount > 0 || totalSelected === 0) ? 'not-allowed' : 'pointer',
-                        fontSize: 14, fontWeight: 600,
-                      }}>
-                      {submitting ? '提交中...' : '确认导入'}
-                    </button>
-                  </div>
-                </div>
-
-                {/* 提交结果 */}
-                {submitResult && (
-                  <div style={{ margin: '0 16px 12px', padding: '12px 16px', background: submitResult.failed > 0 ? '#fff2f0' : '#f6ffed', borderRadius: 6, border: `1px solid ${submitResult.failed > 0 ? '#ffccc7' : '#b7eb8f'}`, fontSize: 14 }}>
-                    <strong style={{ color: submitResult.failed > 0 ? '#ff4d4f' : '#52c41a' }}>
-                      提交完成：成功 {submitResult.success} 条，失败 {submitResult.failed} 条
-                    </strong>
                   </div>
                 )}
               </div>

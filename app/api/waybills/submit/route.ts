@@ -36,12 +36,15 @@ function validateRow(row: WaybillRow, rowIndex: number): ValidationError[] {
     }
   }
 
-  const weight = parseFloat(String(row.weight || '').trim());
+  // 数值容错：trim + 清理 Excel 数字格式 .0 后缀
+  const cleanWeight = String(row.weight || '').trim().replace(/\.0+$/, '');
+  const cleanQty = String(row.quantity || '').trim().replace(/\.0+$/, '');
+  const weight = parseFloat(cleanWeight);
   if (row.weight !== '' && row.weight !== undefined && (isNaN(weight) || weight <= 0)) {
     errors.push({ row: rowIndex, field: '重量(kg)', value: String(row.weight), message: '必须为正数' });
   }
 
-  const qty = parseInt(String(row.quantity || '').trim());
+  const qty = parseInt(cleanQty);
   if (row.quantity !== '' && row.quantity !== undefined && (isNaN(qty) || qty <= 0 || !Number.isInteger(qty))) {
     errors.push({ row: rowIndex, field: '件数', value: String(row.quantity), message: '必须为正整数' });
   }

@@ -98,9 +98,14 @@ export async function DELETE(request: Request) {
       return NextResponse.json({ error: '缺少 ids 参数' }, { status: 400 });
     }
 
+    // 过滤非数字 ID，防止 SQL 注入
+    const numericIds = ids.map(id => parseInt(String(id), 10)).filter(n => !isNaN(n) && n > 0);
+    if (numericIds.length === 0) {
+      return NextResponse.json({ error: 'ids 参数无效' }, { status: 400 });
+    }
+
     const neonSql = getNeonClient();
-    const idList = ids.map((id) => String(id)).join(',');
-    const result = await neonSql`DELETE FROM waybills WHERE id IN (${neonSql.unsafe(idList)}) RETURNING id` as unknown as Array<{ id: number }>;
+    const result = await sql`DELETE FROM waybills WHERE id = ANY(${numericIds}) RETURNING id` as unknown as Array<{ id: number }>;
     const deletedCount = result.length;
 
     return NextResponse.json({ success: true, deletedCount });
