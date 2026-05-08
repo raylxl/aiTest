@@ -139,6 +139,7 @@ export const COLUMN_ALIAS_MAP: Record<string, string> = {
   '发件人': 'sender_name',        // 分组模板别名
   '发货人': 'sender_name',
   'sender': 'sender_name',
+  'Sender': 'sender_name',
   '寄件人': 'sender_name',
   '寄件人姓名': 'sender_name',
   // 发件人电话
@@ -146,33 +147,40 @@ export const COLUMN_ALIAS_MAP: Record<string, string> = {
   '发件电话': 'sender_phone',      // 分组模板别名
   '发货电话': 'sender_phone',
   'sender tel': 'sender_phone',
+  'Sender Tel': 'sender_phone',
   '寄件人电话': 'sender_phone',
   // 发件人地址
   '发件人地址': 'sender_address',
   '发件地址': 'sender_address',    // 分组模板别名
   '发货地址': 'sender_address',
   'sender address': 'sender_address',
+  'Sender Address': 'sender_address',
   '寄件人地址': 'sender_address',
   // 收件人姓名
   '收件人姓名': 'receiver_name',
   '收件人': 'receiver_name',       // 分组模板别名
   '收货人': 'receiver_name',
   'receiver': 'receiver_name',
+  'Receiver': 'receiver_name',
   // 收件人电话
   '收件人电话': 'receiver_phone',
   '收件电话': 'receiver_phone',     // 分组模板别名
   '收货电话': 'receiver_phone',
   'receiver tel': 'receiver_phone',
+  'Receiver Tel': 'receiver_phone',
   // 收件人地址
   '收件人地址': 'receiver_address',
   '收件地址': 'receiver_address',   // 分组模板别名
   '收货地址': 'receiver_address',
   'receiver address': 'receiver_address',
+  'Receiver Address': 'receiver_address',
   // 重量
   '重量(kg)': 'weight',
   '重量': 'weight',
   'weight(kg)': 'weight',
   'weight': 'weight',
+  'Weight(kg)': 'weight',
+  'Weight': 'weight',
   '重量(KG)': 'weight',
   '重量(Kg)': 'weight',
   'w': 'weight',
@@ -190,10 +198,12 @@ export const COLUMN_ALIAS_MAP: Record<string, string> = {
   '温层': 'temp_layer',
   '温度要求': 'temp_layer',
   'temp zone': 'temp_layer',
+  'Temp Zone': 'temp_layer',
   // 备注
   '备注': 'remark',
   '附言': 'remark',
   'note': 'remark',
+  'Note': 'remark',
 };
 
 // 温层可选值
