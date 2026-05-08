@@ -286,8 +286,10 @@ export async function POST(request: Request) {
       const exactRows = await sql`SELECT header_columns, id FROM template_mappings WHERE header_hash = ${headerHash} LIMIT 1`;
       if (exactRows.length > 0) {
         savedMapping = exactRows[0].header_columns as Record<string, string>;
-      } else {
-        // Step 2: 模糊匹配（Jaccard 相似度）
+      }
+
+      // Step 2: 模糊匹配（独立执行，精确匹配失败或无模糊结果时使用）
+      if (!savedMapping) {
         const allTemplates = await sql`SELECT id, header_hash, header_columns FROM template_mappings ORDER BY id DESC LIMIT 50`;
         let bestScore = 0;
         let bestTemplate: typeof allTemplates[0] | null = null;
@@ -304,6 +306,7 @@ export async function POST(request: Request) {
           savedTemplateName = `模糊匹配(${Math.round(bestScore * 100)}%)`;
         }
       }
+
       // 应用已保存的映射
       if (savedMapping) mapping = savedMapping;
     } catch {

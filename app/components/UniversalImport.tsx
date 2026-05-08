@@ -512,51 +512,80 @@ export default function UniversalImport() {
         return;
       }
 
-      // Step 2：启动模拟进度条，显示"已解析 X/总数 条 (Y%)"
+      // Step 2：启动模拟进度条，显示"前端解析进度"
       let simPct = 0;
       progressInterval = setInterval(() => {
         setUploadProgress(prev => {
-          if (prev >= 92) return prev;
-          const next = prev + Math.ceil((92 - prev) / 12);
-          const current = Math.min(Math.round(next * totalRows / 100), totalRows);
+          if (prev >= 30) return prev; // 模拟进度只到30%，后续由XHR接管
+          const next = prev + Math.ceil((30 - prev) / 8);
+          const current = Math.min(Math.round(next * totalRows / 30), totalRows);
           const pct = Math.round(current / totalRows * 100);
-          setUploadProgressText(`已解析 ${current}/${totalRows} 条 (${pct}%)`);
-          return Math.min(next, 92);
+          setUploadProgressText(`正在解析文件... ${current}/${totalRows} 条 (${pct}%)`);
+          return Math.min(next, 30);
         });
-      }, 250);
+      }, 200);
 
-      // Step 3：上传文件到后端（后端再次解析并校验）
-      const formData = new FormData();
-      formData.append('file', file);
-      const res = await fetch('/api/waybills/upload', { method: 'POST', body: formData });
+      // Step 3：XHR 真实上传进度（fetch 不支持 upload.onprogress）
+      const json = await new Promise<Record<string, unknown>>((resolve, reject) => {
+        const xhr = new XMLHttpRequest();
+        const formData = new FormData();
+        formData.append('file', file);
 
-      // Step 4：清除定时器，设 100%
-      if (progressInterval) clearInterval(progressInterval);
+        xhr.upload.onprogress = (e) => {
+          if (e.lengthComputable) {
+            // 上传进度: 30%~95%
+            const uploadPct = Math.round((e.loaded / e.total) * 100);
+            const displayPct = Math.round(30 + uploadPct * 0.65);
+            setUploadProgress(displayPct);
+            setUploadProgressText(`正在上传... ${displayPct}%`);
+          }
+        };
+
+        xhr.onload = () => {
+          if (progressInterval) clearInterval(progressInterval);
+          try {
+            const data = JSON.parse(xhr.responseText);
+            if (xhr.status >= 200 && xhr.status < 300) {
+              resolve(data as Record<string, unknown>);
+            } else {
+              reject(new Error((data as { error?: string }).error || `上传失败 (${xhr.status})`));
+            }
+          } catch {
+            reject(new Error(xhr.statusText || '解析响应失败'));
+          }
+        };
+
+        xhr.onerror = () => {
+          if (progressInterval) clearInterval(progressInterval);
+          reject(new Error('网络错误，上传失败'));
+        };
+
+        xhr.open('POST', '/api/waybills/upload');
+        xhr.send(formData);
+      });
+
+      // Step 4：后端返回后，设 100%
       setUploadProgress(100);
-      setUploadProgressText(`已解析 ${totalRows}/${totalRows} 条 (100%)`);
+      setUploadProgressText(`上传完成，正在处理...`);
 
-      const json = await res.json();
-      if (!res.ok) {
-        showToast(json.error || '上传失败', 'error');
-        return;
-      }
-
-      setHeaders(json.headers || []);
-      setMapping(json.mapping || {});
-      setHeaderHash(json.headerHash || '');
-      setHasSavedMapping(json.hasSavedMapping || false);
-      setTemplateName(json.templateName || '');
-      setTemplateMatchNote(json.templateMatchNote || '');
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const data = json as any;
+      setHeaders(data.headers || []);
+      setMapping(data.mapping || {});
+      setHeaderHash(data.headerHash || '');
+      setHasSavedMapping(data.hasSavedMapping || false);
+      setTemplateName(data.templateName || '');
+      setTemplateMatchNote(data.templateMatchNote || '');
       setPendingMapping({});
       setDismissAutoApply(false);
       setIsManualMapping(false);
-      setIsGrouped(json.isGrouped || false);
-      setPreviewData(json.rows || []);
+      setIsGrouped(data.isGrouped || false);
+      setPreviewData(data.rows || []);
       // 保存原始行数据（不含表头），用于重新映射
-      setRawRows(json.rawRows || []);
+      setRawRows(data.rawRows || []);
       showToast(
-        `解析成功，共 ${json.totalCount} 条数据${json.totalErrors > 0 ? `，其中 ${json.totalErrors} 条有错误` : ''}`,
-        json.totalErrors > 0 ? 'warning' : 'success'
+        `解析成功，共 ${data.totalCount} 条数据${data.totalErrors > 0 ? `，其中 ${data.totalErrors} 条有错误` : ''}`,
+        data.totalErrors > 0 ? 'warning' : 'success'
       );
     } catch (e) {
       showToast('上传失败：' + (e instanceof Error ? e.message : String(e)), 'error');

@@ -94,5 +94,28 @@ export async function initDB() {
       updated_at     TIMESTAMPTZ DEFAULT NOW()
     )
   `;
+
+  // ========== 数据库迁移（冷启动自动执行，PostgreSQL ALTER IF NOT EXISTS 等效）==========
+  // 迁移记录表
+  await sql`
+    CREATE TABLE IF NOT EXISTS schema_migrations (
+      id         SERIAL PRIMARY KEY,
+      version    VARCHAR(20) NOT NULL UNIQUE,
+      applied_at TIMESTAMPTZ DEFAULT NOW()
+    )
+  `;
+
+  // Migration 001: waybills 字段扩展为 TEXT（已有 CREATE TABLE 时字段已是 TEXT，但存量数据表可能仍为 VARCHAR）
+  const [m001] = await sql`SELECT id FROM schema_migrations WHERE version = '001' LIMIT 1`;
+  if (!m001) {
+    try {
+      await sql`ALTER TABLE waybills ALTER COLUMN sender_address TYPE TEXT`;
+      await sql`ALTER TABLE waybills ALTER COLUMN receiver_address TYPE TEXT`;
+      await sql`ALTER TABLE waybills ALTER COLUMN remark TYPE TEXT`;
+      await sql`INSERT INTO schema_migrations (version) VALUES ('001')`;
+    } catch {
+      // 字段可能已是 TEXT 或表结构差异，忽略错误
+    }
+  }
 }
 
