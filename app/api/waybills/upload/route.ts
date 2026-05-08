@@ -409,6 +409,7 @@ export async function POST(request: Request) {
     return NextResponse.json({
       headers,
       rows: finalRows,
+      rawRows: dataRows,       // 原始行数据，用于重新映射
       totalCount: finalRows.length,
       totalErrors,
       mapping,

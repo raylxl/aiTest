@@ -397,6 +397,7 @@ export default function UniversalImport() {
 
   // 预览数据
   const [previewData, setPreviewData] = useState<WaybillRow[]>([]);
+  const [rawRows, setRawRows] = useState<unknown[][]>([]); // 原始 Excel 行数据，用于重新映射
   const [headers, setHeaders] = useState<string[]>([]);
   const [mapping, setMapping] = useState<Record<string, string>>({});
   const [headerHash, setHeaderHash] = useState('');
@@ -405,6 +406,7 @@ export default function UniversalImport() {
   const [templateMatchNote, setTemplateMatchNote] = useState('');
   const [isManualMapping, setIsManualMapping] = useState(false);
   const [pendingMapping, setPendingMapping] = useState<Record<string, string>>({});
+  const [isGrouped, setIsGrouped] = useState(false); // 是否为分组表头
 
   // 提交状态
   const [submitting, setSubmitting] = useState(false);
@@ -548,7 +550,10 @@ export default function UniversalImport() {
       setPendingMapping({});
       setDismissAutoApply(false);
       setIsManualMapping(false);
+      setIsGrouped(json.isGrouped || false);
       setPreviewData(json.rows || []);
+      // 保存原始行数据（不含表头），用于重新映射
+      setRawRows(json.rawRows || []);
       showToast(
         `解析成功，共 ${json.totalCount} 条数据${json.totalErrors > 0 ? `，其中 ${json.totalErrors} 条有错误` : ''}`,
         json.totalErrors > 0 ? 'warning' : 'success'
@@ -575,8 +580,10 @@ export default function UniversalImport() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           rows: previewData,
+          rawRows,           // 原始行数据，用新映射重新解析
           rawHeaders: headers,
           newMapping,
+          isGrouped,
         }),
       });
       const json = await res.json();
@@ -589,6 +596,7 @@ export default function UniversalImport() {
       setHasSavedMapping(json.hasSavedMapping || false);
       setTemplateMatchNote(json.templateMatchNote || '');
       setPendingMapping({});
+      setIsGrouped(json.isGrouped ?? false);
       setPreviewData(json.rows || []);
       showToast(
         `重新解析完成，共 ${json.totalCount} 条数据${json.totalErrors > 0 ? `，其中 ${json.totalErrors} 条有错误` : ''}`,
@@ -737,6 +745,7 @@ export default function UniversalImport() {
       );
       if (totalSuccess > 0) {
         setPreviewData([]);
+        setRawRows([]);
         setHeaders([]);
         setMapping({});
         setHeaderHash('');
@@ -1030,6 +1039,7 @@ export default function UniversalImport() {
                 templateMatchNote={templateMatchNote}
                 onReset={() => {
                   setPreviewData([]);
+                  setRawRows([]);
                   setHeaders([]);
                   setMapping({});
                   setHeaderHash('');
@@ -1040,6 +1050,7 @@ export default function UniversalImport() {
                   setTemplateMatchNote('');
                   setScrollTop(0);
                   setDismissAutoApply(false);
+                  setIsGrouped(false);
                 }}
               />
             )}
