@@ -71,14 +71,14 @@ export async function initDB() {
       external_code   VARCHAR(100) UNIQUE,
       sender_name     VARCHAR(100) NOT NULL,
       sender_phone    VARCHAR(20) NOT NULL,
-      sender_address  VARCHAR(500) NOT NULL,
+      sender_address  TEXT NOT NULL,
       receiver_name   VARCHAR(100) NOT NULL,
       receiver_phone  VARCHAR(20) NOT NULL,
-      receiver_address VARCHAR(500) NOT NULL,
+      receiver_address TEXT NOT NULL,
       weight          DECIMAL(10,2) NOT NULL,
       quantity        INTEGER NOT NULL,
       temp_layer      VARCHAR(20) NOT NULL,
-      remark          VARCHAR(500) DEFAULT '',
+      remark          TEXT DEFAULT '',
       status          VARCHAR(20) DEFAULT 'submitted',
       created_at      TIMESTAMPTZ DEFAULT NOW()
     )

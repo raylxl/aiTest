@@ -130,6 +130,12 @@ function validateRow(
   existingCodes: Set<string>,
   currentBatchCodes: Map<string, number>
 ): { errors: Record<string, string>; isValid: boolean } {
+  // 字段容错：trim 所有值，去除首尾空格
+  const trimmedRow: Record<string, string> = {};
+  for (const [key, val] of Object.entries(row)) {
+    trimmedRow[key] = String(val || '').trim();
+  }
+
   const errors: Record<string, string> = {};
 
   // 必填校验
@@ -146,7 +152,7 @@ function validateRow(
   ];
 
   for (const f of requiredFields) {
-    const val = String(row[f.key] || '').trim();
+    const val = trimmedRow[f.key];
     if (!val) errors[f.key] = '不能为空';
   }
 
@@ -156,32 +162,32 @@ function validateRow(
     { key: 'receiver_phone', label: '收件人电话' },
   ];
   for (const f of phoneFields) {
-    const val = String(row[f.key] || '').trim();
+    const val = trimmedRow[f.key];
     if (val && !/^1[3-9]\d{9}$/.test(val) && !/^0\d{2,3}-?\d{7,8}$/.test(val)) {
       if (!errors[f.key]) errors[f.key] = '格式错误（手机号11位或固话格式）';
     }
   }
 
-  // 重量正数
-  const weight = parseFloat(row.weight);
-  if (row.weight && (isNaN(weight) || weight <= 0)) {
+  // 重量正数（容错：去除空格后解析）
+  const weight = parseFloat(trimmedRow.weight);
+  if (trimmedRow.weight && (isNaN(weight) || weight <= 0)) {
     errors['weight'] = '必须为正数';
   }
 
-  // 件数正整数
-  const qty = parseInt(row.quantity);
-  if (row.quantity && (isNaN(qty) || qty <= 0 || !Number.isInteger(qty))) {
+  // 件数正整数（容错：去除空格后解析）
+  const qty = parseInt(trimmedRow.quantity);
+  if (trimmedRow.quantity && (isNaN(qty) || qty <= 0 || !Number.isInteger(qty))) {
     errors['quantity'] = '必须为正整数';
   }
 
   // 温层枚举值
-  const temp = String(row.temp_layer || '').trim();
+  const temp = trimmedRow.temp_layer;
   if (temp && !TEMP_LAYER_OPTIONS.includes(temp)) {
     errors['temp_layer'] = `可选值：${TEMP_LAYER_OPTIONS.join('、')}`;
   }
 
   // 外部编码重复检测（批次内）
-  const extCode = String(row.external_code || '').trim();
+  const extCode = trimmedRow.external_code;
   if (extCode) {
     if (currentBatchCodes.has(extCode)) {
       const firstRow = currentBatchCodes.get(extCode)!;
@@ -321,8 +327,12 @@ export async function POST(request: Request) {
       const row = dataRows[i] as unknown[];
       const rowIndex = i + headerRow + 2; // 1-based Excel行号
 
-      // 跳过全空行
-      if (!row.some(c => c !== '' && c !== null && c !== undefined)) continue;
+      // 跳过全空行（含仅空格的情况）
+      const hasContent = row.some(c => {
+        const s = String(c ?? '').trim();
+        return s !== '';
+      });
+      if (!hasContent) continue;
 
       // 将行数据映射到字段
       const mapped: Record<string, string> = {};
@@ -369,16 +379,17 @@ export async function POST(request: Request) {
       });
     }
 
-    // 批量查询已存在的外部编码（逐个查询）
+    // 批量查询已存在的外部编码（改为 ANY 数组查询，避免 N+1 问题）
     const existingCodeSet = new Set<string>();
     if (externalCodes.length > 0) {
       try {
-        for (const code of externalCodes) {
-          const exist = await sql`SELECT id FROM waybills WHERE external_code = ${code} LIMIT 1`;
-          if (exist.length > 0) existingCodeSet.add(code);
+        // PostgreSQL: external_code = ANY($1) — 数组作为单个参数，一次查询
+        const result = await sql`SELECT external_code FROM waybills WHERE external_code = ANY(${externalCodes})` as Array<{ external_code: string }>;
+        for (const r of result) {
+          existingCodeSet.add(r.external_code);
         }
       } catch {
-        // 查询失败，忽略
+        // 查询失败，降级忽略
       }
     }
 

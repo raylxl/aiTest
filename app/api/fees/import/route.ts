@@ -2,25 +2,25 @@ import { NextResponse } from 'next/server';
 import sql from '@/lib/db';
 
 // ============ 多模板字段映射配置 ============
-// key: 数据库字段名, value: 可能的 Excel 列名数组（按优先级排列）
+// key: 数据库字段名, value: 可能的 Excel 列名数组（按优先级排列，中文优先）
 const FIELD_MAPS: Array<Record<string, string[]>> = [
   // 标准模板（鲸天系统）
   {
-    fee_code: ['费用编号', '费用编码', '编号', '编码'],
-    fee_name: ['费用名称', '名称', '费用名'],
-    business_domain: ['所属业务域', '业务域', '业务类型', '业务线'],
-    price_types: ['所属报价', '报价类型', '价格类型'],
-    remark: ['备注', '说明', '描述'],
-    creator: ['创建人', '操作人', '录入人'],
+    fee_code: ['费用编号', '费用编码', '编号', '编码', 'fee_code', 'feeCode', 'Fee Code', 'Fee Code', 'code', 'Code', 'fee_id', 'feeId'],
+    fee_name: ['费用名称', '名称', '费用名', 'fee_name', 'feeName', 'Fee Name', 'name', 'Name'],
+    business_domain: ['所属业务域', '业务域', '业务类型', '业务线', 'business_domain', 'businessDomain', 'Business Domain', 'domain', 'Domain'],
+    price_types: ['所属报价', '报价类型', '价格类型', '报价', 'price_types', 'priceTypes', 'Price Types', 'price', 'Price'],
+    remark: ['备注', '说明', '描述', 'remark', 'Remark', 'note', 'Note', 'description', 'Description'],
+    creator: ['创建人', '操作人', '录入人', 'creator', 'Creator', 'created_by', 'Created By'],
   },
   // 简写模板
   {
-    fee_code: ['费用编号', '费用编码', '编号', '编码'],
-    fee_name: ['费用名称', '名称'],
-    business_domain: ['所属业务域', '业务域', '业务线'],
-    price_types: ['所属报价', '报价'],
-    remark: ['备注'],
-    creator: ['创建人', '操作人'],
+    fee_code: ['费用编号', '费用编码', '编号', '编码', 'fee_code', 'feeCode', 'Fee Code', 'code', 'Code', 'fee_id', 'feeId'],
+    fee_name: ['费用名称', '名称', 'fee_name', 'feeName', 'Fee Name', 'name', 'Name'],
+    business_domain: ['所属业务域', '业务域', '业务线', 'business_domain', 'businessDomain', 'Business Domain', 'domain', 'Domain'],
+    price_types: ['所属报价', '报价', 'price_types', 'priceTypes', 'Price Types', 'price', 'Price'],
+    remark: ['备注', 'remark', 'Remark', 'note', 'Note'],
+    creator: ['创建人', '操作人', 'creator', 'Creator', 'created_by'],
   },
 ];
 
@@ -239,7 +239,7 @@ export async function POST(request: Request) {
 
 // PUT /api/fees/import
 // Body: JSON { rows: [...], action: 'insert'|'skip', creator: string }
-// 支持大批量分批处理（超过200条时每100条为一批）
+// 支持大批量分批处理（每100条为一批），先去重再写入，避免 N+1
 export async function PUT(request: Request) {
   try {
     const body = await request.json();
@@ -265,29 +265,35 @@ export async function PUT(request: Request) {
     const errors: string[] = [];
     const BATCH_SIZE = 100;
 
-    // 分批写入：每次处理 BATCH_SIZE 条，减少数据库连接压力
+    // Step 1: 批量查询所有待导入 fee_code 中已存在于 DB 的
+    const feeCodes = rows.map(r => r.fee_code);
+    const existingRows = await sql`SELECT fee_code FROM fee_types WHERE fee_code = ANY(${feeCodes})` as Array<{ fee_code: string }>;
+    const existingSet = new Set(existingRows.map(r => r.fee_code));
+
+    // Step 2: 分批写入
     for (let i = 0; i < rows.length; i += BATCH_SIZE) {
       const batch = rows.slice(i, i + BATCH_SIZE);
 
       for (const row of batch) {
-        try {
-          // Check duplicate fee_code in DB
-          const exist = await sql`SELECT id FROM fee_types WHERE fee_code = ${row.fee_code}`;
-          if (exist.length > 0) {
-            if (action === 'skip') {
-              skipped++;
-              continue;
-            } else {
-              errors.push(`费用编号 ${row.fee_code} 已存在，跳过`);
-              continue;
-            }
+        // 已在 DB 中
+        if (existingSet.has(row.fee_code)) {
+          if (action === 'skip') {
+            skipped++;
+            continue;
+          } else {
+            errors.push(`费用编号 ${row.fee_code} 已存在，跳过`);
+            continue;
           }
+        }
 
+        try {
           await sql`
             INSERT INTO fee_types (fee_code, fee_name, business_domain, price_types, remark, creator, updater)
             VALUES (${row.fee_code}, ${row.fee_name}, ${row.business_domain}, ${row.price_types}, ${row.remark}, ${creator}, ${creator})
           `;
           inserted++;
+          // 标记为已存在，避免同批次重复
+          existingSet.add(row.fee_code);
         } catch (e) {
           const msg = e instanceof Error ? e.message : String(e);
           errors.push(`费用编号 ${row.fee_code} 写入失败：${msg}`);
@@ -298,7 +304,7 @@ export async function PUT(request: Request) {
     return NextResponse.json({
       inserted,
       skipped,
-      errors: errors.slice(0, 50), // Return first 50 errors
+      errors: errors.slice(0, 50),
       total: rows.length,
     });
   } catch (e: unknown) {

@@ -105,12 +105,35 @@ export const SYSTEM_FIELDS: SystemField[] = [
 
 // 列名别名映射表（用于自动识别）
 export const COLUMN_ALIAS_MAP: Record<string, string> = {
-  // 外部编码
+  // 外部编码（英文别名最全）
   '外部编码': 'external_code',
   '外部订单号': 'external_code',
-  'ref code': 'external_code',
   '客户单号': 'external_code',
   '单号': 'external_code',
+  'ref code': 'external_code',
+  'ref_code': 'external_code',
+  'refCode': 'external_code',
+  'Ref Code': 'external_code',
+  'reference_code': 'external_code',
+  'reference code': 'external_code',
+  'order_no': 'external_code',
+  'order no': 'external_code',
+  'orderNo': 'external_code',
+  'Order No': 'external_code',
+  'tracking_no': 'external_code',
+  'tracking no': 'external_code',
+  'trackingNo': 'external_code',
+  'Tracking No': 'external_code',
+  'waybill_no': 'external_code',
+  'waybill no': 'external_code',
+  'waybillNo': 'external_code',
+  'Waybill No': 'external_code',
+  'shipment_no': 'external_code',
+  'shipment no': 'external_code',
+  'shipmentNo': 'external_code',
+  'Shipment No': 'external_code',
+  'code': 'external_code',
+  'Code': 'external_code',
   // 发件人姓名
   '发件人姓名': 'sender_name',
   '发件人': 'sender_name',        // 分组模板别名
@@ -152,10 +175,17 @@ export const COLUMN_ALIAS_MAP: Record<string, string> = {
   'weight': 'weight',
   '重量(KG)': 'weight',
   '重量(Kg)': 'weight',
+  'w': 'weight',
+  'W': 'weight',
   // 件数
   '件数': 'quantity',
   '数量': 'quantity',
   'qty': 'quantity',
+  'QTY': 'quantity',
+  'count': 'quantity',
+  'Count': 'quantity',
+  'n': 'quantity',
+  'N': 'quantity',
   // 温层
   '温层': 'temp_layer',
   '温度要求': 'temp_layer',
