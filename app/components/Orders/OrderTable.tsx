@@ -69,16 +69,17 @@ export default function OrderTable({
   }, [orders, selectedIndices, onSelectionChange]);
 
   const headers = [
-    { key: 'index', label: '序号', width: 'w-16' },
-    { key: 'orderNo', label: '运单号', width: 'w-32' },
-    { key: 'receiverName', label: '收货人', width: 'w-24' },
+    { key: 'index', label: '序号', width: 'w-14' },
+    { key: 'orderNo', label: '外部编码', width: 'w-28' },
+    { key: 'storeName', label: '收货门店', width: 'w-28' },
+    { key: 'receiverName', label: '收件人', width: 'w-24' },
     { key: 'receiverPhone', label: '电话', width: 'w-28' },
-    { key: 'receiverAddress', label: '收货地址', width: 'w-48' },
-    { key: 'itemName', label: '物品名称', width: 'w-32' },
-    { key: 'itemCode', label: '物品编码', width: 'w-28' },
-    { key: 'quantity', label: '数量', width: 'w-20' },
-    { key: 'unit', label: '单位', width: 'w-16' },
-    { key: 'actions', label: '操作', width: 'w-24' },
+    { key: 'itemCode', label: 'SKU编码', width: 'w-28' },
+    { key: 'itemName', label: 'SKU名称', width: 'w-32' },
+    { key: 'quantity', label: '发货数量', width: 'w-22' },
+    { key: 'specification', label: '规格型号', width: 'w-26' },
+    { key: 'remark', label: '备注', width: 'w-28' },
+    { key: 'actions', label: '操作', width: 'w-20' },
   ];
 
   const renderRow = useCallback((order: ParsedOrder, index: number) => {
@@ -102,20 +103,33 @@ export default function OrderTable({
             />
           </td>
         )}
-        <td className="px-4 py-3 text-sm text-gray-500 w-16">{index + 1}</td>
-        <td className={`px-4 py-3 text-sm w-32 font-medium ${isDuplicate ? 'text-yellow-700' : 'text-gray-900'}`}>
+        <td className="px-4 py-3 text-sm text-gray-500 w-14">{index + 1}</td>
+        <td className={`px-4 py-3 text-sm w-28 font-medium ${isDuplicate ? 'text-yellow-700' : 'text-gray-900'}`}>
           {order.orderNo || '-'}
           {isDuplicate && <span className="ml-1 text-xs bg-yellow-200 text-yellow-800 px-1 rounded">重复</span>}
         </td>
+        <td className="px-4 py-3 text-sm w-28" title={order.storeName}>
+          {order.storeName ? (
+            <span className="inline-flex items-center gap-1">
+              <span className="w-2 h-2 rounded-full bg-[#0fc6c2] shrink-0"></span>
+              <span className="truncate max-w-[120px]">{order.storeName}</span>
+            </span>
+          ) : '-'}
+        </td>
         <td className="px-4 py-3 text-sm text-gray-900 w-24">{order.receiverName || '-'}</td>
         <td className="px-4 py-3 text-sm text-gray-500 w-28">{order.receiverPhone || '-'}</td>
-        <td className="px-4 py-3 text-sm text-gray-500 w-48 truncate" title={order.receiverAddress}>
-          {order.receiverAddress || '-'}
-        </td>
+        <td className="px-4 py-3 text-sm text-gray-500 w-28 font-mono">{order.itemCode || '-'}</td>
         <td className="px-4 py-3 text-sm text-gray-900 w-32">{order.itemName || '-'}</td>
-        <td className="px-4 py-3 text-sm text-gray-500 w-28">{order.itemCode || '-'}</td>
-        <td className="px-4 py-3 text-sm text-gray-900 w-20">{order.quantity ?? '-'}</td>
-        <td className="px-4 py-3 text-sm text-gray-500 w-16">{order.unit || '-'}</td>
+        <td className={`px-4 py-3 text-sm w-22 font-medium ${!order.quantity || order.quantity <= 0 ? 'text-red-600' : 'text-gray-900'}`}>
+          {order.quantity ?? '-'}
+          {!order.quantity && <span className="ml-1 text-xs text-red-400">缺</span>}
+        </td>
+        <td className="px-4 py-3 text-sm text-gray-500 w-26 truncate" title={order.specification}>
+          {order.specification || '-'}
+        </td>
+        <td className="px-4 py-3 text-sm text-gray-400 w-28 truncate" title={order.remark}>
+          {order.remark || '-'}
+        </td>
         <td className="px-4 py-3 text-sm w-24">
           <div className="flex gap-2">
             {onEdit && (
@@ -155,21 +169,34 @@ export default function OrderTable({
             />
           </div>
         )}
-        <div className="px-4 text-sm text-gray-500 w-16">{index + 1}</div>
-        <div className={`px-4 text-sm w-32 flex items-center gap-1 ${isDuplicate ? 'text-yellow-700 font-medium' : 'text-gray-900'}`}>
+        <div className="px-4 text-sm text-gray-500 w-14">{index + 1}</div>
+        <div className={`px-4 text-sm w-28 flex items-center gap-1 truncate ${isDuplicate ? 'text-yellow-700 font-medium' : 'text-gray-900'}`}>
           {order.orderNo || '-'}
-          {isDuplicate && <span className="text-xs bg-yellow-200 text-yellow-800 px-1 rounded">重复</span>}
+          {isDuplicate && <span className="text-xs bg-yellow-200 text-yellow-800 px-1 rounded shrink-0">重复</span>}
         </div>
-        <div className="px-4 text-sm text-gray-900 w-24">{order.receiverName || '-'}</div>
+        <div className="px-4 text-sm w-28 truncate" title={order.storeName}>
+          {order.storeName ? (
+            <span className="inline-flex items-center gap-1">
+              <span className="w-2 h-2 rounded-full bg-[#0fc6c2] shrink-0"></span>
+              <span className="truncate">{order.storeName}</span>
+            </span>
+          ) : '-'}
+        </div>
+        <div className="px-4 text-sm text-gray-900 w-24 truncate">{order.receiverName || '-'}</div>
         <div className="px-4 text-sm text-gray-500 w-28">{order.receiverPhone || '-'}</div>
-        <div className="px-4 text-sm text-gray-500 w-48 truncate" title={order.receiverAddress}>
-          {order.receiverAddress || '-'}
+        <div className="px-4 text-sm text-gray-500 w-28 font-mono truncate">{order.itemCode || '-'}</div>
+        <div className="px-4 text-sm text-gray-900 w-32 truncate">{order.itemName || '-'}</div>
+        <div className={`px-4 text-sm w-22 font-medium ${!order.quantity || order.quantity <= 0 ? 'text-red-600' : 'text-gray-900'}`}>
+          {order.quantity ?? '-'}
+          {!order.quantity && <span className="ml-1 text-xs text-red-400">缺</span>}
         </div>
-        <div className="px-4 text-sm text-gray-900 w-32">{order.itemName || '-'}</div>
-        <div className="px-4 text-sm text-gray-500 w-28">{order.itemCode || '-'}</div>
-        <div className="px-4 text-sm text-gray-900 w-20">{order.quantity ?? '-'}</div>
-        <div className="px-4 text-sm text-gray-500 w-16">{order.unit || '-'}</div>
-        <div className="px-4 text-sm w-24">
+        <div className="px-4 text-sm text-gray-500 w-26 truncate" title={order.specification}>
+          {order.specification || '-'}
+        </div>
+        <div className="px-4 text-sm text-gray-400 w-28 truncate" title={order.remark}>
+          {order.remark || '-'}
+        </div>
+        <div className="px-4 text-sm w-20">
           <div className="flex gap-2">
             {onEdit && (
               <button onClick={() => onEdit(index, order)} className="text-[#0fc6c2] hover:text-[#0aa8a4]">编辑</button>

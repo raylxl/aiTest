@@ -63,7 +63,9 @@ export interface MultiSourceConfig {
 
 export interface RecipientConfig {
   source: 'inline' | 'footer' | 'header' | 'separate';
+  mode?: 'store' | 'receiver' | 'both';  // A组(门店) / B组(收件人) / 两组都填
   fields: {
+    storeName?: string | { row: number; col: number } | { pattern: string }; // 收货门店
     name?: string | { row: number; col: number } | { pattern: string };
     phone?: string | { row: number; col: number } | { pattern: string };
     address?: string | { row: number; col: number } | { pattern: string };
@@ -98,19 +100,31 @@ export interface ParseRule {
 
 // 解析后的运单数据
 export interface ParsedOrder {
-  orderNo?: string;
+  orderNo?: string;              // 外部编码（用于去重和聚合）
+
+  // A组：门店模式（只需填收货门店）
+  storeName?: string;            // 收货门店/机构名称
+
+  // B组：收件人模式（需填以下三个）
+  receiverName?: string;         // 收件人姓名
+  receiverPhone?: string;        // 收件人联系方式
+  receiverAddress?: string;      // 收件人完整地址
+
+  // 发货方信息（可选）
   senderName?: string;
   senderPhone?: string;
   senderAddress?: string;
-  receiverName?: string;
-  receiverPhone?: string;
-  receiverAddress?: string;
-  itemName?: string;
-  itemCode?: string;
-  itemCategory?: string;
-  specification?: string;
-  quantity?: number;
+
+  // SKU 物品信息
+  itemCode?: string;             // SKU 物品编码（必填）
+  itemName?: string;             // SKU 物品名称（必填)
+  itemCategory?: string;         // 物品分类
+  specification?: string;        // SKU 规格型号
+  quantity?: number;             // SKU 发货数量（必填，正数）
   unit?: string;
+
+  remark?: string;               // 备注
+
   extraFields?: Record<string, any>;
   sourceRow?: number;
   sourceSheet?: string;

@@ -116,19 +116,21 @@ export async function initDB() {
     CREATE TABLE IF NOT EXISTS import_orders (
       id              SERIAL PRIMARY KEY,
       batch_id        INTEGER REFERENCES import_batches(id),
-      order_no        VARCHAR(100),
+      order_no        VARCHAR(100),              -- 外部编码（用于去重和聚合）
+      store_name      VARCHAR(200),             -- 收货门店/机构名称（A组门店模式）
       sender_name     VARCHAR(100),
       sender_phone    VARCHAR(20),
       sender_address  TEXT,
-      receiver_name   VARCHAR(100),
+      receiver_name   VARCHAR(100),             -- B组收件人模式
       receiver_phone  VARCHAR(20),
       receiver_address TEXT,
-      item_name       VARCHAR(200),
-      item_code       VARCHAR(100),
+      item_name       VARCHAR(200),             -- SKU 物品名称（必填）
+      item_code       VARCHAR(100),             -- SKU 物品编码（必填）
       item_category   VARCHAR(100),
-      specification   VARCHAR(200),
-      quantity        DECIMAL(10,2),
+      specification   VARCHAR(200),            -- SKU 规格型号
+      quantity        DECIMAL(10,2),            -- SKU 发货数量（必填，正数）
       unit            VARCHAR(20),
+      remark          TEXT,                     -- 备注
       source_file     VARCHAR(200),
       source_sheet    VARCHAR(100),
       source_row      INTEGER,
@@ -200,6 +202,24 @@ export async function initDB() {
       await sql`INSERT INTO schema_migrations (version) VALUES ('002')`;
     } catch {
       // 迁移可能部分成功，忽略错误
+    }
+  }
+
+  // Migration 003: import_orders 表新增 store_name(收货门店) + remark(备注) 字段（A/B组下单模式支持）
+  const [m003] = await sql`SELECT id FROM schema_migrations WHERE version = '003' LIMIT 1`;
+  if (!m003) {
+    try {
+      await sql`ALTER TABLE import_orders ADD COLUMN IF NOT EXISTS store_name VARCHAR(200)`;
+      await sql`ALTER TABLE import_orders ADD COLUMN IF NOT EXISTS remark TEXT`;
+      // 给 order_no 添加注释说明（外部编码用于去重聚合）
+      await sql`COMMENT ON COLUMN import_orders.order_no IS '外部编码：外部系统订单唯一编号，用于去重和聚合'`;
+      await sql`COMMENT ON COLUMN import_orders.store_name IS '收货门店/机构名称（A组门店模式必填）'`;
+      await sql`COMMENT ON COLUMN import_orders.item_name IS 'SKU物品名称（必填）'`;
+      await sql`COMMENT ON COLUMN import_orders.item_code IS 'SKU物品编码（必填）'`;
+      await sql`COMMENT ON COLUMN import_orders.quantity IS 'SKU发货数量（必填，必须为正数）'`;
+      await sql`INSERT INTO schema_migrations (version) VALUES ('003')`;
+    } catch {
+      // 字段可能已存在或权限不足，忽略错误继续运行
     }
   }
 }

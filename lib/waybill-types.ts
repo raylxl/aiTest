@@ -90,121 +90,86 @@ export interface SystemField {
 }
 
 export const SYSTEM_FIELDS: SystemField[] = [
-  { key: 'external_code', label: '外部编码', required: false },
-  { key: 'sender_name', label: '发件人姓名', required: true },
-  { key: 'sender_phone', label: '发件人电话', required: true },
-  { key: 'sender_address', label: '发件人地址', required: true },
-  { key: 'receiver_name', label: '收件人姓名', required: true },
-  { key: 'receiver_phone', label: '收件人电话', required: true },
-  { key: 'receiver_address', label: '收件人地址', required: true },
-  { key: 'weight', label: '重量(kg)', required: true },
-  { key: 'quantity', label: '件数', required: true },
-  { key: 'temp_layer', label: '温层', required: true, options: ['常温', '冷藏', '冷冻'] },
+  { key: 'order_no', label: '外部编码', required: false },
+  // A组：门店模式
+  { key: 'store_name', label: '收货门店', required: false },
+  // B组：收件人模式（三选一或三选全）
+  { key: 'receiver_name', label: '收件人姓名', required: false },
+  { key: 'receiver_phone', label: '收件人电话', required: false },
+  { key: 'receiver_address', label: '收件人地址', required: false },
+  // 发货方
+  { key: 'sender_name', label: '发件人姓名', required: false },
+  { key: 'sender_phone', label: '发件人电话', required: false },
+  { key: 'sender_address', label: '发件人地址', required: false },
+  // SKU 物品信息
+  { key: 'item_code', label: 'SKU物品编码', required: true },
+  { key: 'item_name', label: 'SKU物品名称', required: true },
+  { key: 'quantity', label: 'SKU发货数量', required: true },
+  { key: 'specification', label: 'SKU规格型号', required: false },
   { key: 'remark', label: '备注', required: false },
 ];
 
-// 列名别名映射表（用于自动识别）
+// 列名别名映射表（用于自动识别，适配考试要求的下单字段定义）
 export const COLUMN_ALIAS_MAP: Record<string, string> = {
-  // 外部编码（英文别名最全）
-  '外部编码': 'external_code',
-  '外部订单号': 'external_code',
-  '客户单号': 'external_code',
-  '单号': 'external_code',
-  'ref code': 'external_code',
-  'ref_code': 'external_code',
-  'refCode': 'external_code',
-  'Ref Code': 'external_code',
-  'reference_code': 'external_code',
-  'reference code': 'external_code',
-  'order_no': 'external_code',
-  'order no': 'external_code',
-  'orderNo': 'external_code',
-  'Order No': 'external_code',
-  'tracking_no': 'external_code',
-  'tracking no': 'external_code',
-  'trackingNo': 'external_code',
-  'Tracking No': 'external_code',
-  'waybill_no': 'external_code',
-  'waybill no': 'external_code',
-  'waybillNo': 'external_code',
-  'Waybill No': 'external_code',
-  'shipment_no': 'external_code',
-  'shipment no': 'external_code',
-  'shipmentNo': 'external_code',
-  'Shipment No': 'external_code',
-  'code': 'external_code',
-  'Code': 'external_code',
-  // 发件人姓名
-  '发件人姓名': 'sender_name',
-  '发件人': 'sender_name',        // 分组模板别名
-  '发货人': 'sender_name',
-  'sender': 'sender_name',
-  'Sender': 'sender_name',
-  '寄件人': 'sender_name',
-  '寄件人姓名': 'sender_name',
-  // 发件人电话
-  '发件人电话': 'sender_phone',
-  '发件电话': 'sender_phone',      // 分组模板别名
-  '发货电话': 'sender_phone',
-  'sender tel': 'sender_phone',
-  'Sender Tel': 'sender_phone',
-  '寄件人电话': 'sender_phone',
-  // 发件人地址
-  '发件人地址': 'sender_address',
-  '发件地址': 'sender_address',    // 分组模板别名
-  '发货地址': 'sender_address',
-  'sender address': 'sender_address',
-  'Sender Address': 'sender_address',
-  '寄件人地址': 'sender_address',
-  // 收件人姓名
-  '收件人姓名': 'receiver_name',
-  '收件人': 'receiver_name',       // 分组模板别名
-  '收货人': 'receiver_name',
-  'receiver': 'receiver_name',
-  'Receiver': 'receiver_name',
-  // 收件人电话
-  '收件人电话': 'receiver_phone',
-  '收件电话': 'receiver_phone',     // 分组模板别名
-  '收货电话': 'receiver_phone',
-  'receiver tel': 'receiver_phone',
-  'Receiver Tel': 'receiver_phone',
-  // 收件人地址
-  '收件人地址': 'receiver_address',
-  '收件地址': 'receiver_address',   // 分组模板别名
-  '收货地址': 'receiver_address',
-  'receiver address': 'receiver_address',
-  'Receiver Address': 'receiver_address',
-  // 重量
-  '重量(kg)': 'weight',
-  '重量': 'weight',
-  'weight(kg)': 'weight',
-  'weight': 'weight',
-  'Weight(kg)': 'weight',
-  'Weight': 'weight',
-  '重量(KG)': 'weight',
-  '重量(Kg)': 'weight',
-  'w': 'weight',
-  'W': 'weight',
-  // 件数
-  '件数': 'quantity',
-  '数量': 'quantity',
-  'qty': 'quantity',
-  'Qty': 'quantity',
-  'QTY': 'quantity',
-  'count': 'quantity',
-  'Count': 'quantity',
-  'n': 'quantity',
-  'N': 'quantity',
-  // 温层
-  '温层': 'temp_layer',
-  '温度要求': 'temp_layer',
-  'temp zone': 'temp_layer',
-  'Temp Zone': 'temp_layer',
+  // 外部编码
+  '外部编码': 'order_no',
+  '外部订单号': 'order_no',
+  '客户单号': 'order_no',
+  '单号': 'order_no',
+  'ref code': 'order_no', 'ref_code': 'order_no', 'refCode': 'order_no',
+  'Ref Code': 'order_no', 'reference_code': 'order_no', 'reference code': 'order_no',
+  'orderNo': 'order_no', 'Order No': 'order_no',
+  'tracking_no': 'order_no', 'trackingNo': 'order_no', 'Tracking No': 'order_no',
+  'waybill_no': 'order_no', 'waybillNo': 'order_no', 'Waybill No': 'order_no',
+  'shipment_no': 'order_no', 'shipmentNo': 'order_no', 'Shipment No': 'order_no',
+
+  // A组：收货门店（门店模式必填）
+  '收货门店': 'store_name',
+  '门店': 'store_name',
+  '店铺名称': 'store_name',
+  '机构名称': 'store_name',
+  '门店名称': 'store_name',
+  '收货店铺': 'store_name',
+  '配送门店': 'store_name',
+  'storeName': 'store_name', 'store name': 'store_name', 'Store Name': 'store_name',
+
+  // 发货方
+  '发件人姓名': 'sender_name', '发件人': 'sender_name', '发货人': 'sender_name',
+  'sender': 'sender_name', 'Sender': 'sender_name', '寄件人': 'sender_name', '寄件人姓名': 'sender_name',
+  '发件人电话': 'sender_phone', '发电话': 'sender_phone', '发货电话': 'sender_phone',
+  'sender tel': 'sender_phone', 'Sender Tel': 'sender_phone', '寄件人电话': 'sender_phone',
+  '发件人地址': 'sender_address', '发地址': 'sender_address', '发货地址': 'sender_address',
+  'sender address': 'sender_address', 'Sender Address': 'sender_address', '寄件人地址': 'sender_address',
+
+  // B组：收件人信息
+  '收件人姓名': 'receiver_name', '收件人': 'receiver_name', '收货人': 'receiver_name',
+  'receiver': 'receiver_name', 'Receiver': 'receiver_name',
+  '收件人电话': 'receiver_phone', '收电话': 'receiver_phone', '收货电话': 'receiver_phone',
+  'receiver tel': 'receiver_phone', 'Receiver Tel': 'receiver_phone',
+  '收件人地址': 'receiver_address', '收地址': 'receiver_address', '收货地址': 'receiver_address',
+  'receiver address': 'receiver_address', 'Receiver Address': 'receiver_address',
+
+  // SKU 物品编码（必填）
+  'SKU物品编码': 'item_code', '物品编码': 'item_code', 'SKU编码': 'item_code',
+  '商品编码': 'item_code', '条码': 'item_code', 'skuCode': 'item_code',
+  'SKU Code': 'item_code', 'itemCode': 'item_code', '编码': 'item_code',
+
+  // SKU 物品名称（必填）
+  'SKU物品名称': 'item_name', '物品名称': 'item_name', 'SKU名称': 'item_name',
+  '商品名称': 'item_name', '品名': 'item_name', '货品': 'item_name',
+  'itemName': 'item_name', 'Item Name': 'item_name', '物品': 'item_name',
+
+  // SKU 发货数量（必填，正数）
+  'SKU发货数量': 'quantity', '发货数量': 'quantity', '数量': 'quantity',
+  '件数': 'quantity', 'qty': 'quantity', 'Qty': 'quantity', 'QTY': 'quantity',
+  'count': 'quantity', 'Count': 'quantity',
+
+  // SKU 规格型号
+  'SKU规格型号': 'specification', '规格型号': 'specification',
+  '规格': 'specification', '型号': 'specification',
+
   // 备注
-  '备注': 'remark',
-  '附言': 'remark',
-  'note': 'remark',
-  'Note': 'remark',
+  '备注': 'remark', '附言': 'remark', 'note': 'remark', 'Note': 'remark',
 };
 
 // 温层可选值

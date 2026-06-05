@@ -240,13 +240,15 @@ export class ParseEngine {
     const columns: ColumnMapping[] = [];
     const fieldNameMap: Record<string, string> = {
       '单号': 'orderNo', '运单号': 'orderNo', '配送单号': 'orderNo', '订单号': 'orderNo',
+      '外部编码': 'orderNo', '外部订单号': 'orderNo', '客户单号': 'orderNo', '参考编码': 'orderNo',
+      '门店': 'storeName', '收货门店': 'storeName', '店铺': 'storeName', '机构': 'storeName',
       '收货人': 'receiverName', '收件人': 'receiverName',
       '电话': 'receiverPhone', '手机': 'receiverPhone', '联系电话': 'receiverPhone',
       '地址': 'receiverAddress', '收货地址': 'receiverAddress', '收件地址': 'receiverAddress',
       '商品': 'itemName', '物品': 'itemName', '品名': 'itemName', '货品': 'itemName', 'SKU': 'itemName',
-      '编码': 'itemCode', '条码': 'itemCode',
+      '编码': 'itemCode', '条码': 'itemCode', 'SKU码': 'itemCode', '物品编码': 'itemCode',
       '数量': 'quantity', '件数': 'quantity', '发货数量': 'quantity',
-      '规格': 'specification', '型号': 'specification',
+      '规格': 'specification', '型号': 'specification', '规格型号': 'specification',
       '单位': 'unit',
     };
     
@@ -324,25 +326,62 @@ export class ParseEngine {
   }
 
   /**
-   * 校验订单数据
+   * 校验订单数据（A/B 组二选一业务规则）
+   *
+   * 考试要求：
+   * - A组（门店模式）：只需填写"收货门店"(storeName)，不要求收件人姓名/电话/地址
+   * - B组（收件人模式）：需填写"收件人姓名 + 收件人电话 + 收件人地址"三个字段
+   * - 两组都填也可以，但至少填一组。两组都没填则校验不通过
+   * - SKU物品编码、SKU物品名称：必填
+   * - SKU发货数量：必填且必须为正数
    */
   private validateOrders(orders: ParsedOrder[]): ParsedOrder[] {
     return orders.map(order => {
       const errors: string[] = [];
 
-      // 必填字段校验
-      if (!order.itemName && !order.receiverName) {
-        errors.push('缺少物品名称或收货人信息');
+      // ========== A/B 组二选一校验 ==========
+      // 判断A组（门店模式）是否完整
+      const groupAComplete = Boolean(order.storeName?.trim());
+
+      // 判断B组（收件人模式）是否完整（三个字段都需有值）
+      const groupBComplete = Boolean(
+        order.receiverName?.trim() &&
+        order.receiverPhone?.trim() &&
+        order.receiverAddress?.trim()
+      );
+
+      if (!groupAComplete && !groupBComplete) {
+        errors.push(
+          '收货信息不完整：请填写「收货门店」（A组门店模式），' +
+          '或填写完整的「收件人姓名 + 电话 + 地址」（B组收件人模式）'
+        );
       }
 
-      // 电话格式校验
-      if (order.receiverPhone && !/^1\d{10}$/.test(order.receiverPhone)) {
-        // 不是标准手机号，但可能是座机，不报错
+      // ========== SKU 必填校验 ==========
+      if (!order.itemCode?.trim()) {
+        errors.push('SKU物品编码为必填项');
+      }
+      if (!order.itemName?.trim()) {
+        errors.push('SKU物品名称为必填项');
       }
 
-      // 数量校验
-      if (order.quantity !== undefined && order.quantity < 0) {
-        errors.push('数量不能为负数');
+      // ========== 数量校验（必须为正数）==========
+      if (order.quantity === undefined || order.quantity === null) {
+        errors.push('SKU发货数量为必填项');
+      } else if (typeof order.quantity === 'number') {
+        if (order.quantity <= 0) {
+          errors.push('SKU发货数量必须为正数');
+        }
+        // 检查是否为整数或合理小数（最多2位小数）
+        if (order.quantity !== Math.floor(order.quantity * 100) / 100) {
+          errors.push('SKU发货数量最多保留2位小数');
+        }
+      }
+
+      // ========== 电话格式校验（提示性，非阻塞）==========
+      if (order.receiverPhone?.trim() && !/^1\d{10}$/.test(order.receiverPhone.trim())) {
+        // 不是标准11位手机号，可能是座机或其他格式
+        // 仅记录警告，不作为错误阻止提交
       }
 
       return {
