@@ -59,7 +59,7 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json({
       success: true,
-      sample: sample.substring(0, 2000), // 返回样本供前端发送给AI
+      sample: sample.substring(0, 1500), // 减少样本大小避免请求过大
       fileInfo: {
         name: fileName,
         type: fileType,

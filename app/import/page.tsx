@@ -21,65 +21,41 @@ interface AnalyzedFile {
   error?: string;
 }
 
-// AI系统提示词
-const AI_SYSTEM_PROMPT = `你是一个文件解析规则生成专家。你的任务是根据用户提供的文件样本，生成JSON格式的解析规则。
+// AI系统提示词 - 精简版
+const AI_SYSTEM_PROMPT = `你是文件解析规则生成专家。根据文件样本生成JSON解析规则。
 
-## 规则类型说明
+## 规则类型：table(标准表格) / matrix(矩阵转置) / card(卡片堆叠) / text(正则提取) / multi-sheet(多Sheet合并) / multi-page(多页PDF)
 
-1. **table** - 标准表格格式：有明确的表头行和数据行
-2. **matrix** - 矩阵格式：SKU×门店矩阵，需要转置
-3. **card** - 卡片格式：多个独立卡片堆叠
-4. **text** - 纯文本格式：无表格，用正则提取
-5. **multi-sheet** - 多Sheet格式：Excel有多个Sheet，每个Sheet结构相同
-6. **multi-page** - 多页格式：PDF有多个独立单元
-
-## 输出格式
-
-请输出严格的JSON格式，结构如下：
-
+## 输出JSON格式：
 \`\`\`json
 {
   "name": "规则名称",
   "description": "规则描述",
   "fileTypes": ["excel"],
   "parser": {
-    "type": "table|matrix|card|text|multi-sheet",
+    "type": "table",
     "table": {
       "headerRow": 0,
       "dataStartRow": 1,
       "columns": [
-        {"sourceIndex": 0, "targetField": "字段名", "dataType": "string|number"}
+        {"sourceIndex": 0, "targetField": "字段名", "dataType": "string"}
       ]
     }
   },
   "recipient": {
-    "source": "footer|inline|header",
+    "source": "footer",
     "fields": {
-      "name": {"pattern": "收货人[：:]\\\\s*(.+?)(?:\\\\s|$)"},
-      "phone": {"pattern": "(?:电话|手机)[：:]\\\\s*(\\\\d+)"},
-      "address": {"pattern": "(?:地址|收货地址)[：:]\\\\s*(.+)"}
+      "name": {"pattern": "收货人[：:]\\\\s*(.+)"},
+      "phone": {"pattern": "电话[：:]\\\\s*(\\\\d+)"},
+      "address": {"pattern": "地址[：:]\\\\s*(.+)"}
     }
   }
 }
 \`\`\`
 
-## 重要：multi-sheet模式
-
-当文件有多个Sheet时，必须使用multi-sheet类型，**并且必须同时提供table配置**（用于解析每个Sheet的数据）。示例：
-\`\`\`json
-{
-  "parser": {
-    "type": "multi-sheet",
-    "table": {
-      "headerRow": 0,
-      "dataStartRow": 1,
-      "columns": [...]
-    }
-  }
-}
-\`\`\`
-
-## 字段映射规则
+## multi-sheet必须提供table配置
+## targetField标准字段：orderNo(单号) / receiverName(收货人) / receiverPhone(电话) / receiverAddress(地址) / itemName(商品) / quantity(数量) / specification(规格)
+## 识别表头行，跳过空行和汇总行
 
 targetField应使用以下标准字段名：
 - 运单号/单据号/配送单号 → orderNo
