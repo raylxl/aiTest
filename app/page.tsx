@@ -88,7 +88,7 @@ function MenuPlaceholder({ title, subtitle }: { title: string; subtitle?: string
 
 // ============ 菜单名称映射 ============
 const MENU_ITEM_MAP: Record<string, { title: string; subtitle?: string }> = {
-  home: { title: '首页', subtitle: '欢迎使用中通冷链管理系统' },
+  home: { title: '首页', subtitle: '欢迎使用智能多格式批量下单系统' },
   fence: { title: '网点围栏管理' }, 'fence-audit': { title: '围栏审核管理' }, 'outlet-new': { title: '新营业网点' }, 'sales-fence': { title: '业务员围栏' }, 'biz-config': { title: '业务配置' }, 'biz-dict': { title: '业务字典' },
   'base-price': { title: '基础报价' }, 'price-manage': { title: '价格管理' }, 'trans-ops': { title: '运营运输管理' }, 'freight-bill': { title: '账单管理' }, 'ops-manage': { title: '运营操作管理' }, handover: { title: '出港交接单' }, 'it-center': { title: 'IT管理中心' }, 'data-monitor': { title: '数据监控' }, 'cl-report': { title: '仓链报表' }, 'ty-bigdata': { title: '天易大数据平台' }, 'base-quote': { title: '基础报价' }, 'price-ctrl': { title: '价格管理' },
   attend: { title: '考勤管理' }, 'attend-stat': { title: '考勤统计' }, replenish: { title: '补卡申请' }, leave: { title: '请假申请' }, field: { title: '外勤管理' },
@@ -324,7 +324,7 @@ export default function FeeManager() {
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', height: '100vh', overflow: 'auto', fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "PingFang SC", sans-serif', background: 'rgb(243,249,254)' }}>
-      {/* 顶部导航 — 鲸天系统渐变顶栏 */}
+      {/* 顶部导航 */}
       <header style={{ background: 'linear-gradient(90deg, rgb(1,190,190) 0%, rgb(0,77,114) 100%)', height: 56, display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '0 16px', boxShadow: '0 1px 4px rgba(0,21,41,.25)', flexShrink: 0, position: 'relative', zIndex: 200 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
           <button onClick={() => setCollapsed(!collapsed)} title={collapsed ? '展开菜单' : '折叠菜单'}
