@@ -557,30 +557,80 @@ export default function ImportPage() {
     showToast('success', `已删除 ${selectedIndices.length} 条记录`);
   };
 
-  // 编辑订单
-  const handleEditOrder = (index: number, order: ParsedOrder) => {
-    const newValue = prompt('请输入新的收货人姓名', order.receiverName || '');
-    if (newValue !== null) {
-      setOrders((prev: ParsedOrder[]) => {
-        const newOrders = [...prev];
-        newOrders[index] = { ...newOrders[index], receiverName: newValue };
-        return newOrders;
-      });
-    }
-  };
-
   // 删除单个订单
   const handleDeleteOrder = (index: number) => {
     setOrders((prev: ParsedOrder[]) => prev.filter((_, i) => i !== index));
     showToast('success', '已删除');
   };
 
-  // 批量提交
+  // 批量提交（校验+进度条+阻止错误行）
+  const [submitting, setSubmitting] = useState(false);
+  const [submitProgress, setSubmitProgress] = useState(0);
   const handleSubmitOrders = async () => {
     if (orders.length === 0) { showToast('warning', '没有可提交的数据'); return; }
-    const submitData = selectedIndices.length > 0 ? orders.filter((_, i) => selectedIndices.includes(i)) : filteredOrders;
-    showToast('info', `准备提交 ${submitData.length} 条运单...`);
-    showToast('success', `成功提交 ${submitData.length} 条运单`);
+
+    // 检查错误行
+    const errorOrders = orders.filter(o => !o.isValid);
+    if (errorOrders.length > 0) {
+      showToast('error', `有 ${errorOrders.length} 条数据存在错误，请先修正后再提交！点击"⚠X条有误"查看详情`);
+      return;
+    }
+
+    // 确认提交
+    if (!confirm(`确定要提交 ${orders.length} 条运单吗？`)) return;
+
+    setSubmitting(true);
+    setSubmitProgress(0);
+
+    try {
+      const submitData = selectedIndices.length > 0 ? orders.filter((_, i) => selectedIndices.includes(i)) : orders;
+      const BATCH_SIZE = 100; // 分批提交
+
+      let successCount = 0;
+      let failCount = 0;
+      const totalBatches = Math.ceil(submitData.length / BATCH_SIZE);
+
+      for (let batchIdx = 0; batchIdx < totalBatches; batchIdx++) {
+        const start = batchIdx * BATCH_SIZE;
+        const end = Math.min(start + BATCH_SIZE, submitData.length);
+        const batch = submitData.slice(start, end);
+
+        setSubmitProgress(Math.round((batchIdx / totalBatches) * 90));
+        showToast('info', `正在提交第 ${start + 1} ~ ${end} 条，共 ${submitData.length} 条...`);
+
+        const response = await fetch('/api/import-orders', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            orders: batch,
+            fileName: analyzedFiles.map(f => f.file.name).join(', '),
+            fileType: analyzedFiles[0]?.fileInfo?.type || 'unknown',
+            ruleName: analyzedFiles[0]?.rule?.name || '',
+            ruleJson: analyzedFiles[0]?.rule || {},
+          }),
+        });
+        const data = await response.json();
+
+        if (data.success) {
+          successCount += batch.length;
+        } else {
+          failCount += batch.length;
+        }
+      }
+
+      setSubmitProgress(100);
+      if (failCount === 0) {
+        showToast('success', `全部提交成功！共 ${successCount} 条运单已入库`);
+      } else {
+        showToast('warning', `提交完成：成功 ${successCount} 条，失败 ${failCount} 条`);
+      }
+    } catch (err) {
+      console.error('提交失败:', err);
+      showToast('error', '提交失败，请检查网络连接');
+    } finally {
+      setSubmitting(false);
+      setTimeout(() => setSubmitProgress(0), 2000);
+    }
   };
 
   // 保存到数据库
@@ -873,10 +923,18 @@ export default function ImportPage() {
                     className="px-3 sm:px-4 py-1.5 sm:py-2 bg-[#0fc6c2] text-white rounded-lg text-xs sm:text-sm font-medium hover:bg-[#0aa8a4] disabled:opacity-50 transition-colors shrink-0">
                     📥 导出
                   </button>
-                  <button onClick={handleSubmitOrders} disabled={orders.length === 0}
-                    className="px-3 sm:px-4 py-1.5 sm:py-2 bg-green-500 text-white rounded-lg text-xs sm:text-sm font-medium hover:bg-green-600 disabled:opacity-50 transition-colors shrink-0">
-                    🚀 提交
+                  <button onClick={handleSubmitOrders}
+                    disabled={orders.length === 0 || submitting}
+                    className="px-3 sm:px-4 py-1.5 sm:py-2 bg-green-500 text-white rounded-lg text-xs sm:text-sm font-medium hover:bg-green-600 disabled:opacity-50 transition-colors shrink-0 min-w-[80px]">
+                    {submitting ? `提交中 ${submitProgress}%` : '🚀 提交'}
                   </button>
+                  {/* 提交进度条 */}
+                  {submitting && submitProgress > 0 && (
+                    <div className="w-full sm:w-48 h-2 bg-gray-200 rounded-full overflow-hidden">
+                      <div className="h-full bg-green-500 transition-all duration-300"
+                        style={{ width: `${submitProgress}%` }} />
+                    </div>
+                  )}
                   {/* 次要操作 - 小屏隐藏文字只留图标，或折叠 */}
                   <button onClick={handleDeleteSelected} disabled={selectedIndices.length === 0}
                     className="hidden xs:inline-flex px-3 sm:px-4 py-1.5 sm:py-2 bg-red-500 text-white rounded-lg text-xs sm:text-sm font-medium hover:bg-red-600 disabled:opacity-50 transition-colors items-center gap-1 shrink-0">
@@ -940,10 +998,25 @@ export default function ImportPage() {
             {/* 运单表格 */}
             <OrderTable
               orders={filteredOrders}
+              onOrdersChange={(updated: ParsedOrder[]) => {
+                // 保持原始数据顺序：filteredOrders 是筛选后的视图
+                // 需要回写到 orders 中对应的位置
+                setOrders((prev: ParsedOrder[]) => {
+                  if (prev === filteredOrders) return updated;
+                  // 如果有筛选条件，需要更精确地合并
+                  const result = [...prev];
+                  updated.forEach((u, i) => {
+                    const origIdx = prev.findIndex(o =>
+                      o.orderNo === u.orderNo && o.itemCode === u.itemCode && o.itemName === u.itemName
+                    );
+                    if (origIdx >= 0) result[origIdx] = u;
+                  });
+                  return result;
+                });
+              }}
               selectable
               selectedIndices={selectedIndices}
               onSelectionChange={setSelectedIndices}
-              onEdit={handleEditOrder}
               onDelete={handleDeleteOrder}
               useVirtualScroll={useVirtualScroll}
               virtualHeight={600}
@@ -1247,6 +1320,10 @@ function HistoryView({ onBack }: { onBack: () => void }) {
   const [selectedBatch, setSelectedBatch] = useState<number | null>(null);
   const [batchOrders, setBatchOrders] = useState<any[]>([]);
 
+  // 筛选搜索状态
+  const [searchText, setSearchText] = useState('');
+  const [filterField, setFilterField] = useState<'all' | 'orderNo' | 'receiver'>('all');
+
   useEffect(() => {
     fetch('/api/import-orders?action=batches')
       .then(res => res.json())
@@ -1258,8 +1335,34 @@ function HistoryView({ onBack }: { onBack: () => void }) {
     setSelectedBatch(batchId);
     const res = await fetch(`/api/import-orders?batchId=${batchId}&pageSize=100`);
     const data = await res.json();
-    if (data.success) setBatchOrders(data.orders);
+    if (data.success) setBatchOrders(data.orders || []);
   };
+
+  // 批次筛选
+  const filteredBatches = batches.filter((batch: any) => {
+    if (!searchText.trim()) return true;
+    const q = searchText.toLowerCase();
+    return (batch.file_name || '').toLowerCase().includes(q) ||
+           (batch.rule_name || '').toLowerCase().includes(q) ||
+           String(batch.total_rows).includes(q);
+  });
+
+  // 运单详情筛选
+  const filteredOrders = batchOrders.filter((order: any) => {
+    if (!searchText.trim() || !selectedBatch) return true;
+    const q = searchText.toLowerCase();
+    switch (filterField) {
+      case 'orderNo':
+        return (order.order_no || '').toLowerCase().includes(q);
+      case 'receiver':
+        return (order.receiver_name || '').toLowerCase().includes(q) ||
+               (order.store_name || '').toLowerCase().includes(q);
+      default:
+        return (order.order_no || '').toLowerCase().includes(q) ||
+               (order.receiver_name || '').toLowerCase().includes(q) ||
+               (order.item_name || '').toLowerCase().includes(q);
+    }
+  });
 
   if (loading) {
     return (
@@ -1274,13 +1377,32 @@ function HistoryView({ onBack }: { onBack: () => void }) {
       <div className="bg-white rounded-lg border border-gray-200 p-4">
         <div className="flex items-center justify-between mb-4">
           <h3 className="text-lg font-medium text-gray-900">📋 历史导入记录</h3>
-          <button onClick={onBack} className="text-sm text-[#0fc6c2] hover:text-[#0aa8a4]">← 返回上传</button>
+          <div className="flex gap-2">
+            {/* 搜索框 */}
+            <input
+              type="text"
+              placeholder="搜索（编码/收件人/文件名）..."
+              value={searchText}
+              onChange={e => setSearchText(e.target.value)}
+              className="px-3 py-1.5 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#0fc6c2] w-48 sm:w-64"
+            />
+            <select
+              value={filterField}
+              onChange={e => setFilterField(e.target.value as any)}
+              className="px-2 py-1.5 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-1 focus:ring-[#0fc6c2]"
+            >
+              <option value="all">全部字段</option>
+              <option value="orderNo">外部编码</option>
+              <option value="receiver">收件人/门店</option>
+            </select>
+            <button onClick={onBack} className="text-sm text-[#0fc6c2] hover:text-[#0aa8a4] whitespace-nowrap">← 返回</button>
+          </div>
         </div>
         {batches.length === 0 ? (
           <p className="text-gray-500 text-center py-8">暂无导入记录</p>
         ) : (
           <div className="space-y-3">
-            {batches.map((batch: any) => (
+            {filteredBatches.map((batch: any) => (
               <div key={batch.id}
                 className={`border rounded-lg p-4 cursor-pointer transition-all ${selectedBatch === batch.id ? 'border-[#0fc6c2] bg-[#0fc6c2]/5' : 'border-gray-200 hover:border-gray-300'}`}
                 onClick={() => loadBatchOrders(batch.id)}>
@@ -1304,24 +1426,31 @@ function HistoryView({ onBack }: { onBack: () => void }) {
       </div>
       {selectedBatch && batchOrders.length > 0 && (
         <div className="bg-white rounded-lg border border-gray-200 p-4">
-          <h4 className="font-medium text-gray-900 mb-3">批次 #{selectedBatch} 运单详情</h4>
+          <h4 className="font-medium text-gray-900 mb-3">
+            批次 #{selectedBatch} 运单详情
+            {searchText && <span className="text-sm text-gray-500 ml-2">(筛选: {filteredOrders.length}/{batchOrders.length})</span>}
+          </h4>
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
               <thead className="bg-gray-50">
                 <tr>
-                  <th className="px-3 py-2 text-left text-xs font-medium text-gray-500">收货人</th>
+                  <th className="px-3 py-2 text-left text-xs font-medium text-gray-500">外部编码</th>
+                  <th className="px-3 py-2 text-left text-xs font-medium text-gray-500">收货门店</th>
+                  <th className="px-3 py-2 text-left text-xs font-medium text-gray-500">收件人</th>
                   <th className="px-3 py-2 text-left text-xs font-medium text-gray-500">电话</th>
-                  <th className="px-3 py-2 text-left text-xs font-medium text-gray-500">地址</th>
-                  <th className="px-3 py-2 text-left text-xs font-medium text-gray-500">物品</th>
+                  <th className="px-3 py-2 text-left text-xs font-medium text-gray-500">SKU编码</th>
+                  <th className="px-3 py-2 text-left text-xs font-medium text-gray-500">SKU名称</th>
                   <th className="px-3 py-2 text-left text-xs font-medium text-gray-500">数量</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-200">
-                {batchOrders.map((order: any) => (
+                {filteredOrders.map((order: any) => (
                   <tr key={order.id} className="hover:bg-gray-50">
+                    <td className="px-3 py-2 font-mono text-xs">{order.order_no || '-'}</td>
+                    <td className="px-3 py-2">{order.store_name || '-'}</td>
                     <td className="px-3 py-2">{order.receiver_name || '-'}</td>
                     <td className="px-3 py-2">{order.receiver_phone || '-'}</td>
-                    <td className="px-3 py-2 max-w-xs truncate">{order.receiver_address || '-'}</td>
+                    <td className="px-3 py-2 font-mono text-xs">{order.item_code || '-'}</td>
                     <td className="px-3 py-2">{order.item_name || '-'}</td>
                     <td className="px-3 py-2">{order.quantity ?? '-'}</td>
                   </tr>

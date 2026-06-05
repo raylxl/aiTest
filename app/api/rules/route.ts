@@ -7,8 +7,10 @@ function getDB() {
   return neon(url);
 }
 
-// 初始化规则表
-async function initRulesTable() {
+// 初始化规则表（仅执行一次）
+let tableInitialized = false;
+async function ensureTableExists() {
+  if (tableInitialized) return;
   const sql = getDB();
   await sql`
     CREATE TABLE IF NOT EXISTS parse_rules (
@@ -24,23 +26,24 @@ async function initRulesTable() {
       updated_at      TIMESTAMPTZ DEFAULT NOW()
     )
   `;
+  tableInitialized = true;
 }
 
 // 获取所有规则
 export async function GET() {
   try {
     const sql = getDB();
-    await initRulesTable();
-    
+    await ensureTableExists();
+
     const rules = await sql`
-      SELECT * FROM parse_rules 
-      WHERE is_active = TRUE 
+      SELECT * FROM parse_rules
+      WHERE is_active = TRUE
       ORDER BY updated_at DESC
     `;
 
     return NextResponse.json({
       success: true,
-      rules: rules.map(r => ({
+      rules: rules.map((r: any) => ({
         id: r.id,
         name: r.name,
         description: r.description,
@@ -53,10 +56,10 @@ export async function GET() {
         updatedAt: r.updated_at,
       })),
     });
-  } catch (error) {
-    console.error('获取规则失败:', error);
+  } catch (error: any) {
+    console.error('获取规则失败:', error?.message || error);
     return NextResponse.json(
-      { error: '获取规则失败' },
+      { error: '获取规则失败: ' + (error?.message || '未知错误') },
       { status: 500 }
     );
   }
@@ -66,21 +69,28 @@ export async function GET() {
 export async function POST(request: NextRequest) {
   try {
     const sql = getDB();
-    await initRulesTable();
-    
+    await ensureTableExists();
+
     const body = await request.json();
     const { name, description, fileTypes, ruleJson, isAiGenerated } = body;
 
     if (!name || !ruleJson) {
       return NextResponse.json(
-        { error: '缺少必要字段' },
+        { error: '缺少必要字段: name 和 ruleJson 均为必填' },
         { status: 400 }
       );
     }
 
+    // 确保 ruleJson 是对象，如果是字符串则解析
+    let ruleData = ruleJson;
+    if (typeof ruleJson === 'string') {
+      try { ruleData = JSON.parse(ruleJson); }
+      catch { return NextResponse.json({ error: 'ruleJson 格式错误：不是合法的 JSON' }, { status: 400 }); }
+    }
+
     const result = await sql`
       INSERT INTO parse_rules (name, description, file_types, rule_json, is_ai_generated)
-      VALUES (${name}, ${description || ''}, ${fileTypes || ['excel']}, ${JSON.stringify(ruleJson)}, ${isAiGenerated || false})
+      VALUES (${name}, ${description || ''}, ${fileTypes || ['excel']}, ${JSON.stringify(ruleData)}::jsonb, ${isAiGenerated || false})
       RETURNING *
     `;
 
@@ -98,10 +108,10 @@ export async function POST(request: NextRequest) {
         createdAt: rule.created_at,
       },
     });
-  } catch (error) {
-    console.error('创建规则失败:', error);
+  } catch (error: any) {
+    console.error('创建规则失败:', error?.message || error);
     return NextResponse.json(
-      { error: '创建规则失败' },
+      { error: '创建规则失败: ' + (error?.message || '未知错误') },
       { status: 500 }
     );
   }
@@ -111,7 +121,7 @@ export async function POST(request: NextRequest) {
 export async function PUT(request: NextRequest) {
   try {
     const sql = getDB();
-    await initRulesTable();
+    await ensureTableExists();
 
     const body = await request.json();
     const { id, name, description, fileTypes, ruleJson } = body;
@@ -120,13 +130,18 @@ export async function PUT(request: NextRequest) {
       return NextResponse.json({ error: '缺少规则 id' }, { status: 400 });
     }
 
+    let ruleData = ruleJson;
+    if (typeof ruleJson === 'string') {
+      try { ruleData = JSON.parse(ruleJson); }
+      catch { return NextResponse.json({ error: 'ruleJson 格式错误' }, { status: 400 }); }
+    }
+
     const result = await sql`
-      UPDATE parse_rules
-      SET 
+      UPDATE parse_rules SET
         name = ${name},
         description = ${description || ''},
         file_types = ${fileTypes || ['excel']},
-        rule_json = ${JSON.stringify(ruleJson)},
+        rule_json = ${JSON.stringify(ruleData)}::jsonb,
         updated_at = NOW()
       WHERE id = ${id}
       RETURNING *
@@ -148,9 +163,9 @@ export async function PUT(request: NextRequest) {
         updatedAt: rule.updated_at,
       },
     });
-  } catch (error) {
-    console.error('更新规则失败:', error);
-    return NextResponse.json({ error: '更新规则失败' }, { status: 500 });
+  } catch (error: any) {
+    console.error('更新规则失败:', error?.message || error);
+    return NextResponse.json({ error: '更新规则失败: ' + (error?.message || '未知错误') }, { status: 500 });
   }
 }
 
@@ -158,7 +173,7 @@ export async function PUT(request: NextRequest) {
 export async function DELETE(request: NextRequest) {
   try {
     const sql = getDB();
-    await initRulesTable();
+    await ensureTableExists();
 
     const { searchParams } = new URL(request.url);
     const id = searchParams.get('id');
@@ -166,13 +181,11 @@ export async function DELETE(request: NextRequest) {
       return NextResponse.json({ error: '缺少规则 id' }, { status: 400 });
     }
 
-    await sql`
-      UPDATE parse_rules SET is_active = FALSE WHERE id = ${parseInt(id)}
-    `;
+    await sql`UPDATE parse_rules SET is_active = FALSE WHERE id = ${parseInt(id)}`;
 
     return NextResponse.json({ success: true });
-  } catch (error) {
-    console.error('删除规则失败:', error);
-    return NextResponse.json({ error: '删除规则失败' }, { status: 500 });
+  } catch (error: any) {
+    console.error('删除规则失败:', error?.message || error);
+    return NextResponse.json({ error: '删除规则失败: ' + (error?.message || '未知错误') }, { status: 500 });
   }
 }
