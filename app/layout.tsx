@@ -2,8 +2,8 @@ import type { Metadata } from "next";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "鲸天管理系统",
-  description: "中通冷链鲸天系统",
+  title: "智能多格式批量下单系统",
+  description: "智能多格式批量下单系统 - 万能导入V2",
 };
 
 export default function RootLayout({
