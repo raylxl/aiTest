@@ -128,7 +128,8 @@ export class ParseEngine {
     const sheet = excelData.sheets[0];
     if (!sheet) throw new Error('Excel文件没有Sheet');
 
-    switch (rule.parser.type) {
+    const parserType = rule.parser.type as string;
+    switch (parserType) {
       case 'table':
         return parseTable(sheet.data, rule.parser.table!, rule.recipient);
       case 'matrix':
@@ -142,7 +143,7 @@ export class ParseEngine {
         }
         throw new Error('multi-sheet模式需要配置multiSource或table规则');
       default:
-        throw new Error(`Excel不支持的解析模式: ${rule.parser.type}`);
+        throw new Error(`Excel不支持的解析模式: ${parserType}`);
     }
   }
 
