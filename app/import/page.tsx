@@ -185,6 +185,12 @@ export default function ImportPage() {
       throw new Error('请先配置AI API Key');
     }
 
+    // 确保API URL是完整的
+    let fullApiUrl = apiUrl;
+    if (!apiUrl.includes('/chat/completions')) {
+      fullApiUrl = apiUrl.replace(/\/+$/, '') + '/chat/completions';
+    }
+
     const userMessage = `请根据以下文件样本生成解析规则。
 
 ## 文件信息
@@ -198,7 +204,8 @@ ${sample}
 
 请分析文件结构，生成对应的解析规则JSON。`;
 
-    const response = await fetch(apiUrl, {
+    console.log('调用AI API:', fullApiUrl, '模型:', modelName);
+    const response = await fetch(fullApiUrl, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -221,36 +228,51 @@ ${sample}
       throw new Error(`API调用失败 (${response.status}): ${errorText.substring(0, 200)}`);
     }
 
-    // 获取响应文本，支持JSON和SSE格式
+    // 获取响应文本
     const responseText = await response.text();
+    console.log('API响应前500字符:', responseText.substring(0, 500));
     let content = '';
 
-    // 判断是否是SSE格式（以"data: "开头）
-    if (responseText.startsWith('data: ')) {
-      // 解析SSE格式，提取所有data行并合并内容
-      const lines = responseText.split('\n');
-      let fullContent = '';
-      for (const line of lines) {
-        if (line.startsWith('data: ') && !line.includes('[DONE]')) {
-          try {
-            const chunk = JSON.parse(line.slice(6));
-            const delta = chunk.choices?.[0]?.delta?.content;
-            if (delta) {
-              fullContent += delta;
+    // 先尝试直接解析为JSON（如果API返回标准JSON格式）
+    try {
+      const data = JSON.parse(responseText);
+      // 检查是否有错误
+      if (data.error) {
+        throw new Error(`API错误: ${data.error.message || JSON.stringify(data.error)}`);
+      }
+      content = data.choices?.[0]?.message?.content || '';
+    } catch (jsonError) {
+      // 如果不是JSON，尝试SSE格式
+      if (responseText.includes('data: ')) {
+        const lines = responseText.split('\n');
+        let fullContent = '';
+        let hasError = false;
+        
+        for (const line of lines) {
+          const trimmedLine = line.trim();
+          if (trimmedLine.startsWith('data: ') && !trimmedLine.includes('[DONE]')) {
+            try {
+              const chunk = JSON.parse(trimmedLine.slice(6));
+              // 检查是否有错误
+              if (chunk.error) {
+                throw new Error(`API错误: ${chunk.error.message || JSON.stringify(chunk.error)}`);
+              }
+              // 支持delta格式和message格式
+              const delta = chunk.choices?.[0]?.delta?.content || chunk.choices?.[0]?.message?.content;
+              if (delta) {
+                fullContent += delta;
+              }
+            } catch (e: any) {
+              if (e.message?.startsWith('API错误:')) {
+                throw e;
+              }
+              console.warn('SSE行解析失败:', trimmedLine);
             }
-          } catch {
-            // 忽略解析错误的行
           }
         }
-      }
-      content = fullContent;
-    } else {
-      // 标准JSON格式
-      try {
-        const data = JSON.parse(responseText);
-        content = data.choices?.[0]?.message?.content || '';
-      } catch {
-        throw new Error('无法解析API响应');
+        content = fullContent;
+      } else {
+        throw new Error('无法解析API响应: ' + responseText.substring(0, 200));
       }
     }
 
