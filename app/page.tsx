@@ -442,7 +442,7 @@ export default function FeeManager() {
         </aside>
 
         {/* 主内容区 */}
-        <main style={{ flex: 1, overflow: 'auto', padding: '12px 16px 20px', display: 'flex', flexDirection: 'column', gap: 0, minWidth: 0 }}>
+        <main style={{ flex: 1, overflow: 'hidden', padding: '12px 16px 20px', display: 'flex', flexDirection: 'column', gap: 0, minWidth: 0, minHeight: 0 }}>
           {/* 面包屑 */}
           <div style={{ fontSize: 13, color: '#8c8c8c', display: 'flex', alignItems: 'center', gap: 4, marginBottom: 12, flexShrink: 0 }}>
             <a href="#" style={{ color: '#8c8c8c', textDecoration: 'none' }}>首页</a>
@@ -465,7 +465,7 @@ export default function FeeManager() {
           </div>
 
           {/* 内容卡片 */}
-          <div style={{ background: '#fff', borderRadius: 4, flex: 1, border: '1px solid #e4edf7', overflow: 'auto', display: 'flex', flexDirection: 'column' }}>
+          <div style={{ background: '#fff', borderRadius: 4, flex: 1, border: '1px solid #e4edf7', overflow: 'hidden', display: 'flex', flexDirection: 'column', minHeight: 0 }}>
             {activeMenu === 'fee-type-cc' ? (
               <FeeTable
                 data={data} setData={setData} selectedRows={selectedRows} setSelectedRows={setSelectedRows}
@@ -507,8 +507,8 @@ export default function FeeManager() {
             ) : activeMenu === 'universal-import' ? (
               <UniversalImport />
             ) : activeMenu === 'universal-import-v2' ? (
-              <div style={{ flex: 1, overflow: 'auto', width: '100%', height: '100%' }}>
-                <iframe src="/import" style={{ width: '100%', height: '100%', border: 'none', minHeight: '100vh' }} scrolling="auto" />
+              <div style={{ flex: 1, overflow: 'hidden', width: '100%', height: '100%', display: 'flex', flexDirection: 'column' }}>
+                <iframe src="/import" style={{ flex: 1, width: '100%', border: 'none', minHeight: 0 }} scrolling="auto" />
               </div>
             ) : activeMenu === 'fee-rules' ? (
               <FeeRulesTable
