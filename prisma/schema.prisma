@@ -1,0 +1,82 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// 解析规则表
+model ParseRule {
+  id            String   @id @default(cuid())
+  name          String
+  description   String?
+  fileTypes     String[] // ["excel", "pdf", "word"]
+  ruleJson      Json     // 完整规则JSON
+  isActive      Boolean  @default(true)
+  isAiGenerated Boolean  @default(false)
+  usageCount    Int      @default(0)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+  
+  parseSessions ParseSession[]
+}
+
+// 解析会话表
+model ParseSession {
+  id            String   @id @default(cuid())
+  ruleId        String?
+  rule          ParseRule? @relation(fields: [ruleId], references: [id])
+  fileName      String
+  fileType      String
+  fileSize      Int
+  status        String   @default("pending") // pending/parsing/completed/failed
+  totalRows     Int?
+  parsedRows    Int?
+  errorRows     Int?
+  errorMessage  String?
+  createdAt     DateTime @default(now())
+  completedAt   DateTime?
+  
+  orders        Order[]
+}
+
+// 运单表
+model Order {
+  id            String   @id @default(cuid())
+  sessionId     String
+  session       ParseSession @relation(fields: [sessionId], references: [id])
+  
+  // 运单核心字段
+  orderNo       String?  // 运单号
+  senderName    String?  // 发货人
+  senderPhone   String?
+  senderAddress String?
+  receiverName  String?  // 收货人
+  receiverPhone String?
+  receiverAddress String?
+  
+  // 货物信息
+  itemName      String?  // 物品名称
+  itemCode      String?  // 物品编码
+  itemCategory  String?  // 物品分类
+  specification String?  // 规格型号
+  quantity      Decimal? @db.Decimal(10, 2) // 数量
+  unit          String?  // 单位
+  
+  // 扩展字段（JSON存储灵活字段）
+  extraFields   Json?
+  
+  // 元信息
+  sourceRow     Int?     // 原始行号
+  sourceSheet   String?  // 原始Sheet名
+  isValid       Boolean  @default(true)
+  validationErrors String[]
+  
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+  
+  @@index([sessionId])
+  @@index([orderNo])
+}
