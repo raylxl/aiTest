@@ -703,7 +703,7 @@ export default function ImportPage() {
             setParseProgressText(`正在解析第 ${i + 1}/${total} 个文件：${item.file.name}（Worker）`);
             const result = await parseWithWorker(item.file, item.rule!, (p) => {
               const fileProgress = ((i + p.percent / 100) / total) * 100;
-              setParseProgressText(`正在解析第 ${i + 1}/${total} 个文件：${item.file.name}（Worker ${p.current ?? 0}/${p.total ?? 0}，${Math.round(p.percent)}%）`);
+              setParseProgressText(`正在解析第 ${i + 1}/${total} 个文件：${item.file.name}（Worker ${Math.round(p.percent)}%，${p.message || '处理中'}）`);
               setProgress(fileProgress);
             });
             allOrders.push(...result.orders);
