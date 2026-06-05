@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useCallback, useMemo } from 'react';
+import { useState, useCallback, useMemo, useEffect } from 'react';
 import FileUploader from '../components/Upload/FileUploader';
 import OrderTable from '../components/Orders/OrderTable';
 import Loading from '../components/Common/Loading';
@@ -21,6 +21,71 @@ interface AnalyzedFile {
   error?: string;
 }
 
+// AI系统提示词
+const AI_SYSTEM_PROMPT = `你是一个文件解析规则生成专家。你的任务是根据用户提供的文件样本，生成JSON格式的解析规则。
+
+## 规则类型说明
+
+1. **table** - 标准表格格式：有明确的表头行和数据行
+2. **matrix** - 矩阵格式：SKU×门店矩阵，需要转置
+3. **card** - 卡片格式：多个独立卡片堆叠
+4. **text** - 纯文本格式：无表格，用正则提取
+5. **multi-sheet** - 多Sheet格式：Excel有多个Sheet
+6. **multi-page** - 多页格式：PDF有多个独立单元
+
+## 输出格式
+
+请输出严格的JSON格式，结构如下：
+
+\`\`\`json
+{
+  "name": "规则名称",
+  "description": "规则描述",
+  "fileTypes": ["excel"],
+  "parser": {
+    "type": "table|matrix|card|text|multi-sheet",
+    "table": {
+      "headerRow": 0,
+      "dataStartRow": 1,
+      "columns": [
+        {"sourceIndex": 0, "targetField": "字段名", "dataType": "string|number"}
+      ]
+    }
+  },
+  "recipient": {
+    "source": "footer|inline|header",
+    "fields": {
+      "name": {"pattern": "收货人[：:]\\\\s*(.+?)(?:\\\\s|$)"},
+      "phone": {"pattern": "(?:电话|手机)[：:]\\\\s*(\\\\d+)"},
+      "address": {"pattern": "(?:地址|收货地址)[：:]\\\\s*(.+)"}
+    }
+  }
+}
+\`\`\`
+
+## 字段映射规则
+
+targetField应使用以下标准字段名：
+- 运单号/单据号/配送单号 → orderNo
+- 发货人 → senderName
+- 收货人/收货人姓名 → receiverName
+- 电话/手机/联系电话 → receiverPhone
+- 地址/收货地址/详细地址 → receiverAddress
+- 物品名称/商品名称/SKU名称 → itemName
+- 物品编码/商品编码/SKU编码 → itemCode
+- 物品分类 → itemCategory
+- 规格型号/规格 → specification
+- 单位 → unit
+- 数量/发货数量/出库数量 → quantity
+
+## 重要提示
+
+1. 只输出JSON，不要包含任何解释文字
+2. headerRow和dataStartRow使用0-based索引
+3. sourceIndex是列的索引（0-based）
+4. 正则表达式需要正确转义
+`;
+
 export default function ImportPage() {
   const [step, setStep] = useState<StepType>('upload');
   const [analyzedFiles, setAnalyzedFiles] = useState<AnalyzedFile[]>([]);
@@ -30,6 +95,27 @@ export default function ImportPage() {
   const [searchQuery, setSearchQuery] = useState('');
   const [editingRuleIndex, setEditingRuleIndex] = useState<number | null>(null);
   const [editingRuleJson, setEditingRuleJson] = useState('');
+  const [apiKey, setApiKey] = useState('');
+  const [apiUrl, setApiUrl] = useState('https://www.vbcode.io/v1/chat/completions');
+  const [modelName, setModelName] = useState('gpt-5.4');
+
+  // 从localStorage加载配置
+  useEffect(() => {
+    const savedKey = localStorage.getItem('ai_api_key');
+    const savedUrl = localStorage.getItem('ai_api_url');
+    const savedModel = localStorage.getItem('ai_model_name');
+    if (savedKey) setApiKey(savedKey);
+    if (savedUrl) setApiUrl(savedUrl);
+    if (savedModel) setModelName(savedModel);
+  }, []);
+
+  // 保存配置到localStorage
+  const saveConfig = useCallback(() => {
+    localStorage.setItem('ai_api_key', apiKey);
+    localStorage.setItem('ai_api_url', apiUrl);
+    localStorage.setItem('ai_model_name', modelName);
+    showToast('success', '配置已保存');
+  }, [apiKey, apiUrl, modelName]);
 
   const {
     data: orders,
@@ -58,6 +144,63 @@ export default function ImportPage() {
 
   const useVirtualScroll = totalCount > 100;
 
+  // 前端直接调用AI API（避免Cloudflare拦截）
+  const callAIFromClient = async (sample: string, fileType: string, fileName: string): Promise<ParseRule> => {
+    if (!apiKey) {
+      throw new Error('请先配置AI API Key');
+    }
+
+    const userMessage = `请根据以下文件样本生成解析规则。
+
+## 文件信息
+- 文件名：${fileName}
+- 文件类型：${fileType}
+
+## 文件内容样本（前20行）
+\`\`\`
+${sample}
+\`\`\`
+
+请分析文件结构，生成对应的解析规则JSON。`;
+
+    const response = await fetch(apiUrl, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${apiKey}`,
+      },
+      body: JSON.stringify({
+        model: modelName,
+        messages: [
+          { role: 'system', content: AI_SYSTEM_PROMPT },
+          { role: 'user', content: userMessage }
+        ],
+        temperature: 0.1,
+        max_tokens: 4000,
+      }),
+    });
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      throw new Error(`API调用失败 (${response.status}): ${errorText.substring(0, 200)}`);
+    }
+
+    const data = await response.json();
+    const content = data.choices?.[0]?.message?.content;
+
+    if (!content) {
+      throw new Error('AI返回空内容');
+    }
+
+    // 提取JSON
+    const jsonMatch = content.match(/\{[\s\S]*\}/);
+    if (!jsonMatch) {
+      throw new Error('无法从AI响应中提取JSON');
+    }
+
+    return JSON.parse(jsonMatch[0]) as ParseRule;
+  };
+
   // 步骤1：选择文件
   const handleFilesSelected = useCallback((newFiles: File[]) => {
     const analyzed: AnalyzedFile[] = newFiles.map(file => ({
@@ -70,7 +213,7 @@ export default function ImportPage() {
     setAnalyzedFiles(prev => [...prev, ...analyzed]);
   }, []);
 
-  // 步骤2：AI分析单个文件
+  // 步骤2：AI分析单个文件（前端调用）
   const handleAnalyzeFile = async (index: number) => {
     const item = analyzedFiles[index];
     if (!item) return;
@@ -78,41 +221,45 @@ export default function ImportPage() {
     setAnalyzedFiles(prev => prev.map((f, i) => i === index ? { ...f, analyzing: true, error: undefined } : f));
 
     try {
+      // 1. 先从服务端提取文件样本
       const formData = new FormData();
       formData.append('file', item.file);
 
-      const response = await fetch('/api/analyze', { method: 'POST', body: formData });
-      const data = await response.json();
+      const extractResponse = await fetch('/api/extract-sample', { method: 'POST', body: formData });
+      const extractData = await extractResponse.json();
 
-      if (data.success) {
-        setAnalyzedFiles(prev => prev.map((f, i) => i === index ? {
-          ...f,
-          rule: data.rule,
-          sample: data.sample,
-          fileInfo: data.fileInfo,
-          analyzing: false,
-        } : f));
-        showToast('success', `${item.file.name} AI分析完成`);
-      } else {
-        setAnalyzedFiles(prev => prev.map((f, i) => i === index ? {
-          ...f,
-          analyzing: false,
-          error: data.error,
-        } : f));
-        showToast('error', `${item.file.name} 分析失败: ${data.error}`);
+      if (!extractData.success) {
+        throw new Error(extractData.error || '提取样本失败');
       }
+
+      // 2. 前端直接调用AI API生成规则
+      const rule = await callAIFromClient(extractData.sample, extractData.fileInfo.type, extractData.fileInfo.name);
+
+      setAnalyzedFiles(prev => prev.map((f, i) => i === index ? {
+        ...f,
+        rule,
+        sample: extractData.sample,
+        fileInfo: extractData.fileInfo,
+        analyzing: false,
+      } : f));
+      showToast('success', `${item.file.name} AI分析完成`);
     } catch (error) {
+      const errorMsg = error instanceof Error ? error.message : '分析失败';
       setAnalyzedFiles(prev => prev.map((f, i) => i === index ? {
         ...f,
         analyzing: false,
-        error: '网络错误',
+        error: errorMsg,
       } : f));
-      showToast('error', 'AI分析请求失败');
+      showToast('error', `${item.file.name} 分析失败: ${errorMsg}`);
     }
   };
 
   // 批量AI分析所有文件
   const handleAnalyzeAll = async () => {
+    if (!apiKey) {
+      showToast('error', '请先配置AI API Key');
+      return;
+    }
     setStep('analyze');
     for (let i = 0; i < analyzedFiles.length; i++) {
       if (!analyzedFiles[i].rule) {
@@ -400,6 +547,54 @@ export default function ImportPage() {
       {/* 主内容区 */}
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pb-8">
 
+        {/* AI配置区域 */}
+        {step === 'upload' && (
+          <div className="bg-white rounded-lg border border-gray-200 p-4 mb-6">
+            <h3 className="text-sm font-medium text-gray-700 mb-3">🤖 AI配置</h3>
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              <div>
+                <label className="block text-xs text-gray-500 mb-1">API地址</label>
+                <input
+                  type="text"
+                  value={apiUrl}
+                  onChange={e => setApiUrl(e.target.value)}
+                  placeholder="https://api.openai.com/v1/chat/completions"
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#0fc6c2]"
+                />
+              </div>
+              <div>
+                <label className="block text-xs text-gray-500 mb-1">模型名称</label>
+                <input
+                  type="text"
+                  value={modelName}
+                  onChange={e => setModelName(e.target.value)}
+                  placeholder="gpt-5.4"
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#0fc6c2]"
+                />
+              </div>
+              <div>
+                <label className="block text-xs text-gray-500 mb-1">API Key</label>
+                <div className="flex gap-2">
+                  <input
+                    type="password"
+                    value={apiKey}
+                    onChange={e => setApiKey(e.target.value)}
+                    placeholder="sk-..."
+                    className="flex-1 px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#0fc6c2]"
+                  />
+                  <button
+                    onClick={saveConfig}
+                    className="px-4 py-2 bg-[#0fc6c2] text-white rounded-lg text-sm hover:bg-[#0aa8a4]"
+                  >
+                    保存
+                  </button>
+                </div>
+              </div>
+            </div>
+            <p className="text-xs text-gray-500 mt-2">配置会保存在浏览器本地，下次无需重复输入</p>
+          </div>
+        )}
+
         {/* 步骤1：上传文件 */}
         {step === 'upload' && (
           <div className="space-y-6">
@@ -438,11 +633,14 @@ export default function ImportPage() {
 
             <button
               onClick={handleAnalyzeAll}
-              disabled={analyzedFiles.length === 0}
+              disabled={analyzedFiles.length === 0 || !apiKey}
               className="w-full px-6 py-3 bg-[#0fc6c2] text-white rounded-lg font-medium hover:bg-[#0aa8a4] disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
             >
               🤖 开始AI分析 ({analyzedFiles.length} 个文件)
             </button>
+            {!apiKey && (
+              <p className="text-sm text-red-500 text-center">请先配置AI API Key</p>
+            )}
           </div>
         )}
 
