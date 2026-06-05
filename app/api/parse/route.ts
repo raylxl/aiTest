@@ -1,8 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { parseEngine } from '@/lib/parser/engine';
-import { matchPresetRule } from '@/lib/parser/preset-rules';
 import type { ParseRule } from '@/types/rule';
 
+/**
+ * 文件解析API - 必须传入解析规则（由AI生成或用户手动配置）
+ * 不再使用硬编码匹配，完全依赖规则引擎
+ */
 export async function POST(request: NextRequest) {
   try {
     const formData = await request.formData();
@@ -10,41 +13,29 @@ export async function POST(request: NextRequest) {
     const ruleStr = formData.get('rule') as string;
 
     if (!file) {
+      return NextResponse.json({ error: '请上传文件' }, { status: 400 });
+    }
+
+    if (!ruleStr) {
       return NextResponse.json(
-        { error: '请上传文件' },
+        { error: '请提供解析规则。请先通过"AI分析"生成规则，或手动配置规则。' },
         { status: 400 }
       );
     }
 
-    let rule: ParseRule | undefined;
-    if (ruleStr) {
-      try {
-        rule = JSON.parse(ruleStr);
-      } catch {
-        return NextResponse.json(
-          { error: '规则格式错误' },
-          { status: 400 }
-        );
-      }
+    let rule: ParseRule;
+    try {
+      rule = JSON.parse(ruleStr);
+    } catch {
+      return NextResponse.json({ error: '规则格式错误' }, { status: 400 });
     }
 
-    // 如果没有提供规则，先尝试匹配预设规则，再使用默认规则
-    if (!rule) {
-      rule = matchPresetRule(file.name) || createDefaultRule(file.name);
+    // 验证规则基本结构
+    if (!rule.name || !rule.parser?.type) {
+      return NextResponse.json({ error: '规则缺少必要字段（name, parser.type）' }, { status: 400 });
     }
-
-    console.log('File:', file.name);
-    console.log('Rule:', rule.name);
-    console.log('Parser type:', rule.parser.type);
 
     const result = await parseEngine.parseFile(file, file.name, rule);
-    
-    console.log('Parse result:', {
-      success: result.success,
-      totalRows: result.totalRows,
-      errorRows: result.errorRows,
-      ordersCount: result.orders.length,
-    });
 
     return NextResponse.json(result);
   } catch (error) {
@@ -54,72 +45,4 @@ export async function POST(request: NextRequest) {
       { status: 500 }
     );
   }
-}
-
-/**
- * 根据文件名创建默认规则
- */
-function createDefaultRule(fileName: string): ParseRule {
-  const ext = fileName.toLowerCase().split('.').pop();
-
-  if (ext === 'pdf') {
-    return {
-      name: 'PDF默认规则',
-      fileTypes: ['pdf'],
-      identifier: {},
-      parser: {
-        type: 'table',
-        table: {
-          headerRow: 'auto',
-          dataStartRow: 'auto',
-          columns: [
-            { sourceIndex: 0, targetField: '物品类别', dataType: 'string' },
-            { sourceIndex: 1, targetField: '物品编码', dataType: 'string' },
-            { sourceIndex: 2, targetField: '物品名称', dataType: 'string' },
-            { sourceIndex: 3, targetField: '规格型号', dataType: 'string' },
-            { sourceIndex: 4, targetField: '单位', dataType: 'string' },
-            { sourceIndex: 5, targetField: '数量', dataType: 'number' },
-          ],
-        },
-      },
-      recipient: {
-        source: 'footer',
-        fields: {
-          name: { pattern: '收货人[：:]\\s*(.+?)(?:\\s|$)' },
-          phone: { pattern: '(?:电话|手机)[：:]\\s*(\\d+)' },
-          address: { pattern: '(?:地址|收货地址)[：:]\\s*(.+)' },
-        },
-      },
-    };
-  }
-
-  // Excel默认规则
-  return {
-    name: 'Excel默认规则',
-    fileTypes: ['excel'],
-    identifier: {},
-    parser: {
-      type: 'table',
-      table: {
-        headerRow: 'auto',
-        dataStartRow: 'auto',
-        columns: [
-          { sourceIndex: 0, targetField: '序号', dataType: 'number' },
-          { sourceIndex: 1, targetField: '物品编码', dataType: 'string' },
-          { sourceIndex: 2, targetField: '物品名称', dataType: 'string' },
-          { sourceIndex: 3, targetField: '规格型号', dataType: 'string' },
-          { sourceIndex: 4, targetField: '单位', dataType: 'string' },
-          { sourceIndex: 5, targetField: '数量', dataType: 'number' },
-        ],
-      },
-    },
-    recipient: {
-      source: 'footer',
-      fields: {
-        name: { pattern: '收货人[：:]\\s*(.+?)(?:\\s|$)' },
-        phone: { pattern: '(?:电话|手机)[：:]\\s*(\\d+)' },
-        address: { pattern: '(?:地址|收货地址)[：:]\\s*(.+)' },
-      },
-    },
-  };
 }

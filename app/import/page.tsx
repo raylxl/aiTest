@@ -10,19 +10,27 @@ import { useDebounce } from '../hooks/useDebounce';
 import { useLargeData } from '../hooks/useLargeData';
 import type { ParsedOrder, ParseRule } from '@/types/rule';
 
-type TabType = 'upload' | 'rules' | 'orders';
+type StepType = 'upload' | 'analyze' | 'confirm' | 'result' | 'history';
+
+interface AnalyzedFile {
+  file: File;
+  rule: ParseRule | null;
+  sample: string;
+  fileInfo: { name: string; type: string; sheets: string[] };
+  analyzing: boolean;
+  error?: string;
+}
 
 export default function ImportPage() {
-  const [activeTab, setActiveTab] = useState<TabType>('upload');
-  const [files, setFiles] = useState<File[]>([]);
+  const [step, setStep] = useState<StepType>('upload');
+  const [analyzedFiles, setAnalyzedFiles] = useState<AnalyzedFile[]>([]);
   const [parsing, setParsing] = useState(false);
   const [progress, setProgress] = useState(0);
-  const [currentRule, setCurrentRule] = useState<ParseRule | null>(null);
-  const [generatingRule, setGeneratingRule] = useState(false);
   const [selectedIndices, setSelectedIndices] = useState<number[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
-  
-  // 使用大数据分页Hook
+  const [editingRuleIndex, setEditingRuleIndex] = useState<number | null>(null);
+  const [editingRuleJson, setEditingRuleJson] = useState('');
+
   const {
     data: orders,
     setData: setOrders,
@@ -34,62 +42,112 @@ export default function ImportPage() {
     loadMore,
     goToPage,
   } = useLargeData<ParsedOrder>({ pageSize: 100 });
-  
-  // 防抖搜索
+
   const debouncedSearchQuery = useDebounce(searchQuery, 300);
-  
-  // 过滤后的订单
+
   const filteredOrders = useMemo(() => {
     if (!debouncedSearchQuery) return displayedOrders;
-    
     const query = debouncedSearchQuery.toLowerCase();
-    return displayedOrders.filter(order => 
+    return displayedOrders.filter(order =>
       (order.orderNo?.toLowerCase().includes(query)) ||
       (order.receiverName?.toLowerCase().includes(query)) ||
       (order.receiverPhone?.includes(query)) ||
       (order.itemName?.toLowerCase().includes(query))
     );
   }, [displayedOrders, debouncedSearchQuery]);
-  
-  // 是否使用虚拟滚动（超过100条记录）
+
   const useVirtualScroll = totalCount > 100;
 
-  // 处理文件选择
+  // 步骤1：选择文件
   const handleFilesSelected = useCallback((newFiles: File[]) => {
-    setFiles(prev => [...prev, ...newFiles]);
+    const analyzed: AnalyzedFile[] = newFiles.map(file => ({
+      file,
+      rule: null,
+      sample: '',
+      fileInfo: { name: file.name, type: '', sheets: [] },
+      analyzing: false,
+    }));
+    setAnalyzedFiles(prev => [...prev, ...analyzed]);
   }, []);
 
-  // AI生成规则
-  const handleGenerateRule = async (file: File) => {
-    setGeneratingRule(true);
+  // 步骤2：AI分析单个文件
+  const handleAnalyzeFile = async (index: number) => {
+    const item = analyzedFiles[index];
+    if (!item) return;
+
+    setAnalyzedFiles(prev => prev.map((f, i) => i === index ? { ...f, analyzing: true, error: undefined } : f));
+
     try {
       const formData = new FormData();
-      formData.append('file', file);
+      formData.append('file', item.file);
 
-      const response = await fetch('/api/rules/generate', {
-        method: 'POST',
-        body: formData,
-      });
-
+      const response = await fetch('/api/analyze', { method: 'POST', body: formData });
       const data = await response.json();
 
       if (data.success) {
-        setCurrentRule(data.rule);
-        showToast('success', 'AI规则生成成功');
+        setAnalyzedFiles(prev => prev.map((f, i) => i === index ? {
+          ...f,
+          rule: data.rule,
+          sample: data.sample,
+          fileInfo: data.fileInfo,
+          analyzing: false,
+        } : f));
+        showToast('success', `${item.file.name} AI分析完成`);
       } else {
-        showToast('error', data.error || '规则生成失败');
+        setAnalyzedFiles(prev => prev.map((f, i) => i === index ? {
+          ...f,
+          analyzing: false,
+          error: data.error,
+        } : f));
+        showToast('error', `${item.file.name} 分析失败: ${data.error}`);
       }
     } catch (error) {
-      showToast('error', '规则生成失败');
-    } finally {
-      setGeneratingRule(false);
+      setAnalyzedFiles(prev => prev.map((f, i) => i === index ? {
+        ...f,
+        analyzing: false,
+        error: '网络错误',
+      } : f));
+      showToast('error', 'AI分析请求失败');
     }
   };
 
-  // 解析文件
-  const handleParse = async () => {
-    if (files.length === 0) {
-      showToast('warning', '请先选择文件');
+  // 批量AI分析所有文件
+  const handleAnalyzeAll = async () => {
+    setStep('analyze');
+    for (let i = 0; i < analyzedFiles.length; i++) {
+      if (!analyzedFiles[i].rule) {
+        await handleAnalyzeFile(i);
+      }
+    }
+    setStep('confirm');
+  };
+
+  // 编辑规则
+  const handleEditRule = (index: number) => {
+    const item = analyzedFiles[index];
+    if (!item?.rule) return;
+    setEditingRuleIndex(index);
+    setEditingRuleJson(JSON.stringify(item.rule, null, 2));
+  };
+
+  // 保存编辑后的规则
+  const handleSaveRule = () => {
+    if (editingRuleIndex === null) return;
+    try {
+      const rule = JSON.parse(editingRuleJson) as ParseRule;
+      setAnalyzedFiles(prev => prev.map((f, i) => i === editingRuleIndex ? { ...f, rule } : f));
+      setEditingRuleIndex(null);
+      showToast('success', '规则已更新');
+    } catch {
+      showToast('error', 'JSON格式错误');
+    }
+  };
+
+  // 步骤3：用确认后的规则解析所有文件
+  const handleParseAll = async () => {
+    const filesWithRules = analyzedFiles.filter(f => f.rule);
+    if (filesWithRules.length === 0) {
+      showToast('warning', '没有可用的解析规则，请先完成AI分析');
       return;
     }
 
@@ -100,43 +158,42 @@ export default function ImportPage() {
 
     try {
       const allOrders: ParsedOrder[] = [];
-      const totalFiles = files.length;
+      const total = filesWithRules.length;
 
-      for (let i = 0; i < files.length; i++) {
-        const file = files[i];
-        setProgress(((i + 0.5) / totalFiles) * 100);
+      for (let i = 0; i < total; i++) {
+        const item = filesWithRules[i];
+        setProgress(((i + 0.5) / total) * 100);
 
         const formData = new FormData();
-        formData.append('file', file);
-        if (currentRule) {
-          formData.append('rule', JSON.stringify(currentRule));
-        }
+        formData.append('file', item.file);
+        formData.append('rule', JSON.stringify(item.rule));
 
-        const response = await fetch('/api/parse', {
-          method: 'POST',
-          body: formData,
-        });
-
+        const response = await fetch('/api/parse', { method: 'POST', body: formData });
         const data = await response.json();
 
         if (data.success) {
           allOrders.push(...data.orders);
-          showToast('success', `${file.name} 解析完成，${data.totalRows} 条记录`);
+          showToast('success', `${item.file.name} 解析完成，${data.totalRows} 条记录`);
         } else {
-          showToast('error', `${file.name} 解析失败: ${data.error}`);
+          showToast('error', `${item.file.name} 解析失败: ${data.error}`);
         }
 
-        setProgress(((i + 1) / totalFiles) * 100);
+        setProgress(((i + 1) / total) * 100);
       }
 
       setOrders(allOrders);
-      setActiveTab('orders');
+      setStep('result');
       showToast('success', `全部解析完成，共 ${allOrders.length} 条记录`);
-    } catch (error) {
+    } catch {
       showToast('error', '解析过程中发生错误');
     } finally {
       setParsing(false);
     }
+  };
+
+  // 移除文件
+  const handleRemoveFile = (index: number) => {
+    setAnalyzedFiles(prev => prev.filter((_, i) => i !== index));
   };
 
   // 导出Excel
@@ -147,15 +204,13 @@ export default function ImportPage() {
     }
 
     try {
-      const exportData = selectedIndices.length > 0 
-        ? orders.filter((_, i) => selectedIndices.includes(i)) 
+      const exportData = selectedIndices.length > 0
+        ? orders.filter((_, i) => selectedIndices.includes(i))
         : filteredOrders;
-      
+
       const response = await fetch('/api/orders/export', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ orders: exportData }),
       });
 
@@ -173,12 +228,12 @@ export default function ImportPage() {
       } else {
         showToast('error', '导出失败');
       }
-    } catch (error) {
+    } catch {
       showToast('error', '导出失败');
     }
   };
 
-  // 删除选中订单
+  // 删除选中
   const handleDeleteSelected = () => {
     if (selectedIndices.length === 0) {
       showToast('warning', '请先选择要删除的记录');
@@ -207,28 +262,75 @@ export default function ImportPage() {
     showToast('success', '已删除');
   };
 
-  // 批量提交下单
+  // 批量提交
   const handleSubmitOrders = async () => {
     if (orders.length === 0) {
       showToast('warning', '没有可提交的数据');
       return;
     }
-
-    const submitData = selectedIndices.length > 0 
-      ? orders.filter((_, i) => selectedIndices.includes(i)) 
+    const submitData = selectedIndices.length > 0
+      ? orders.filter((_, i) => selectedIndices.includes(i))
       : filteredOrders;
-
     showToast('info', `准备提交 ${submitData.length} 条运单...`);
-    
-    // 模拟提交过程
-    // 实际项目中这里会调用API
     showToast('success', `成功提交 ${submitData.length} 条运单`);
+  };
+
+  // 保存到数据库
+  const [saving, setSaving] = useState(false);
+  const handleSaveToDB = async () => {
+    if (orders.length === 0) {
+      showToast('warning', '没有可保存的数据');
+      return;
+    }
+    setSaving(true);
+    try {
+      const saveData = selectedIndices.length > 0
+        ? orders.filter((_, i) => selectedIndices.includes(i))
+        : orders;
+
+      const response = await fetch('/api/import-orders', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          orders: saveData,
+          fileName: analyzedFiles.map(f => f.file.name).join(', '),
+          fileType: analyzedFiles[0]?.fileInfo?.type || 'unknown',
+          ruleName: analyzedFiles[0]?.rule?.name || '',
+          ruleJson: analyzedFiles[0]?.rule || {},
+        }),
+      });
+
+      const data = await response.json();
+      if (data.success) {
+        showToast('success', `已保存 ${saveData.length} 条运单到数据库`);
+      } else {
+        showToast('error', data.error || '保存失败');
+      }
+    } catch {
+      showToast('error', '保存失败');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  // 返回上传步骤
+  const handleBackToUpload = () => {
+    setStep('upload');
+  };
+
+  // 重新开始
+  const handleRestart = () => {
+    setStep('upload');
+    setAnalyzedFiles([]);
+    setOrders([]);
+    setSelectedIndices([]);
+    setSearchQuery('');
   };
 
   return (
     <div className="min-h-screen bg-gray-50">
       <Toast />
-      
+
       {/* 顶部导航 */}
       <header className="bg-white shadow-sm border-b border-gray-200">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
@@ -249,126 +351,230 @@ export default function ImportPage() {
                 <span className="text-sm text-gray-600">
                   已解析 <span className="font-medium text-[#0fc6c2]">{orders.length}</span> 条运单
                   {useVirtualScroll && (
-                    <span className="ml-2 text-xs bg-blue-100 text-blue-800 px-2 py-0.5 rounded">
-                      虚拟滚动
-                    </span>
+                    <span className="ml-2 text-xs bg-blue-100 text-blue-800 px-2 py-0.5 rounded">虚拟滚动</span>
                   )}
                 </span>
+              )}
+              <button
+                onClick={() => setStep('history')}
+                className="text-sm text-[#0fc6c2] hover:text-[#0aa8a4]"
+              >
+                📋 历史记录
+              </button>
+              {step !== 'upload' && step !== 'history' && (
+                <button onClick={handleRestart} className="text-sm text-gray-500 hover:text-gray-700">
+                  重新开始
+                </button>
               )}
             </div>
           </div>
         </div>
       </header>
 
-      {/* 主内容区 */}
-      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        {/* 标签页 */}
-        <div className="flex gap-1 mb-6 bg-white rounded-lg p-1 shadow-sm">
-          <button
-            onClick={() => setActiveTab('upload')}
-            className={`flex-1 px-4 py-2 rounded-md text-sm font-medium transition-colors ${
-              activeTab === 'upload'
-                ? 'bg-[#0fc6c2] text-white'
-                : 'text-gray-600 hover:text-gray-900 hover:bg-gray-100'
-            }`}
-          >
-            📁 文件上传
-          </button>
-          <button
-            onClick={() => setActiveTab('rules')}
-            className={`flex-1 px-4 py-2 rounded-md text-sm font-medium transition-colors ${
-              activeTab === 'rules'
-                ? 'bg-[#0fc6c2] text-white'
-                : 'text-gray-600 hover:text-gray-900 hover:bg-gray-100'
-            }`}
-          >
-            📋 解析规则
-          </button>
-          <button
-            onClick={() => setActiveTab('orders')}
-            className={`flex-1 px-4 py-2 rounded-md text-sm font-medium transition-colors ${
-              activeTab === 'orders'
-                ? 'bg-[#0fc6c2] text-white'
-                : 'text-gray-600 hover:text-gray-900 hover:bg-gray-100'
-            }`}
-          >
-            📊 运单数据 {orders.length > 0 && `(${orders.length})`}
-          </button>
+      {/* 步骤指示器 */}
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-6">
+        <div className="flex items-center justify-center gap-2 mb-6">
+          {[
+            { key: 'upload', label: '上传文件', icon: '📁' },
+            { key: 'analyze', label: 'AI分析', icon: '🤖' },
+            { key: 'confirm', label: '确认规则', icon: '✅' },
+            { key: 'result', label: '解析结果', icon: '📊' },
+          ].map((s, i) => (
+            <div key={s.key} className="flex items-center">
+              <div className={`flex items-center gap-1 px-3 py-1.5 rounded-full text-sm ${
+                step === s.key
+                  ? 'bg-[#0fc6c2] text-white'
+                  : (['upload', 'analyze', 'confirm', 'result'].indexOf(step) > i
+                    ? 'bg-green-100 text-green-700'
+                    : 'bg-gray-100 text-gray-500')
+              }`}>
+                <span>{s.icon}</span>
+                <span>{s.label}</span>
+              </div>
+              {i < 3 && <div className="w-8 h-px bg-gray-300 mx-1" />}
+            </div>
+          ))}
         </div>
+      </div>
 
-        {/* 文件上传页 */}
-        {activeTab === 'upload' && (
+      {/* 主内容区 */}
+      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pb-8">
+
+        {/* 步骤1：上传文件 */}
+        {step === 'upload' && (
           <div className="space-y-6">
             <FileUploader onFilesSelected={handleFilesSelected} />
 
-            {/* 已选文件列表 */}
-            {files.length > 0 && (
+            {analyzedFiles.length > 0 && (
               <div className="bg-white rounded-lg border border-gray-200 p-4">
-                <h3 className="text-sm font-medium text-gray-700 mb-3">已选择的文件</h3>
+                <h3 className="text-sm font-medium text-gray-700 mb-3">已选择的文件 ({analyzedFiles.length})</h3>
                 <ul className="space-y-2">
-                  {files.map((file, index) => (
+                  {analyzedFiles.map((item, index) => (
                     <li key={index} className="flex items-center justify-between py-2 px-3 bg-gray-50 rounded-lg">
                       <div className="flex items-center gap-3">
                         <svg className="w-5 h-5 text-[#0fc6c2]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
                         </svg>
                         <div>
-                          <span className="text-sm text-gray-700">{file.name}</span>
-                          <span className="text-xs text-gray-400 ml-2">
-                            ({(file.size / 1024).toFixed(1)} KB)
-                          </span>
+                          <span className="text-sm text-gray-700">{item.file.name}</span>
+                          <span className="text-xs text-gray-400 ml-2">({(item.file.size / 1024).toFixed(1)} KB)</span>
                         </div>
                       </div>
-                      <div className="flex gap-2">
-                        <button
-                          onClick={() => handleGenerateRule(file)}
-                          disabled={generatingRule}
-                          className="text-xs text-[#0fc6c2] hover:text-[#0aa8a4] disabled:opacity-50"
-                        >
-                          {generatingRule ? '生成中...' : 'AI生成规则'}
-                        </button>
-                        <button
-                          onClick={() => setFiles(prev => prev.filter((_, i) => i !== index))}
-                          className="text-xs text-red-500 hover:text-red-700"
-                        >
-                          移除
-                        </button>
-                      </div>
+                      <button onClick={() => handleRemoveFile(index)} className="text-xs text-red-500 hover:text-red-700">移除</button>
                     </li>
                   ))}
                 </ul>
               </div>
             )}
 
-            {/* 当前规则 */}
-            {currentRule && (
-              <div className="bg-white rounded-lg border border-gray-200 p-4">
-                <h3 className="text-sm font-medium text-gray-700 mb-3">当前解析规则</h3>
-                <div className="bg-gray-50 rounded-lg p-3">
-                  <div className="flex items-center justify-between mb-2">
-                    <span className="font-medium text-gray-900">{currentRule.name}</span>
-                    <span className="text-xs text-[#0fc6c2] bg-[#0fc6c2]/10 px-2 py-1 rounded">
-                      {currentRule.parser.type}
-                    </span>
+            {/* 核心理念说明 */}
+            <div className="bg-blue-50 rounded-lg p-4">
+              <h4 className="font-medium text-blue-900 mb-2">💡 核心设计理念</h4>
+              <p className="text-sm text-blue-800">
+                不是写 N 个 if-else 适配 N 种文件，而是设计一套<strong>通用规则描述语言</strong>。
+                每种新格式只需"AI分析生成一条规则"即可适配。新增第 5、第 10 种格式时，<strong>系统代码零改动</strong>。
+              </p>
+            </div>
+
+            <button
+              onClick={handleAnalyzeAll}
+              disabled={analyzedFiles.length === 0}
+              className="w-full px-6 py-3 bg-[#0fc6c2] text-white rounded-lg font-medium hover:bg-[#0aa8a4] disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+            >
+              🤖 开始AI分析 ({analyzedFiles.length} 个文件)
+            </button>
+          </div>
+        )}
+
+        {/* 步骤2：AI分析中 */}
+        {step === 'analyze' && (
+          <div className="space-y-4">
+            <div className="bg-white rounded-lg border border-gray-200 p-6">
+              <h3 className="text-lg font-medium text-gray-900 mb-4">🤖 AI正在分析文件结构...</h3>
+              <ProgressBar progress={progress} />
+              <div className="mt-4 space-y-3">
+                {analyzedFiles.map((item, index) => (
+                  <div key={index} className="flex items-center gap-3 p-3 bg-gray-50 rounded-lg">
+                    {item.analyzing ? (
+                      <Loading size="sm" />
+                    ) : item.rule ? (
+                      <span className="text-green-500">✅</span>
+                    ) : item.error ? (
+                      <span className="text-red-500">❌</span>
+                    ) : (
+                      <span className="text-gray-400">⏳</span>
+                    )}
+                    <span className="text-sm text-gray-700">{item.file.name}</span>
+                    {item.rule && <span className="text-xs text-[#0fc6c2]">→ {item.rule.parser.type}</span>}
+                    {item.error && <span className="text-xs text-red-500">{item.error}</span>}
                   </div>
-                  {currentRule.description && (
-                    <p className="text-sm text-gray-600">{currentRule.description}</p>
-                  )}
-                  <button
-                    onClick={() => setCurrentRule(null)}
-                    className="text-xs text-red-500 hover:text-red-700 mt-2"
-                  >
-                    清除规则
-                  </button>
+                ))}
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* 步骤3：确认规则 */}
+        {step === 'confirm' && (
+          <div className="space-y-4">
+            <div className="bg-white rounded-lg border border-gray-200 p-6">
+              <h3 className="text-lg font-medium text-gray-900 mb-2">✅ 确认解析规则</h3>
+              <p className="text-sm text-gray-600 mb-4">
+                AI已分析每个文件的结构并生成解析规则。请检查规则是否正确，可点击"编辑规则"手动调整。
+              </p>
+
+              <div className="space-y-4">
+                {analyzedFiles.map((item, index) => (
+                  <div key={index} className="border border-gray-200 rounded-lg p-4">
+                    <div className="flex items-center justify-between mb-3">
+                      <div className="flex items-center gap-2">
+                        <span className="font-medium text-gray-900">{item.file.name}</span>
+                        {item.rule && (
+                          <span className="text-xs bg-[#0fc6c2]/10 text-[#0fc6c2] px-2 py-0.5 rounded">
+                            {item.rule.parser.type}
+                          </span>
+                        )}
+                      </div>
+                      <div className="flex gap-2">
+                        <button
+                          onClick={() => handleAnalyzeFile(index)}
+                          disabled={item.analyzing}
+                          className="text-xs text-[#0fc6c2] hover:text-[#0aa8a4]"
+                        >
+                          重新分析
+                        </button>
+                        {item.rule && (
+                          <button
+                            onClick={() => handleEditRule(index)}
+                            className="text-xs text-blue-500 hover:text-blue-700"
+                          >
+                            编辑规则
+                          </button>
+                        )}
+                      </div>
+                    </div>
+
+                    {item.rule ? (
+                      <div className="bg-gray-50 rounded p-3">
+                        <div className="flex items-center gap-2 mb-2">
+                          <span className="text-sm font-medium">{item.rule.name}</span>
+                        </div>
+                        {item.rule.description && (
+                          <p className="text-xs text-gray-600 mb-2">{item.rule.description}</p>
+                        )}
+                        <div className="text-xs text-gray-500">
+                          解析模式: {item.rule.parser.type} |
+                          字段数: {item.rule.parser.table?.columns?.length || item.rule.parser.matrix?.storeColumns?.length || '-'}
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="bg-red-50 rounded p-3 text-sm text-red-700">
+                        {item.error || '未能生成规则'}
+                      </div>
+                    )}
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            {/* 规则编辑弹窗 */}
+            {editingRuleIndex !== null && (
+              <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+                <div className="bg-white rounded-lg p-6 w-full max-w-2xl max-h-[80vh] overflow-auto">
+                  <h3 className="text-lg font-medium mb-4">编辑解析规则</h3>
+                  <textarea
+                    value={editingRuleJson}
+                    onChange={e => setEditingRuleJson(e.target.value)}
+                    className="w-full h-96 font-mono text-sm border border-gray-300 rounded-lg p-3 focus:outline-none focus:ring-2 focus:ring-[#0fc6c2]"
+                  />
+                  <div className="flex gap-3 mt-4 justify-end">
+                    <button
+                      onClick={() => setEditingRuleIndex(null)}
+                      className="px-4 py-2 text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200"
+                    >
+                      取消
+                    </button>
+                    <button
+                      onClick={handleSaveRule}
+                      className="px-4 py-2 text-white bg-[#0fc6c2] rounded-lg hover:bg-[#0aa8a4]"
+                    >
+                      保存
+                    </button>
+                  </div>
                 </div>
               </div>
             )}
 
-            {/* 操作按钮 */}
             <div className="flex gap-4">
               <button
-                onClick={handleParse}
-                disabled={files.length === 0 || parsing}
+                onClick={handleBackToUpload}
+                className="px-6 py-3 bg-gray-100 text-gray-700 rounded-lg font-medium hover:bg-gray-200 transition-colors"
+              >
+                ← 返回修改
+              </button>
+              <button
+                onClick={handleParseAll}
+                disabled={parsing || analyzedFiles.every(f => !f.rule)}
                 className="flex-1 px-6 py-3 bg-[#0fc6c2] text-white rounded-lg font-medium hover:bg-[#0aa8a4] disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
               >
                 {parsing ? (
@@ -377,73 +583,15 @@ export default function ImportPage() {
                     <span>解析中... {Math.round(progress)}%</span>
                   </div>
                 ) : (
-                  '开始解析'
+                  '确认并开始解析'
                 )}
               </button>
             </div>
-
-            {/* 解析进度 */}
-            {parsing && (
-              <div className="bg-white rounded-lg border border-gray-200 p-4">
-                <div className="flex items-center gap-3 mb-3">
-                  <Loading size="sm" />
-                  <span className="text-sm text-gray-700">正在解析文件...</span>
-                </div>
-                <ProgressBar progress={progress} />
-                <p className="text-xs text-gray-500 mt-2">
-                  已解析 {Math.round(progress / 100 * files.length)} / {files.length} 个文件
-                </p>
-              </div>
-            )}
           </div>
         )}
 
-        {/* 规则页 */}
-        {activeTab === 'rules' && (
-          <div className="bg-white rounded-lg border border-gray-200 p-6">
-            <h3 className="text-lg font-medium text-gray-900 mb-4">解析规则管理</h3>
-            <p className="text-gray-600 mb-4">
-              规则引擎支持多种解析模式：标准表格、矩阵转置、卡片识别、纯文本提取等。
-            </p>
-            
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-              {/* 规则类型卡片 */}
-              {[
-                { type: 'table', name: '标准表格', desc: '有明确表头和数据行的表格格式', icon: '📊' },
-                { type: 'matrix', name: '矩阵转置', desc: 'SKU×门店矩阵，需转置为独立记录', icon: '🔄' },
-                { type: 'card', name: '卡片识别', desc: '多个独立卡片堆叠的格式', icon: '🎴' },
-                { type: 'text', name: '纯文本提取', desc: '无表格，用正则表达式提取', icon: '📝' },
-                { type: 'multi-sheet', name: '多Sheet合并', desc: 'Excel多个Sheet独立解析后合并', icon: '📑' },
-                { type: 'multi-page', name: '多页拆分', desc: 'PDF含多个独立单元，需拆分', icon: '📄' },
-              ].map((item) => (
-                <div
-                  key={item.type}
-                  className="border border-gray-200 rounded-lg p-4 hover:border-[#0fc6c2] hover:shadow-md transition-all cursor-pointer"
-                  onClick={() => {
-                    showToast('info', `选择${item.name}规则`);
-                  }}
-                >
-                  <div className="text-3xl mb-2">{item.icon}</div>
-                  <h4 className="font-medium text-gray-900 mb-1">{item.name}</h4>
-                  <p className="text-sm text-gray-600">{item.desc}</p>
-                </div>
-              ))}
-            </div>
-
-            <div className="mt-6 p-4 bg-blue-50 rounded-lg">
-              <h4 className="font-medium text-blue-900 mb-2">💡 使用提示</h4>
-              <ul className="text-sm text-blue-800 space-y-1">
-                <li>• 上传文件后，点击"AI生成规则"可自动生成解析规则</li>
-                <li>• 系统会根据文件结构智能匹配最佳解析模式</li>
-                <li>• 规则可手动微调，满足特殊格式需求</li>
-                <li>• 新增第5、第10种格式时，系统代码零改动</li>
-              </ul>
-            </div>
-          </div>
-        )}
-
-        {/* 运单数据页 */}
-        {activeTab === 'orders' && (
+        {/* 步骤4：解析结果 */}
+        {step === 'result' && (
           <div className="space-y-4">
             {/* 操作栏 */}
             <div className="bg-white rounded-lg border border-gray-200 p-4">
@@ -470,15 +618,27 @@ export default function ImportPage() {
                   >
                     🚀 批量提交下单
                   </button>
+                  <button
+                    onClick={handleSaveToDB}
+                    disabled={orders.length === 0 || saving}
+                    className="px-4 py-2 bg-purple-500 text-white rounded-lg text-sm font-medium hover:bg-purple-600 disabled:opacity-50 transition-colors"
+                  >
+                    {saving ? '保存中...' : '💾 保存到数据库'}
+                  </button>
+                  <button
+                    onClick={handleRestart}
+                    className="px-4 py-2 bg-gray-100 text-gray-700 rounded-lg text-sm font-medium hover:bg-gray-200 transition-colors"
+                  >
+                    📁 继续导入
+                  </button>
                 </div>
-                
+
                 <div className="flex items-center gap-4">
-                  {/* 搜索框 */}
                   <div className="relative">
                     <input
                       type="text"
                       value={searchQuery}
-                      onChange={(e) => setSearchQuery(e.target.value)}
+                      onChange={e => setSearchQuery(e.target.value)}
                       placeholder="搜索运单号、收货人、电话..."
                       className="w-64 pl-10 pr-4 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#0fc6c2] focus:border-transparent"
                     />
@@ -486,21 +646,14 @@ export default function ImportPage() {
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
                     </svg>
                   </div>
-                  
-                  {/* 统计信息 */}
+
                   <div className="text-sm text-gray-600">
                     {orders.length > 0 && (
                       <>
                         共 <span className="font-medium text-[#0fc6c2]">{totalCount}</span> 条
-                        {debouncedSearchQuery && (
-                          <span className="ml-1">
-                            (筛选 {filteredOrders.length} 条)
-                          </span>
-                        )}
+                        {debouncedSearchQuery && <span className="ml-1">(筛选 {filteredOrders.length} 条)</span>}
                         {orders.filter(o => !o.isValid).length > 0 && (
-                          <span className="ml-2 text-red-500">
-                            ({orders.filter(o => !o.isValid).length} 条有误)
-                          </span>
+                          <span className="ml-2 text-red-500">({orders.filter(o => !o.isValid).length} 条有误)</span>
                         )}
                       </>
                     )}
@@ -521,16 +674,12 @@ export default function ImportPage() {
               virtualHeight={600}
             />
 
-            {/* 分页/加载更多 */}
+            {/* 分页 */}
             {totalCount > 100 && (
               <div className="bg-white rounded-lg border border-gray-200 p-4 flex justify-between items-center">
                 <div className="text-sm text-gray-600">
                   显示 {displayedOrders.length} / {totalCount} 条
-                  {totalPages > 1 && (
-                    <span className="ml-2">
-                      (第 {currentPage}/{totalPages} 页)
-                    </span>
-                  )}
+                  {totalPages > 1 && <span className="ml-2">(第 {currentPage}/{totalPages} 页)</span>}
                 </div>
                 <div className="flex gap-2">
                   <button
@@ -565,7 +714,127 @@ export default function ImportPage() {
             )}
           </div>
         )}
+
+        {/* 历史记录 */}
+        {step === 'history' && <HistoryView onBack={() => setStep('upload')} />}
       </main>
+    </div>
+  );
+}
+
+// 历史记录组件
+function HistoryView({ onBack }: { onBack: () => void }) {
+  const [batches, setBatches] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [selectedBatch, setSelectedBatch] = useState<number | null>(null);
+  const [batchOrders, setBatchOrders] = useState<any[]>([]);
+
+  // 加载批次列表
+  useState(() => {
+    fetch('/api/import-orders?action=batches')
+      .then(res => res.json())
+      .then(data => {
+        if (data.success) setBatches(data.batches);
+      })
+      .finally(() => setLoading(false));
+  });
+
+  // 加载批次运单
+  const loadBatchOrders = async (batchId: number) => {
+    setSelectedBatch(batchId);
+    const res = await fetch(`/api/import-orders?batchId=${batchId}&pageSize=100`);
+    const data = await res.json();
+    if (data.success) setBatchOrders(data.orders);
+  };
+
+  if (loading) {
+    return (
+      <div className="bg-white rounded-lg border border-gray-200 p-8 text-center">
+        <Loading size="md" />
+        <p className="mt-4 text-gray-500">加载历史记录...</p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-4">
+      <div className="bg-white rounded-lg border border-gray-200 p-4">
+        <div className="flex items-center justify-between mb-4">
+          <h3 className="text-lg font-medium text-gray-900">📋 历史导入记录</h3>
+          <button onClick={onBack} className="text-sm text-[#0fc6c2] hover:text-[#0aa8a4]">
+            ← 返回上传
+          </button>
+        </div>
+
+        {batches.length === 0 ? (
+          <p className="text-gray-500 text-center py-8">暂无导入记录</p>
+        ) : (
+          <div className="space-y-3">
+            {batches.map((batch: any) => (
+              <div
+                key={batch.id}
+                className={`border rounded-lg p-4 cursor-pointer transition-all ${
+                  selectedBatch === batch.id
+                    ? 'border-[#0fc6c2] bg-[#0fc6c2]/5'
+                    : 'border-gray-200 hover:border-gray-300'
+                }`}
+                onClick={() => loadBatchOrders(batch.id)}
+              >
+                <div className="flex items-center justify-between">
+                  <div>
+                    <span className="font-medium text-gray-900">{batch.file_name}</span>
+                    <span className="ml-2 text-xs bg-gray-100 text-gray-600 px-2 py-0.5 rounded">
+                      {batch.file_type}
+                    </span>
+                  </div>
+                  <span className="text-xs text-gray-500">
+                    {new Date(batch.created_at).toLocaleString('zh-CN')}
+                  </span>
+                </div>
+                <div className="mt-2 flex gap-4 text-sm text-gray-600">
+                  <span>共 {batch.total_rows} 条</span>
+                  <span className="text-green-600">✓ {batch.success_rows} 条</span>
+                  {batch.error_rows > 0 && <span className="text-red-600">✗ {batch.error_rows} 条</span>}
+                </div>
+                {batch.rule_name && (
+                  <div className="mt-1 text-xs text-gray-500">规则: {batch.rule_name}</div>
+                )}
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+
+      {/* 批次运单详情 */}
+      {selectedBatch && batchOrders.length > 0 && (
+        <div className="bg-white rounded-lg border border-gray-200 p-4">
+          <h4 className="font-medium text-gray-900 mb-3">批次 #{selectedBatch} 运单详情</h4>
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead className="bg-gray-50">
+                <tr>
+                  <th className="px-3 py-2 text-left text-xs font-medium text-gray-500">收货人</th>
+                  <th className="px-3 py-2 text-left text-xs font-medium text-gray-500">电话</th>
+                  <th className="px-3 py-2 text-left text-xs font-medium text-gray-500">地址</th>
+                  <th className="px-3 py-2 text-left text-xs font-medium text-gray-500">物品</th>
+                  <th className="px-3 py-2 text-left text-xs font-medium text-gray-500">数量</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-gray-200">
+                {batchOrders.map((order: any) => (
+                  <tr key={order.id} className="hover:bg-gray-50">
+                    <td className="px-3 py-2">{order.receiver_name || '-'}</td>
+                    <td className="px-3 py-2">{order.receiver_phone || '-'}</td>
+                    <td className="px-3 py-2 max-w-xs truncate">{order.receiver_address || '-'}</td>
+                    <td className="px-3 py-2">{order.item_name || '-'}</td>
+                    <td className="px-3 py-2">{order.quantity ?? '-'}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

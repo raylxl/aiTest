@@ -95,6 +95,65 @@ export async function initDB() {
     )
   `;
 
+  // 万能导入V2 - 导入批次表
+  await sql`
+    CREATE TABLE IF NOT EXISTS import_batches (
+      id              SERIAL PRIMARY KEY,
+      file_name       VARCHAR(200) NOT NULL,
+      file_type       VARCHAR(20) NOT NULL,
+      rule_name       VARCHAR(200),
+      rule_json       JSONB,
+      total_rows      INTEGER DEFAULT 0,
+      success_rows    INTEGER DEFAULT 0,
+      error_rows      INTEGER DEFAULT 0,
+      status          VARCHAR(20) DEFAULT 'completed',
+      created_at      TIMESTAMPTZ DEFAULT NOW()
+    )
+  `;
+
+  // 万能导入V2 - 导入运单表
+  await sql`
+    CREATE TABLE IF NOT EXISTS import_orders (
+      id              SERIAL PRIMARY KEY,
+      batch_id        INTEGER REFERENCES import_batches(id),
+      order_no        VARCHAR(100),
+      sender_name     VARCHAR(100),
+      sender_phone    VARCHAR(20),
+      sender_address  TEXT,
+      receiver_name   VARCHAR(100),
+      receiver_phone  VARCHAR(20),
+      receiver_address TEXT,
+      item_name       VARCHAR(200),
+      item_code       VARCHAR(100),
+      item_category   VARCHAR(100),
+      specification   VARCHAR(200),
+      quantity        DECIMAL(10,2),
+      unit            VARCHAR(20),
+      source_file     VARCHAR(200),
+      source_sheet    VARCHAR(100),
+      source_row      INTEGER,
+      is_valid        BOOLEAN DEFAULT true,
+      validation_errors TEXT[],
+      extra_fields    JSONB,
+      created_at      TIMESTAMPTZ DEFAULT NOW()
+    )
+  `;
+
+  // 万能导入V2 - 解析规则表（用户保存的规则）
+  await sql`
+    CREATE TABLE IF NOT EXISTS parse_rules (
+      id              SERIAL PRIMARY KEY,
+      name            VARCHAR(200) NOT NULL,
+      description     TEXT,
+      file_type       VARCHAR(20) NOT NULL,
+      rule_json       JSONB NOT NULL,
+      is_preset       BOOLEAN DEFAULT false,
+      use_count       INTEGER DEFAULT 0,
+      created_at      TIMESTAMPTZ DEFAULT NOW(),
+      updated_at      TIMESTAMPTZ DEFAULT NOW()
+    )
+  `;
+
   // ========== 数据库迁移（冷启动自动执行，PostgreSQL ALTER IF NOT EXISTS 等效）==========
   // 迁移记录表
   await sql`
