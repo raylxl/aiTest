@@ -1319,6 +1319,8 @@ function HistoryView({ onBack }: { onBack: () => void }) {
   const [loading, setLoading] = useState(true);
   const [selectedBatch, setSelectedBatch] = useState<number | null>(null);
   const [batchOrders, setBatchOrders] = useState<any[]>([]);
+  const [orderPage, setOrderPage] = useState(1);
+  const [orderPageSize, setOrderPageSize] = useState(20);
 
   // 筛选搜索状态
   const [searchText, setSearchText] = useState('');
@@ -1430,6 +1432,24 @@ function HistoryView({ onBack }: { onBack: () => void }) {
             批次 #{selectedBatch} 运单详情
             {searchText && <span className="text-sm text-gray-500 ml-2">(筛选: {filteredOrders.length}/{batchOrders.length})</span>}
           </h4>
+          {/* 分页控件 */}
+          <div className="flex items-center justify-between mb-3">
+            <div className="text-sm text-gray-500">
+              共 {filteredOrders.length} 条{filteredOrders.length !== batchOrders.length && ` (已筛选)`}
+            </div>
+            <div className="flex items-center gap-2">
+              <select
+                value={orderPageSize}
+                onChange={e => { setOrderPageSize(Number(e.target.value)); setOrderPage(1); }}
+                className="px-2 py-1 text-sm border border-gray-300 rounded"
+              >
+                <option value={10}>10条/页</option>
+                <option value={20}>20条/页</option>
+                <option value={50}>50条/页</option>
+                <option value={100}>100条/页</option>
+              </select>
+            </div>
+          </div>
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
               <thead className="bg-gray-50">
@@ -1444,7 +1464,9 @@ function HistoryView({ onBack }: { onBack: () => void }) {
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-200">
-                {filteredOrders.map((order: any) => (
+                {filteredOrders
+                  .slice((orderPage - 1) * orderPageSize, orderPage * orderPageSize)
+                  .map((order: any) => (
                   <tr key={order.id} className="hover:bg-gray-50">
                     <td className="px-3 py-2 font-mono text-xs">{order.order_no || '-'}</td>
                     <td className="px-3 py-2">{order.store_name || '-'}</td>
@@ -1458,6 +1480,28 @@ function HistoryView({ onBack }: { onBack: () => void }) {
               </tbody>
             </table>
           </div>
+          {/* 分页导航 */}
+          {Math.ceil(filteredOrders.length / orderPageSize) > 1 && (
+            <div className="flex items-center justify-center gap-2 mt-4">
+              <button
+                onClick={() => setOrderPage(p => Math.max(1, p - 1))}
+                disabled={orderPage === 1}
+                className="px-3 py-1 text-sm border border-gray-300 rounded hover:bg-gray-50 disabled:opacity-50"
+              >
+                ← 上一页
+              </button>
+              <span className="text-sm text-gray-600">
+                第 {orderPage} / {Math.ceil(filteredOrders.length / orderPageSize)} 页
+              </span>
+              <button
+                onClick={() => setOrderPage(p => Math.min(Math.ceil(filteredOrders.length / orderPageSize), p + 1))}
+                disabled={orderPage >= Math.ceil(filteredOrders.length / orderPageSize)}
+                className="px-3 py-1 text-sm border border-gray-300 rounded hover:bg-gray-50 disabled:opacity-50"
+              >
+                下一页 →
+              </button>
+            </div>
+          )}
         </div>
       )}
     </div>

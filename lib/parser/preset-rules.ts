@@ -213,6 +213,101 @@ export const rule_card: ParseRule = {
 };
 
 /**
+ * 预设规则 - 门店配送确认单（Word，纯文本段落）
+ * 格式特征：纯文本段落，无表格，每条记录用"━━━"分隔线隔开
+ * 物品格式："编号. 编码 | 名称 | 规格 | 数量"
+ */
+export const rule_mendian: ParseRule = {
+  name: '门店配送确认单',
+  description: 'Word纯文本，━━━分隔线拆分多订单',
+  fileTypes: ['word'],
+  identifier: {
+    headerKeywords: ['配送确认', '编码', '名称', '规格', '数量'],
+  },
+  parser: {
+    type: 'text',
+    text: {
+      patterns: [
+        { field: 'storeName', regex: '门店[：:]\\s*(.+?)(?:\\s|$)', group: 1 },
+        { field: 'receiverName', regex: '收货人[：:]\\s*(.+?)(?:\\s|$)', group: 1 },
+        { field: 'receiverPhone', regex: '(?:电话|手机)[：:]\\s*(\\d+)', group: 1 },
+        { field: 'receiverAddress', regex: '(?:地址|收货地址)[：:]\\s*(.+)', group: 1 },
+      ],
+      itemPatterns: [
+        { field: 'itemCode', regex: '\\d+\\.\\s*([A-Za-z0-9]+)\\s*[|｜]', group: 1 },
+        { field: 'itemName', regex: '[|｜]\\s*([^|｜]+?)\\s*[|｜]', group: 1 },
+        { field: 'specification', regex: '[|｜]\\s*([^|｜]+?)\\s*[|｜]', group: 1 },
+        { field: 'quantity', regex: '[|｜]\\s*(\\d+\\.?\\d*)\\s*$', group: 1 },
+      ],
+      orderSeparator: '━━━',
+    },
+  },
+  recipient: {
+    source: 'inline',
+    fields: {},
+  },
+};
+
+/**
+ * 预设规则 - 周配送计划（Excel，日期×门店双重转置）
+ * 格式特征：日期作为列头横向展开（周一到周五），门店纵向排列
+ * 每个单元格含"物品名x数量\n物品名x数量"的复合值
+ */
+export const rule_zhoupei: ParseRule = {
+  name: '周配送计划',
+  description: '日期×门店双重转置，复合单元格拆分',
+  fileTypes: ['excel'],
+  identifier: {
+    headerKeywords: ['周一', '周二', '周三', '周四', '周五', '门店'],
+  },
+  parser: {
+    type: 'double-matrix',
+    matrix: {
+      // 日期行（表头）
+      headerRow: 0,
+      // 门店名列
+      storeColumn: 0,
+      // 日期列范围（周一到周五）
+      dateColumns: [1, 2, 3, 4, 5],
+      // 复合单元格拆分正则："物品名 x 数量"
+      valueSplit: '\\s*[xX×]\\s*',
+      // 日期格式化
+      dateFormat: 'ddd',
+    } as any,
+  },
+};
+
+/**
+ * 预设规则 - 配送签收单（PDF，多单合一）
+ * 格式特征：一个PDF内含3个独立配送签收单，以分隔线区分
+ * 每个单据有独立的收货人信息和物品明细表格
+ */
+export const rule_qianshou: ParseRule = {
+  name: '配送签收单',
+  description: 'PDF多单合一，分隔线拆分为独立运单',
+  fileTypes: ['pdf'],
+  identifier: {
+    headerKeywords: ['签收单', '收货人', '物品', '签收'],
+  },
+  parser: {
+    type: 'multi-page',
+    multiSource: {
+      sourceType: 'page',
+      mergeStrategy: 'split',
+      orderSeparator: '第.+?联|分隔线|---+',
+    } as any,
+  },
+  recipient: {
+    source: 'separate',
+    fields: {
+      name: { pattern: '收货人[：:]\\s*(.+?)(?:\\s|$)' },
+      phone: { pattern: '(?:电话|手机)[：:]\\s*(\\d+)' },
+      address: { pattern: '(?:地址|收货地址)[：:]\\s*(.+)' },
+    },
+  },
+};
+
+/**
  * 所有预设规则
  */
 export const presetRules: ParseRule[] = [
@@ -222,32 +317,10 @@ export const presetRules: ParseRule[] = [
   rule_qianzhai,
   rule_multi_sheet,
   rule_card,
+  rule_mendian,
+  rule_zhoupei,
+  rule_qianshou,
 ];
 
-/**
- * 根据文件名匹配预设规则
- */
-export function matchPresetRule(fileName: string): ParseRule | null {
-  const name = fileName.toLowerCase();
-  
-  if (name.includes('海口') || name.includes('黎明屯') || name.includes('配送发货单')) {
-    return rule_limingtu;
-  }
-  if (name.includes('湖南仓')) {
-    return rule_hunan;
-  }
-  if (name.includes('欢乐牧场')) {
-    return rule_huanle;
-  }
-  if (name.includes('黔寨寨') || name.includes('烙锅')) {
-    return rule_qianzhai;
-  }
-  if (name.includes('多门店') || name.includes('分sheet')) {
-    return rule_multi_sheet;
-  }
-  if (name.includes('调拨') || name.includes('卡片')) {
-    return rule_card;
-  }
-  
-  return null;
-}
+// matchPresetRule 已移除 — 考试要求：代码中不应出现文件名判断
+// 规则选择由用户手动完成，AI 分析文件后生成规则，不做自动匹配

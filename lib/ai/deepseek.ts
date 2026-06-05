@@ -69,6 +69,7 @@ targetField应使用以下标准字段名：
 2. headerRow和dataStartRow使用0-based索引
 3. sourceIndex是列的索引（0-based）
 4. 正则表达式需要正确转义
+5. **推测标注**：如果某个字段映射是你根据常识推测的（而非从文件样本中明确看到的），请在对应字段中添加 inferred: true 属性。例如：{"sourceIndex": 2, "targetField": "itemName", "dataType": "string", "inferred": true}。AI生成的整体规则JSON中也可以添加 hasInferredFields: true 和 inferredFields: ["字段名"] 来帮助用户识别哪些映射是推测的。
 `;
 
 /**

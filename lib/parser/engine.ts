@@ -398,41 +398,7 @@ export class ParseEngine {
     });
   }
 
-  /**
-   * 自动匹配规则
-   * 根据文件特征自动选择最合适的规则
-   */
-  async matchRule(
-    file: File | ArrayBuffer,
-    fileName: string,
-    rules: ParseRule[]
-  ): Promise<RuleMatchResult | null> {
-    const fileType = this.detectFileType(fileName);
-    const matchingRules = rules.filter(r => r.fileTypes.includes(fileType));
-
-    if (matchingRules.length === 0) return null;
-
-    // 简单匹配：根据文件名和文件类型
-    for (const rule of matchingRules) {
-      if (rule.identifier.fileNamePattern) {
-        const pattern = new RegExp(rule.identifier.fileNamePattern, 'i');
-        if (pattern.test(fileName)) {
-          return {
-            rule,
-            confidence: 0.9,
-            matchReasons: [`文件名匹配: ${rule.identifier.fileNamePattern}`],
-          };
-        }
-      }
-    }
-
-    // 如果没有精确匹配，返回第一个匹配的规则
-    return {
-      rule: matchingRules[0],
-      confidence: 0.5,
-      matchReasons: ['文件类型匹配'],
-    };
-  }
+  // matchRule 方法已移除 — 考试要求：规则由用户手动选择
 }
 
 // 导出单例

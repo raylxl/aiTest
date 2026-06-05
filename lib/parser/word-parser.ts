@@ -30,27 +30,59 @@ export async function parseWordFile(buffer: ArrayBuffer): Promise<WordParseResul
 
 /**
  * Word文本模式解析（纯文本段落，无表格）
+ * 支持 orderSeparator 拆分多订单
  */
 export function parseWordText(
   wordData: WordParseResult,
   config: NonNullable<ParseRule['parser']['text']>
 ): ParsedOrder[] {
+  let text = wordData.text;
+
+  // 支持 orderSeparator 拆分多订单
+  if (config.orderSeparator) {
+    const sepRegex = new RegExp(config.orderSeparator);
+    const sections = text.split(sepRegex).filter(s => s.trim());
+    const allOrders: ParsedOrder[] = [];
+
+    for (const section of sections) {
+      const sectionData: WordParseResult = {
+        ...wordData,
+        text: section,
+        paragraphs: section.split('\n').filter(p => p.trim()),
+      };
+      const orders = parseWordTextCore(sectionData, config);
+      allOrders.push(...orders);
+    }
+
+    return allOrders;
+  }
+
+  return parseWordTextCore(wordData, config);
+}
+
+/**
+ * Word文本解析核心逻辑
+ */
+function parseWordTextCore(
+  wordData: WordParseResult,
+  config: NonNullable<ParseRule['parser']['text']>
+): ParsedOrder[] {
   const orders: ParsedOrder[] = [];
-  const { text } = wordData;
-  
+  const { text, paragraphs } = wordData;
+
   // 提取全局字段（收货人、地址等）
   const globalFields: Record<string, string> = {};
-  for (const pattern of config.patterns) {
+  for (const pattern of config.patterns || []) {
     const regex = new RegExp(pattern.regex, 'gm');
     const match = regex.exec(text);
     if (match) {
       globalFields[pattern.field] = match[pattern.group || 1]?.trim() || '';
     }
   }
-  
+
   // 提取物品列表
   if (config.itemPatterns) {
-    const items = extractItemsFromParagraphs(wordData.paragraphs, config.itemPatterns);
+    const items = extractItemsFromParagraphs(paragraphs, config.itemPatterns);
     for (const item of items) {
       orders.push({
         ...globalFields,
@@ -67,7 +99,7 @@ export function parseWordText(
       validationErrors: [],
     } as ParsedOrder);
   }
-  
+
   return orders;
 }
 
