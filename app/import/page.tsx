@@ -102,7 +102,7 @@ export default function ImportPage() {
   const [searchQuery, setSearchQuery] = useState('');
   const [editingRuleIndex, setEditingRuleIndex] = useState<number | null>(null);
   const [editingRuleJson, setEditingRuleJson] = useState('');
-  const [apiKey, setApiKey] = useState('sk-IoFm2IHaR3vBGy2pxgQWPDOSeOqJNFsDKIEM0X5dmuzT5zMq');
+  const [apiKey, setApiKey] = useState('');
   const [apiUrl, setApiUrl] = useState('https://www.vbcode.io/v1/chat/completions');
   const [modelName, setModelName] = useState('gpt-5.4');
 
@@ -110,15 +110,22 @@ export default function ImportPage() {
   const [duplicateNos, setDuplicateNos] = useState<string[]>([]);
   const [dupStats, setDupStats] = useState<{ batchDupCount: number; dbDupCount: number } | null>(null);
 
+  // 全量错误弹窗
+  const [showErrorModal, setShowErrorModal] = useState(false);
+
   // Web Worker
   const { parseWithWorker, isWorking: isWorkerParsing, progress: workerProgress, isSupported: workerSupported } = useParseWorker();
 
-  // 从localStorage加载配置（如果有的话，否则使用默认值）
+  // 从localStorage或环境变量加载配置
   useEffect(() => {
+    // 优先级：环境变量 > localStorage > 空
+    const envKey = process.env.NEXT_PUBLIC_AI_API_KEY || '';
     const savedKey = localStorage.getItem('ai_api_key');
     const savedUrl = localStorage.getItem('ai_api_url');
     const savedModel = localStorage.getItem('ai_model_name');
-    if (savedKey && savedKey !== 'undefined' && savedKey !== 'null' && savedKey.length > 10) {
+    if (envKey) {
+      setApiKey(envKey);
+    } else if (savedKey && savedKey !== 'undefined' && savedKey !== 'null' && savedKey.length > 10) {
       setApiKey(savedKey);
     }
     if (savedUrl && savedUrl !== 'undefined' && savedUrl !== 'null' && savedUrl.includes('/chat/completions')) {
@@ -139,13 +146,13 @@ export default function ImportPage() {
 
   // 重置为默认配置
   const resetConfig = useCallback(() => {
-    setApiKey('sk-IoFm2IHaR3vBGy2pxgQWPDOSeOqJNFsDKIEM0X5dmuzT5zMq');
+    setApiKey('');
     setApiUrl('https://www.vbcode.io/v1/chat/completions');
     setModelName('gpt-5.4');
     localStorage.removeItem('ai_api_key');
     localStorage.removeItem('ai_api_url');
     localStorage.removeItem('ai_model_name');
-    showToast('success', '已重置为默认配置');
+    showToast('success', '已重置为默认配置（请重新输入 API Key）');
   }, []);
 
   const {
@@ -246,16 +253,15 @@ export default function ImportPage() {
     return JSON.parse(jsonMatch[0]) as ParseRule;
   };
 
-  // 生成默认规则（当AI失败时的备用方案）
-  const generateFallbackRule = useCallback((fileType: string, fileName: string): ParseRule => {
-    const isMultiSheet = fileName.includes('多') || fileName.includes('分') || fileName.includes('门店');
+  // 生成默认规则（当AI失败时的备用方案）—— 不使用文件名判断，统一返回通用 table 规则
+  const generateFallbackRule = useCallback((_fileType: string, _fileName: string): ParseRule => {
     return {
-      name: `默认规则 - ${fileName}`,
-      description: `基于文件类型${fileType}自动生成的默认解析规则`,
-      fileTypes: [fileType as any],
+      name: '默认规则（待手动配置）',
+      description: 'AI分析失败时生成的通用规则，请根据实际文件结构手动编辑',
+      fileTypes: ['excel'],
       identifier: {},
       parser: {
-        type: isMultiSheet ? 'multi-sheet' : 'table',
+        type: 'table',
         table: { headerRow: 'auto', dataStartRow: 'auto', columns: [] }
       },
       recipient: {
@@ -563,16 +569,47 @@ export default function ImportPage() {
     showToast('success', '已删除');
   };
 
+  // 收集全量错误信息（行号 + 字段名 + 原因）
+  const collectAllErrors = useCallback((): { row: number; field: string; reason: string; orderNo?: string }[] => {
+    const allErrors: { row: number; field: string; reason: string; orderNo?: string }[] = [];
+    orders.forEach((order, idx) => {
+      if (!order.isValid && order.validationErrors?.length) {
+        order.validationErrors.forEach((err: string) => {
+          // 尝试从错误消息中提取字段名
+          const fieldMatch = err.match(/^(.+?)[：:]\s*(.+)$/);
+          allErrors.push({
+            row: (order.sourceRow ?? idx) + 1,
+            field: fieldMatch ? fieldMatch[1].trim() : '未知字段',
+            reason: fieldMatch ? fieldMatch[2].trim() : err,
+            orderNo: order.orderNo || undefined,
+          });
+        });
+      } else if (!order.isValid) {
+        // 无详细错误信息但标记为无效
+        const missingFields: string[] = [];
+        if (!order.itemCode) missingFields.push('物品编码');
+        if (!order.itemName) missingFields.push('物品名称');
+        if ((order.quantity == null || order.quantity <= 0)) missingFields.push('数量(正数)');
+        if (!order.storeName && !order.receiverName) missingFields.push('门店或收件人(二选一)');
+        if (order.receiverPhone && !/^1\d{10}$/.test(order.receiverPhone)) missingFields.push('电话格式');
+        missingFields.forEach(f => {
+          allErrors.push({ row: (order.sourceRow ?? idx) + 1, field: f, reason: `必填项为空或格式错误`, orderNo: order.orderNo || undefined });
+        });
+      }
+    });
+    return allErrors;
+  }, [orders]);
+
   // 批量提交（校验+进度条+阻止错误行）
   const [submitting, setSubmitting] = useState(false);
   const [submitProgress, setSubmitProgress] = useState(0);
   const handleSubmitOrders = async () => {
     if (orders.length === 0) { showToast('warning', '没有可提交的数据'); return; }
 
-    // 检查错误行
+    // 检查错误行 → 打开全量错误弹窗
     const errorOrders = orders.filter(o => !o.isValid);
     if (errorOrders.length > 0) {
-      showToast('error', `有 ${errorOrders.length} 条数据存在错误，请先修正后再提交！点击"⚠X条有误"查看详情`);
+      setShowErrorModal(true);
       return;
     }
 
@@ -631,6 +668,38 @@ export default function ImportPage() {
       setSubmitting(false);
       setTimeout(() => setSubmitProgress(0), 2000);
     }
+  };
+
+  // 跳过错误行，仅提交有效数据
+  const submitValidOrdersOnly = async (validOrders: ParsedOrder[]) => {
+    if (validOrders.length === 0) return;
+    setSubmitting(true);
+    setSubmitProgress(0);
+    try {
+      const BATCH_SIZE = 100;
+      const totalBatches = Math.ceil(validOrders.length / BATCH_SIZE);
+      let successCount = 0;
+      for (let i = 0; i < totalBatches; i++) {
+        const batch = validOrders.slice(i * BATCH_SIZE, (i + 1) * BATCH_SIZE);
+        setSubmitProgress(Math.round((i / totalBatches) * 90));
+        const res = await fetch('/api/import-orders', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            orders: batch,
+            fileName: analyzedFiles.map(f => f.file.name).join(', '),
+            fileType: analyzedFiles[0]?.fileInfo?.type || 'unknown',
+            ruleName: analyzedFiles[0]?.rule?.name || '',
+            ruleJson: analyzedFiles[0]?.rule || {},
+          }),
+        });
+        const data = await res.json();
+        if (data.success) successCount += batch.length;
+      }
+      setSubmitProgress(100);
+      showToast('success', `已跳过错误行，成功提交 ${successCount} 条有效运单`);
+    } catch { showToast('error', '提交失败'); }
+    finally { setSubmitting(false); setTimeout(() => setSubmitProgress(0), 2000); }
   };
 
   // 保存到数据库
@@ -983,7 +1052,7 @@ export default function ImportPage() {
                         共 <span className="font-medium text-[#0fc6c2]">{totalCount}</span> 条
                         {debouncedSearchQuery && <span className="ml-1">(筛选 {filteredOrders.length} 条)</span>}
                         {orders.filter(o => !o.isValid).length > 0 && (
-                          <span className="ml-2 text-red-500">({orders.filter(o => !o.isValid).length} 条有误)</span>
+                          <button onClick={() => setShowErrorModal(true)} className="ml-2 text-red-500 hover:text-red-700 underline cursor-pointer">({orders.filter(o => !o.isValid).length} 条有误)</button>
                         )}
                         {duplicateNos.length > 0 && (
                           <span className="ml-2 text-yellow-600">({duplicateNos.length} 重复)</span>
@@ -1048,6 +1117,77 @@ export default function ImportPage() {
                 </div>
               </div>
             )}
+
+            {/* 全量错误弹窗 */}
+            {showErrorModal && (() => {
+              const allErrors = collectAllErrors();
+              return (
+                <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50" onClick={() => setShowErrorModal(false)}>
+                  <div className="bg-white rounded-xl shadow-2xl w-[90vw] max-w-3xl max-h-[80vh] flex flex-col" onClick={e => e.stopPropagation()}>
+                    {/* 弹窗标题 */}
+                    <div className="flex items-center justify-between px-6 py-4 border-b border-gray-200">
+                      <div>
+                        <h3 className="text-lg font-semibold text-red-600">数据校验错误</h3>
+                        <p className="text-sm text-gray-500 mt-1">共 {orders.filter(o => !o.isValid).length} 条数据存在 {allErrors.length} 个错误，请修正后重新提交</p>
+                      </div>
+                      <button onClick={() => setShowErrorModal(false)} className="text-gray-400 hover:text-gray-600 text-xl leading-none">&times;</button>
+                    </div>
+
+                    {/* 错误表格 */}
+                    <div className="flex-1 overflow-auto px-6 py-4">
+                      <table className="w-full text-sm border-collapse">
+                        <thead className="sticky top-0 bg-gray-50">
+                          <tr>
+                            <th className="px-4 py-2 text-left font-medium text-gray-600 border-b w-16">#</th>
+                            <th className="px-4 py-2 text-left font-medium text-gray-600 border-b w-20">行号</th>
+                            <th className="px-4 py-2 text-left font-medium text-gray-600 border-b w-32">字段</th>
+                            <th className="px-4 py-2 text-left font-medium text-gray-600 border-b">错误原因</th>
+                            <th className="px-4 py-2 text-left font-medium text-gray-600 border-b w-36">外部编码</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-gray-100">
+                          {allErrors.length > 0 ? allErrors.map((err, i) => (
+                            <tr key={i} className="hover:bg-red-50/50">
+                              <td className="px-4 py-2 text-gray-400">{i + 1}</td>
+                              <td className="px-4 py-2 font-mono text-xs font-medium text-gray-700">{err.row}</td>
+                              <td className="px-4 py-2">
+                                <span className="inline-block px-2 py-0.5 bg-red-100 text-red-700 rounded text-xs font-medium">{err.field}</span>
+                              </td>
+                              <td className="px-4 py-2 text-gray-700">{err.reason}</td>
+                              <td className="px-4 py-2 font-mono text-xs text-gray-500">{err.orderNo || '-'}</td>
+                            </tr>
+                          )) : (
+                            <tr><td colSpan={5} className="px-4 py-8 text-center text-gray-400">暂无详细错误信息（请检查标红行）</td></tr>
+                          )}
+                        </tbody>
+                      </table>
+                    </div>
+
+                    {/* 底部操作 */}
+                    <div className="flex justify-end gap-3 px-6 py-4 border-t border-gray-200">
+                      <button
+                        onClick={() => setShowErrorModal(false)}
+                        className="px-5 py-2 border border-gray-300 text-gray-700 rounded-lg text-sm hover:bg-gray-50 transition-colors"
+                      >
+                        关闭并手动修正
+                      </button>
+                      <button
+                        onClick={() => {
+                          const validOrders = orders.filter(o => o.isValid);
+                          if (validOrders.length === 0) { showToast('error', '没有可提交的有效数据'); return; }
+                          if (!confirm(`仅提交 ${validOrders.length} 条有效数据（跳过 ${orders.filter(o => !o.isValid).length} 条有误），确定？`)) return;
+                          setShowErrorModal(false);
+                          submitValidOrdersOnly(validOrders);
+                        }}
+                        className="px-5 py-2 bg-[#0fc6c2] text-white rounded-lg text-sm hover:bg-[#0dbab6] transition-colors"
+                      >
+                        跳过错误行，提交有效数据 ({orders.filter(o => o.isValid).length} 条)
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              );
+            })()}
           </div>
         )}
 
