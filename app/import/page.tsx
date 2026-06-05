@@ -844,6 +844,29 @@ export default function ImportPage() {
               </div>
             </div>
             <p className="text-xs text-gray-500 mt-2">配置会保存在浏览器本地，下次无需重复输入</p>
+            <div className="mt-3 p-3 bg-gray-50 rounded-lg border border-gray-200">
+              <div className="flex items-center gap-1.5 mb-2">
+                <span className="text-xs font-medium text-gray-600">📋 参考配置</span>
+                <button
+                  onClick={() => { setApiUrl('https://api.siliconflow.cn/v1/chat/completions'); setModelName('deepseek-ai/DeepSeek-V4-Pro'); setApiKey('sk-khaapftyovblxbluvgeneufbsokapjejqyndjtgcvwwadpld'); }}
+                  className="text-xs text-[#0fc6c2] hover:text-[#0aa8a4] hover:underline cursor-pointer"
+                >一键填入</button>
+              </div>
+              <div className="space-y-1.5 text-xs font-mono">
+                <div className="flex items-center gap-2">
+                  <span className="text-gray-500 w-16 shrink-0">API地址：</span>
+                  <code className="bg-white px-2 py-0.5 rounded border border-gray-200 text-gray-700 break-all">https://api.siliconflow.cn/v1/chat/completions</code>
+                </div>
+                <div className="flex items-center gap-2">
+                  <span className="text-gray-500 w-16 shrink-0">模型名：</span>
+                  <code className="bg-white px-2 py-0.5 rounded border border-gray-200 text-gray-700 break-all">deepseek-ai/DeepSeek-V4-Pro</code>
+                </div>
+                <div className="flex items-center gap-2">
+                  <span className="text-gray-500 w-16 shrink-0">API Key：</span>
+                  <code className="bg-white px-2 py-0.5 rounded border border-gray-200 text-gray-700 break-all">sk-kh***adpld</code>
+                </div>
+              </div>
+            </div>
           </div>
         )}
 
