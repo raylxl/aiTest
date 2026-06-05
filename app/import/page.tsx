@@ -104,10 +104,17 @@ export default function ImportPage() {
     const savedKey = localStorage.getItem('ai_api_key');
     const savedUrl = localStorage.getItem('ai_api_url');
     const savedModel = localStorage.getItem('ai_model_name');
-    // 只有当localStorage有值且不为空时才覆盖默认值
-    if (savedKey && savedKey !== 'undefined' && savedKey !== 'null') setApiKey(savedKey);
-    if (savedUrl && savedUrl !== 'undefined' && savedUrl !== 'null') setApiUrl(savedUrl);
-    if (savedModel && savedModel !== 'undefined' && savedModel !== 'null') setModelName(savedModel);
+    // 只有当localStorage有值且不为空且是完整URL时才覆盖默认值
+    if (savedKey && savedKey !== 'undefined' && savedKey !== 'null' && savedKey.length > 10) {
+      setApiKey(savedKey);
+    }
+    // URL必须包含/chat/completions才是完整地址
+    if (savedUrl && savedUrl !== 'undefined' && savedUrl !== 'null' && savedUrl.includes('/chat/completions')) {
+      setApiUrl(savedUrl);
+    }
+    if (savedModel && savedModel !== 'undefined' && savedModel !== 'null' && savedModel.length > 2) {
+      setModelName(savedModel);
+    }
   }, []);
 
   // 保存配置到localStorage
@@ -117,6 +124,17 @@ export default function ImportPage() {
     localStorage.setItem('ai_model_name', modelName);
     showToast('success', '配置已保存');
   }, [apiKey, apiUrl, modelName]);
+
+  // 重置为默认配置
+  const resetConfig = useCallback(() => {
+    setApiKey('sk-IoFm2IHaR3vBGy2pxgQWPDOSeOqJNFsDKIEM0X5dmuzT5zMq');
+    setApiUrl('https://www.vbcode.io/v1/chat/completions');
+    setModelName('gpt-5.4');
+    localStorage.removeItem('ai_api_key');
+    localStorage.removeItem('ai_api_url');
+    localStorage.removeItem('ai_model_name');
+    showToast('success', '已重置为默认配置');
+  }, []);
 
   const {
     data: orders,
@@ -588,6 +606,12 @@ ${sample}
                     className="px-4 py-2 bg-[#0fc6c2] text-white rounded-lg text-sm hover:bg-[#0aa8a4]"
                   >
                     保存
+                  </button>
+                  <button
+                    onClick={resetConfig}
+                    className="px-4 py-2 bg-gray-100 text-gray-600 rounded-lg text-sm hover:bg-gray-200"
+                  >
+                    重置
                   </button>
                 </div>
               </div>
