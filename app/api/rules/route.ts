@@ -106,3 +106,73 @@ export async function POST(request: NextRequest) {
     );
   }
 }
+
+// 更新规则
+export async function PUT(request: NextRequest) {
+  try {
+    const sql = getDB();
+    await initRulesTable();
+
+    const body = await request.json();
+    const { id, name, description, fileTypes, ruleJson } = body;
+
+    if (!id) {
+      return NextResponse.json({ error: '缺少规则 id' }, { status: 400 });
+    }
+
+    const result = await sql`
+      UPDATE parse_rules
+      SET 
+        name = ${name},
+        description = ${description || ''},
+        file_types = ${fileTypes || ['excel']},
+        rule_json = ${JSON.stringify(ruleJson)},
+        updated_at = NOW()
+      WHERE id = ${id}
+      RETURNING *
+    `;
+
+    if (result.length === 0) {
+      return NextResponse.json({ error: '规则不存在' }, { status: 404 });
+    }
+
+    const rule = result[0];
+    return NextResponse.json({
+      success: true,
+      rule: {
+        id: rule.id,
+        name: rule.name,
+        description: rule.description,
+        fileTypes: rule.file_types,
+        ruleJson: rule.rule_json,
+        updatedAt: rule.updated_at,
+      },
+    });
+  } catch (error) {
+    console.error('更新规则失败:', error);
+    return NextResponse.json({ error: '更新规则失败' }, { status: 500 });
+  }
+}
+
+// 删除规则（软删除）
+export async function DELETE(request: NextRequest) {
+  try {
+    const sql = getDB();
+    await initRulesTable();
+
+    const { searchParams } = new URL(request.url);
+    const id = searchParams.get('id');
+    if (!id) {
+      return NextResponse.json({ error: '缺少规则 id' }, { status: 400 });
+    }
+
+    await sql`
+      UPDATE parse_rules SET is_active = FALSE WHERE id = ${parseInt(id)}
+    `;
+
+    return NextResponse.json({ success: true });
+  } catch (error) {
+    console.error('删除规则失败:', error);
+    return NextResponse.json({ error: '删除规则失败' }, { status: 500 });
+  }
+}

@@ -320,6 +320,10 @@ ${sample}
       name: `默认规则 - ${fileName}`,
       description: `基于文件类型${fileType}自动生成的默认解析规则`,
       fileTypes: [fileType as any],
+      identifier: {
+        fileNamePattern: fileName,
+        headerKeywords: ['运单号', '收件人', '电话', '地址']
+      },
       parser: {
         type: isMultiSheet ? 'multi-sheet' : 'table',
         table: {
