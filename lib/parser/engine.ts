@@ -1,4 +1,4 @@
-import type { ParseRule, ParsedOrder, ParseResult, RuleMatchResult, FileType } from '@/types/rule';
+import type { ParseRule, ParsedOrder, ParseResult, RuleMatchResult, FileType, ColumnMapping, TableParserConfig } from '@/types/rule';
 import { parseExcelFile, parseTable, parseMatrix, parseCards } from './excel-parser';
 import { parsePDFFile, parsePDFTable, parsePDFText, parsePDFMultiPage } from './pdf-parser';
 import { parseWordFile, parseWordText } from './word-parser';
@@ -114,6 +114,14 @@ export class ParseEngine {
       if (rule.parser.table) {
         return this.parseAllSheets(excelData, rule);
       }
+      // 如果没有任何配置，尝试用默认table配置解析所有Sheet
+      const defaultTableConfig: TableParserConfig = {
+        headerRow: 'auto',
+        dataStartRow: 'auto',
+        columns: []
+      };
+      const tempRule = { ...rule, parser: { ...rule.parser, table: defaultTableConfig } };
+      return this.parseAllSheets(excelData, tempRule);
     }
 
     // 单Sheet模式
@@ -185,7 +193,13 @@ export class ParseEngine {
       if (!sheet.data || sheet.data.length === 0) continue;
 
       try {
-        const sheetOrders = parseTable(sheet.data, tableConfig, rule.recipient);
+        // 如果columns为空，自动检测列
+        let config = tableConfig;
+        if (!config.columns || config.columns.length === 0) {
+          config = this.autoDetectColumns(sheet.data, config);
+        }
+        
+        const sheetOrders = parseTable(sheet.data, config, rule.recipient);
         
         // 添加Sheet来源信息
         for (const order of sheetOrders) {
@@ -200,6 +214,66 @@ export class ParseEngine {
     }
 
     return orders;
+  }
+
+  /**
+   * 自动检测列配置
+   */
+  private autoDetectColumns(data: any[][], baseConfig: TableParserConfig): TableParserConfig {
+    if (!data || data.length < 2) return baseConfig;
+    
+    // 查找表头行（第一行非空行）
+    let headerRow = 0;
+    for (let i = 0; i < Math.min(data.length, 10); i++) {
+      const row = data[i];
+      if (row && row.length > 0 && row.some((cell: any) => cell !== null && cell !== undefined && cell !== '')) {
+        headerRow = i;
+        break;
+      }
+    }
+    
+    const headerRowData = data[headerRow];
+    if (!headerRowData) return baseConfig;
+    
+    // 自动检测列映射
+    const columns: ColumnMapping[] = [];
+    const fieldNameMap: Record<string, string> = {
+      '单号': 'orderNo', '运单号': 'orderNo', '配送单号': 'orderNo', '订单号': 'orderNo',
+      '收货人': 'receiverName', '收件人': 'receiverName',
+      '电话': 'receiverPhone', '手机': 'receiverPhone', '联系电话': 'receiverPhone',
+      '地址': 'receiverAddress', '收货地址': 'receiverAddress', '收件地址': 'receiverAddress',
+      '商品': 'itemName', '物品': 'itemName', '品名': 'itemName', '货品': 'itemName', 'SKU': 'itemName',
+      '编码': 'itemCode', '条码': 'itemCode',
+      '数量': 'quantity', '件数': 'quantity', '发货数量': 'quantity',
+      '规格': 'specification', '型号': 'specification',
+      '单位': 'unit',
+    };
+    
+    for (let i = 0; i < headerRowData.length; i++) {
+      const cell = String(headerRowData[i] || '').trim();
+      if (!cell) continue;
+      
+      // 查找匹配的字段名
+      let targetField = '';
+      for (const [keyword, field] of Object.entries(fieldNameMap)) {
+        if (cell.includes(keyword)) {
+          targetField = field;
+          break;
+        }
+      }
+      
+      if (targetField) {
+        const dataType = targetField === 'quantity' ? 'number' : 'string';
+        columns.push({ sourceIndex: i, targetField, dataType });
+      }
+    }
+    
+    return {
+      ...baseConfig,
+      headerRow,
+      dataStartRow: headerRow + 1,
+      columns,
+    };
   }
 
   /**

@@ -30,7 +30,7 @@ const AI_SYSTEM_PROMPT = `你是一个文件解析规则生成专家。你的任
 2. **matrix** - 矩阵格式：SKU×门店矩阵，需要转置
 3. **card** - 卡片格式：多个独立卡片堆叠
 4. **text** - 纯文本格式：无表格，用正则提取
-5. **multi-sheet** - 多Sheet格式：Excel有多个Sheet
+5. **multi-sheet** - 多Sheet格式：Excel有多个Sheet，每个Sheet结构相同
 6. **multi-page** - 多页格式：PDF有多个独立单元
 
 ## 输出格式
@@ -58,6 +58,22 @@ const AI_SYSTEM_PROMPT = `你是一个文件解析规则生成专家。你的任
       "name": {"pattern": "收货人[：:]\\\\s*(.+?)(?:\\\\s|$)"},
       "phone": {"pattern": "(?:电话|手机)[：:]\\\\s*(\\\\d+)"},
       "address": {"pattern": "(?:地址|收货地址)[：:]\\\\s*(.+)"}
+    }
+  }
+}
+\`\`\`
+
+## 重要：multi-sheet模式
+
+当文件有多个Sheet时，必须使用multi-sheet类型，**并且必须同时提供table配置**（用于解析每个Sheet的数据）。示例：
+\`\`\`json
+{
+  "parser": {
+    "type": "multi-sheet",
+    "table": {
+      "headerRow": 0,
+      "dataStartRow": 1,
+      "columns": [...]
     }
   }
 }
