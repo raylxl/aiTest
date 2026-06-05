@@ -26,6 +26,44 @@ async function ensureTableExists() {
       updated_at      TIMESTAMPTZ DEFAULT NOW()
     )
   `;
+
+  // 迁移：旧版 db.ts schema 与新版 route.ts schema 字段对齐
+  // 旧版字段: file_type(VARCHAR), is_preset, use_count
+  // 新版字段: file_types(TEXT[]), is_active, is_ai_generated, usage_count
+  try {
+    const existingCols = await sql`
+      SELECT column_name FROM information_schema.columns
+      WHERE table_name = 'parse_rules'
+    `;
+    const colNames = (existingCols as any[]).map((c: any) => c.column_name);
+
+    // 1. file_type → file_types
+    if (colNames.includes('file_type') && !colNames.includes('file_types')) {
+      await sql`ALTER TABLE parse_rules DROP COLUMN file_type`;
+      await sql`ALTER TABLE parse_rules ADD COLUMN file_types TEXT[] DEFAULT '{}'`;
+    }
+    // 2. is_preset → is_active
+    if (colNames.includes('is_preset') && !colNames.includes('is_active')) {
+      await sql`ALTER TABLE parse_rules RENAME COLUMN is_preset TO is_active`;
+    }
+    if (!colNames.includes('is_active')) {
+      await sql`ALTER TABLE parse_rules ADD COLUMN is_active BOOLEAN DEFAULT TRUE`;
+    }
+    // 3. use_count → usage_count
+    if (colNames.includes('use_count') && !colNames.includes('usage_count')) {
+      await sql`ALTER TABLE parse_rules RENAME COLUMN use_count TO usage_count`;
+    }
+    if (!colNames.includes('usage_count')) {
+      await sql`ALTER TABLE parse_rules ADD COLUMN usage_count INTEGER DEFAULT 0`;
+    }
+    // 4. is_ai_generated
+    if (!colNames.includes('is_ai_generated')) {
+      await sql`ALTER TABLE parse_rules ADD COLUMN is_ai_generated BOOLEAN DEFAULT FALSE`;
+    }
+  } catch (e: any) {
+    console.warn('[parse_rules migration]', e?.message || e);
+  }
+
   tableInitialized = true;
 }
 
