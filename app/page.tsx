@@ -507,7 +507,9 @@ export default function FeeManager() {
             ) : activeMenu === 'universal-import' ? (
               <UniversalImport />
             ) : activeMenu === 'universal-import-v2' ? (
-              <iframe src="/import" style={{ width: '100%', height: '100%', border: 'none' }} scrolling="auto" />
+              <div style={{ flex: 1, overflow: 'auto', width: '100%', height: '100%' }}>
+                <iframe src="/import" style={{ width: '100%', height: '100%', border: 'none', minHeight: '100vh' }} scrolling="auto" />
+              </div>
             ) : activeMenu === 'fee-rules' ? (
               <FeeRulesTable
                 currentUserNickname={currentNickname}
