@@ -221,8 +221,38 @@ ${sample}
       throw new Error(`API调用失败 (${response.status}): ${errorText.substring(0, 200)}`);
     }
 
-    const data = await response.json();
-    const content = data.choices?.[0]?.message?.content;
+    // 获取响应文本，支持JSON和SSE格式
+    const responseText = await response.text();
+    let content = '';
+
+    // 判断是否是SSE格式（以"data: "开头）
+    if (responseText.startsWith('data: ')) {
+      // 解析SSE格式，提取所有data行并合并内容
+      const lines = responseText.split('\n');
+      let fullContent = '';
+      for (const line of lines) {
+        if (line.startsWith('data: ') && !line.includes('[DONE]')) {
+          try {
+            const chunk = JSON.parse(line.slice(6));
+            const delta = chunk.choices?.[0]?.delta?.content;
+            if (delta) {
+              fullContent += delta;
+            }
+          } catch {
+            // 忽略解析错误的行
+          }
+        }
+      }
+      content = fullContent;
+    } else {
+      // 标准JSON格式
+      try {
+        const data = JSON.parse(responseText);
+        content = data.choices?.[0]?.message?.content || '';
+      } catch {
+        throw new Error('无法解析API响应');
+      }
+    }
 
     if (!content) {
       throw new Error('AI返回空内容');
