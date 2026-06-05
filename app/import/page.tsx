@@ -212,6 +212,7 @@ ${sample}
         ],
         temperature: 0.1,
         max_tokens: 4000,
+        stream: false,  // 禁用流式响应，获取完整JSON
       }),
     });
 
