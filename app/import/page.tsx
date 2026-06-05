@@ -103,8 +103,8 @@ export default function ImportPage() {
   const [editingRuleIndex, setEditingRuleIndex] = useState<number | null>(null);
   const [editingRuleJson, setEditingRuleJson] = useState('');
   const [apiKey, setApiKey] = useState('');
-  const [apiUrl, setApiUrl] = useState('https://www.vbcode.io/v1/chat/completions');
-  const [modelName, setModelName] = useState('deepseek-chat');
+  const [apiUrl, setApiUrl] = useState('https://api.siliconflow.cn/v1/chat/completions');
+  const [modelName, setModelName] = useState('deepseek-ai/DeepSeek-V4-Pro');
 
   // 重复检测结果
   const [duplicateNos, setDuplicateNos] = useState<string[]>([]);
@@ -147,8 +147,8 @@ export default function ImportPage() {
   // 重置为默认配置
   const resetConfig = useCallback(() => {
     setApiKey('');
-    setApiUrl('https://www.vbcode.io/v1/chat/completions');
-    setModelName('deepseek-chat');
+    setApiUrl('https://api.siliconflow.cn/v1/chat/completions');
+    setModelName('deepseek-ai/DeepSeek-V4-Pro');
     localStorage.removeItem('ai_api_key');
     localStorage.removeItem('ai_api_url');
     localStorage.removeItem('ai_model_name');
@@ -830,7 +830,7 @@ export default function ImportPage() {
               <div>
                 <label className="block text-xs text-gray-500 mb-1">模型名称</label>
                 <input type="text" value={modelName} onChange={e => setModelName(e.target.value)}
-                  placeholder="例如：gpt-5.4、gpt-4o、deepseek-chat"
+                  placeholder="例如：deepseek-ai/DeepSeek-V4-Pro、deepseek-ai/DeepSeek-V3"
                   className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#0fc6c2]" />
               </div>
               <div>

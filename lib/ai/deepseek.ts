@@ -1,7 +1,7 @@
 import type { ParseRule } from '@/types/rule';
 import https from 'https';
 
-const DEEPSEEK_API_URL = 'https://www.vbcode.io/v1/chat/completions';
+const DEEPSEEK_API_URL = 'https://api.siliconflow.cn/v1/chat/completions';
 
 const SYSTEM_PROMPT = `你是一个文件解析规则生成专家。你的任务是根据用户提供的文件样本，生成JSON格式的解析规则。
 
@@ -152,7 +152,7 @@ ${fileSample}
 请分析文件结构，生成对应的解析规则JSON。`;
 
   const body = {
-    model: 'deepseek-chat',
+    model: 'deepseek-ai/DeepSeek-V4-Pro',
     messages: [
       { role: 'system', content: SYSTEM_PROMPT },
       { role: 'user', content: userMessage }
