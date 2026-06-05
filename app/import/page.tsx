@@ -93,6 +93,8 @@ targetField应使用以下标准字段名：
 
 export default function ImportPage() {
   const [step, setStep] = useState<StepType>('upload');
+  const [showMobileMenu, setShowMobileMenu] = useState(false);
+  const [showMoreActions, setShowMoreActions] = useState(false);
   const [analyzedFiles, setAnalyzedFiles] = useState<AnalyzedFile[]>([]);
   const [parsing, setParsing] = useState(false);
   const [progress, setProgress] = useState(0);
@@ -616,56 +618,74 @@ export default function ImportPage() {
     <div className="min-h-screen bg-gray-50 overflow-auto">
       <Toast />
 
-      {/* 顶部导航 */}
-      <header className="bg-white shadow-sm border-b border-gray-200">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex justify-between items-center h-16">
-            <div className="flex items-center gap-3">
-              <div className="w-10 h-10 bg-[#0fc6c2] rounded-lg flex items-center justify-center">
-                <svg className="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+      {/* 顶部导航 - 响应式 */}
+      <header className="bg-white shadow-sm border-b border-gray-200 sticky top-0 z-40">
+        <div className="max-w-7xl mx-auto px-3 sm:px-6 lg:px-8">
+          <div className="flex justify-between items-center h-14 sm:h-16">
+            <div className="flex items-center gap-2 sm:gap-3">
+              <div className="w-8 h-8 sm:w-10 sm:h-10 bg-[#0fc6c2] rounded-lg flex items-center justify-center shrink-0">
+                <svg className="w-5 h-5 sm:w-6 sm:h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
                 </svg>
               </div>
-              <div>
-                <h1 className="text-xl font-bold text-gray-900">万能导入 V2</h1>
-                <p className="text-xs text-gray-500">智能多格式批量下单系统</p>
+              <div className="min-w-0">
+                <h1 className="text-base sm:text-xl font-bold text-gray-900 truncate">万能导入 V2</h1>
+                <p className="hidden sm:block text-xs text-gray-500">智能多格式批量下单系统</p>
               </div>
             </div>
-            <div className="flex items-center gap-4">
+            {/* 右侧操作区：移动端折叠显示 */}
+            <div className="flex items-center gap-1 sm:gap-3">
               {orders.length > 0 && (
-                <span className="text-sm text-gray-600">
+                <span className="hidden md:inline-block text-sm text-gray-600 shrink-0">
                   已解析 <span className="font-medium text-[#0fc6c2]">{orders.length}</span> 条运单
                   {useVirtualScroll && <span className="ml-2 text-xs bg-blue-100 text-blue-800 px-2 py-0.5 rounded">虚拟滚动</span>}
-                  {workerSupported && <span className="ml-2 text-xs bg-green-100 text-green-800 px-2 py-0.5 rounded">Worker支持</span>}
+                  {workerSupported && <span className="ml-2 text-xs bg-green-100 text-green-800 px-2 py-0.5 rounded">Worker</span>}
                 </span>
               )}
-              <button onClick={() => setStep('rules')} className="text-sm text-[#0fc6c2] hover:text-[#0aa8a4]">⚙️ 规则库</button>
-              <button onClick={() => setStep('history')} className="text-sm text-[#0fc6c2] hover:text-[#0aa8a4]">📋 历史记录</button>
-              {step !== 'upload' && step !== 'history' && step !== 'rules' && (
-                <button onClick={handleRestart} className="text-sm text-gray-500 hover:text-gray-700">重新开始</button>
+              {/* 移动端显示简化计数 */}
+              {orders.length > 0 && (
+                <span className="md:hidden text-xs font-medium text-[#0fc6c2] bg-[#0fc6c2]/10 px-2 py-0.5 rounded-full shrink-0">{orders.length}条</span>
               )}
+              <button onClick={() => setStep('rules')} className="text-xs sm:text-sm text-[#0fc6c2] hover:text-[#0aa8a4] whitespace-nowrap shrink-0 hidden xs:inline-block">⚙️ 规则库</button>
+              <button onClick={() => setStep('history')} className="text-xs sm:text-sm text-[#0fc6c2] hover:text-[#0aa8a4] whitespace-nowrap shrink-0 hidden xs:inline-block">📋 历史记录</button>
+              {step !== 'upload' && step !== 'history' && step !== 'rules' && (
+                <button onClick={handleRestart} className="text-xs sm:text-sm text-gray-500 hover:text-gray-700 whitespace-nowrap shrink-0">重置</button>
+              )}
+              {/* 移动端菜单按钮 */}
+              <button onClick={() => setShowMobileMenu(!showMobileMenu)} className="xs:hidden p-1.5 text-gray-600 hover:bg-gray-100 rounded-lg shrink-0" aria-label="菜单">
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16"/></svg>
+              </button>
             </div>
+            {/* 移动端下拉菜单 */}
+            {showMobileMenu && (
+              <div className="absolute right-3 top-14 sm:top-16 bg-white shadow-lg border border-gray-200 rounded-lg py-2 z-50 min-w-[140px]">
+                <button onClick={() => { setStep('rules'); setShowMobileMenu(false); }} className="block w-full text-left px-4 py-2 text-sm text-[#0fc6c2] hover:bg-[#0fc6c2]/5">⚙️ 规则库</button>
+                <button onClick={() => { setStep('history'); setShowMobileMenu(false); }} className="block w-full text-left px-4 py-2 text-sm text-[#0fc6c2] hover:bg-[#0fc6c2]/5">📋 历史记录</button>
+                {orders.length > 0 && <div className="border-t my-1"></div>}
+                {orders.length > 0 && <div className="px-4 py-1 text-xs text-gray-400">已解析 {orders.length} 条运单</div>}
+              </div>
+            )}
           </div>
         </div>
       </header>
 
-      {/* 步骤指示器 */}
+      {/* 步骤指示器 - 响应式 */}
       {step !== 'history' && step !== 'rules' && (
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-6">
-          <div className="flex items-center justify-center gap-2 mb-6">
+        <div className="max-w-7xl mx-auto px-3 sm:px-6 lg:px-8 pt-4 sm:pt-6">
+          <div className="flex items-center justify-center gap-1 sm:gap-2 mb-4 sm:mb-6 overflow-x-auto pb-1 scrollbar-hide">
             {[
               { key: 'upload', label: '上传文件', icon: '📁' },
               { key: 'analyze', label: 'AI分析', icon: '🤖' },
               { key: 'confirm', label: '确认规则', icon: '✅' },
               { key: 'result', label: '解析结果', icon: '📊' },
             ].map((s, i) => (
-              <div key={s.key} className="flex items-center">
-                <div className={`flex items-center gap-1 px-3 py-1.5 rounded-full text-sm ${
+              <div key={s.key} className="flex items-center shrink-0">
+                <div className={`flex items-center gap-0.5 sm:gap-1 px-2 sm:px-3 py-1 sm:py-1.5 rounded-full text-xs sm:text-sm whitespace-nowrap ${
                   step === s.key ? 'bg-[#0fc6c2] text-white'
                     : (['upload', 'analyze', 'confirm', 'result'].indexOf(step) > i
                       ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-500')
                 }`}>
-                  <span>{s.icon}</span><span>{s.label}</span>
+                  <span className="hidden xs:inline">{s.icon}</span><span>{s.label}</span>
                 </div>
                 {i < 3 && <div className="w-8 h-px bg-gray-300 mx-1" />}
               </div>
@@ -674,8 +694,8 @@ export default function ImportPage() {
         </div>
       )}
 
-      {/* 主内容区 */}
-      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pb-8">
+      {/* 主内容区 - 响应式容器 */}
+      <main className="max-w-7xl mx-auto px-3 sm:px-6 lg:px-8 pb-8">
 
         {/* AI配置区域 */}
         {step === 'upload' && (
@@ -791,10 +811,10 @@ export default function ImportPage() {
               </div>
             </div>
 
-            {/* 规则编辑弹窗 */}
+            {/* 规则编辑弹窗 - 响应式 */}
             {editingRuleIndex !== null && (
-              <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-                <div className="bg-white rounded-lg p-6 w-full max-w-2xl max-h-[80vh] overflow-auto">
+              <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+                <div className="bg-white rounded-lg p-4 sm:p-6 w-full max-w-2xl max-h-[85vh] overflow-auto">
                   <h3 className="text-lg font-medium mb-4">编辑解析规则</h3>
                   <textarea value={editingRuleJson} onChange={e => setEditingRuleJson(e.target.value)}
                     className="w-full h-96 font-mono text-sm border border-gray-300 rounded-lg p-3 focus:outline-none focus:ring-2 focus:ring-[#0fc6c2]" />
@@ -843,33 +863,58 @@ export default function ImportPage() {
               </div>
             )}
 
-            {/* 操作栏 */}
-            <div className="bg-white rounded-lg border border-gray-200 p-4">
-              <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
-                <div className="flex flex-wrap gap-2">
+            {/* 操作栏 - 粘性：滚动时关键按钮始终可见 */}
+            <div className="bg-white rounded-lg border border-gray-200 p-3 sm:p-4 sticky top-14 sm:top-16 z-30 shadow-sm">
+              <div className="flex flex-col gap-3 sm:gap-4">
+                {/* 第一行：核心操作按钮（移动端紧凑排列） */}
+                <div className="flex flex-wrap items-center gap-2">
+                  {/* 主要操作 - 始终显示 */}
                   <button onClick={handleExport} disabled={orders.length === 0}
-                    className="px-4 py-2 bg-[#0fc6c2] text-white rounded-lg text-sm font-medium hover:bg-[#0aa8a4] disabled:opacity-50 transition-colors">
-                    📥 导出Excel
-                  </button>
-                  <button onClick={handleDeleteSelected} disabled={selectedIndices.length === 0}
-                    className="px-4 py-2 bg-red-500 text-white rounded-lg text-sm font-medium hover:bg-red-600 disabled:opacity-50 transition-colors">
-                    🗑️ 删除选中 ({selectedIndices.length})
+                    className="px-3 sm:px-4 py-1.5 sm:py-2 bg-[#0fc6c2] text-white rounded-lg text-xs sm:text-sm font-medium hover:bg-[#0aa8a4] disabled:opacity-50 transition-colors shrink-0">
+                    📥 导出
                   </button>
                   <button onClick={handleSubmitOrders} disabled={orders.length === 0}
-                    className="px-4 py-2 bg-green-500 text-white rounded-lg text-sm font-medium hover:bg-green-600 disabled:opacity-50 transition-colors">
-                    🚀 批量提交下单
+                    className="px-3 sm:px-4 py-1.5 sm:py-2 bg-green-500 text-white rounded-lg text-xs sm:text-sm font-medium hover:bg-green-600 disabled:opacity-50 transition-colors shrink-0">
+                    🚀 提交
+                  </button>
+                  {/* 次要操作 - 小屏隐藏文字只留图标，或折叠 */}
+                  <button onClick={handleDeleteSelected} disabled={selectedIndices.length === 0}
+                    className="hidden xs:inline-flex px-3 sm:px-4 py-1.5 sm:py-2 bg-red-500 text-white rounded-lg text-xs sm:text-sm font-medium hover:bg-red-600 disabled:opacity-50 transition-colors items-center gap-1 shrink-0">
+                    🗑️ <span className="hidden sm:inline">删除</span>({selectedIndices.length})
                   </button>
                   <button onClick={handleSaveToDB} disabled={orders.length === 0 || saving}
-                    className="px-4 py-2 bg-purple-500 text-white rounded-lg text-sm font-medium hover:bg-purple-600 disabled:opacity-50 transition-colors">
-                    {saving ? '保存中...' : '💾 保存到数据库'}
+                    className="hidden sm:inline-flex px-3 sm:px-4 py-1.5 sm:py-2 bg-purple-500 text-white rounded-lg text-xs sm:text-sm font-medium hover:bg-purple-600 disabled:opacity-50 transition-colors shrink-0">
+                    {saving ? '保存中...' : '💾 保存'}
                   </button>
-                  <button onClick={handleRestart} className="px-4 py-2 bg-gray-100 text-gray-700 rounded-lg text-sm font-medium hover:bg-gray-200 transition-colors">📁 继续导入</button>
+                  <button onClick={handleRestart}
+                    className="hidden md:inline-flex px-3 sm:px-4 py-1.5 sm:py-2 bg-gray-100 text-gray-700 rounded-lg text-xs sm:text-sm font-medium hover:bg-gray-200 transition-colors shrink-0">
+                    📁 继续导入
+                  </button>
+                  {/* 移动端更多操作按钮 */}
+                  <div className="xs:hidden flex items-center gap-1 ml-auto">
+                    <button onClick={() => setShowMoreActions(!showMoreActions)} className="p-1.5 text-gray-500 hover:bg-gray-100 rounded-lg" aria-label="更多操作">
+                      <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 5v.01M12 12v.01M12 19v.01"/></svg>
+                    </button>
+                  </div>
                 </div>
-                <div className="flex items-center gap-4">
-                  <div className="relative">
+                {/* 移动端展开的更多操作 */}
+                {showMoreActions && (
+                  <div className="xs:flex hidden flex-wrap gap-2 pt-2 border-t border-gray-100">
+                    {selectedIndices.length > 0 && (
+                      <button onClick={handleDeleteSelected}
+                        className="px-3 py-1.5 bg-red-500 text-white rounded-lg text-xs font-medium hover:bg-red-600">🗑️ 删除({selectedIndices.length})</button>
+                    )}
+                    <button onClick={handleSaveToDB} disabled={orders.length === 0 || saving}
+                      className="px-3 py-1.5 bg-purple-500 text-white rounded-lg text-xs font-medium hover:bg-purple-600 disabled:opacity-50">{saving ? '...' : '💾 保存'}</button>
+                    <button onClick={handleRestart} className="px-3 py-1.5 bg-gray-100 text-gray-700 rounded-lg text-xs font-medium hover:bg-gray-200">📁 继续导入</button>
+                  </div>
+                )}
+                {/* 第二行：搜索 + 统计信息（全宽自适应） */}
+                <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 sm:gap-4">
+                  <div className="relative flex-1 min-w-0">
                     <input type="text" value={searchQuery} onChange={e => setSearchQuery(e.target.value)}
                       placeholder="搜索运单号、收货人、电话..."
-                      className="w-64 pl-10 pr-4 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#0fc6c2] focus:border-transparent" />
+                      className="w-full sm:w-64 lg:w-80 pl-10 pr-4 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#0fc6c2] focus:border-transparent" />
                     <svg className="absolute left-3 top-2.5 w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
                     </svg>
@@ -1053,15 +1098,15 @@ function RulesManager({ onBack, onSelectRule }: { onBack: () => void; onSelectRu
 
   return (
     <div className="space-y-4">
-      {/* 标题栏 */}
-      <div className="bg-white rounded-lg border border-gray-200 p-4 flex items-center justify-between">
-        <div className="flex items-center gap-3">
-          <button onClick={onBack} className="text-sm text-[#0fc6c2] hover:text-[#0aa8a4]">← 返回</button>
-          <h3 className="text-lg font-medium text-gray-900">⚙️ 规则库管理</h3>
-          <span className="text-sm text-gray-500">({rules.length} 条规则)</span>
+      {/* 标题栏 - 响应式 */}
+      <div className="bg-white rounded-lg border border-gray-200 p-3 sm:p-4 flex flex-col sm:flex-row items-start sm:items-center gap-3">
+        <div className="flex items-center gap-2 sm:gap-3 w-full sm:w-auto">
+          <button onClick={onBack} className="text-sm text-[#0fc6c2] hover:text-[#0aa8a4] shrink-0">← 返回</button>
+          <h3 className="text-base sm:text-lg font-medium text-gray-900 truncate">⚙️ 规则库</h3>
+          <span className="text-xs sm:text-sm text-gray-500">({rules.length})</span>
         </div>
         <input type="text" value={searchText} onChange={e => setSearchText(e.target.value)}
-          placeholder="搜索规则名称/描述..." className="w-56 px-3 py-1.5 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#0fc6c2]" />
+          placeholder="搜索规则..." className="w-full sm:w-56 px-3 py-1.5 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#0fc6c2]" />
       </div>
 
       {loading ? (
@@ -1102,10 +1147,10 @@ function RulesManager({ onBack, onSelectRule }: { onBack: () => void; onSelectRu
         </div>
       )}
 
-      {/* 规则编辑弹窗 */}
+      {/* 规则编辑弹窗 - 响应式 */}
       {editingRule && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-          <div className="bg-white rounded-lg p-6 w-full max-w-2xl max-h-[85vh] overflow-auto">
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-lg p-4 sm:p-6 w-full max-w-2xl max-h-[90vh] overflow-auto">
             <h3 className="text-lg font-medium mb-4">编辑规则</h3>
             <div className="space-y-3 mb-4">
               <div>
@@ -1134,8 +1179,8 @@ function RulesManager({ onBack, onSelectRule }: { onBack: () => void; onSelectRu
 
       {/* 规则测试弹窗 */}
       {testingRule && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-          <div className="bg-white rounded-lg p-6 w-full max-w-2xl max-h-[85vh] overflow-auto">
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-lg p-4 sm:p-6 w-full max-w-2xl max-h-[90vh] overflow-auto">
             <div className="flex items-center justify-between mb-4">
               <h3 className="text-lg font-medium">🧪 规则测试 - {testingRule.name}</h3>
               <button onClick={() => setTestingRule(null)} className="text-gray-400 hover:text-gray-600">✕</button>

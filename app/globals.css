@@ -1,5 +1,26 @@
 @import "tailwindcss";
 
+/* ========== 响应式工具类 ========== */
+
+/* 隐藏滚动条（保留滚动功能）- 用于步骤指示器等 */
+.scrollbar-hide {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+.scrollbar-hide::-webkit-scrollbar {
+  display: none;
+}
+
+/* xs: 断点 (480px) - Tailwind 默认无此断点 */
+@media (min-width: 480px) {
+  .xs\:block { display: block; }
+  .xs\:inline-block { display: inline-block; }
+  .xs\:inline-flex { display: inline-flex; }
+  .xs\:flex { display: flex; }
+  .xs\:hidden { display: none; }
+  .xs\:grid-cols-2 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+
 /* 鲸天系统配色变量 - 万能导入V2 */
 :root {
   --el-color-primary: #0fc6c2;
@@ -24,7 +45,8 @@ body {
   font-family: var(--el-font-family);
   -webkit-font-smoothing: antialiased;
   background: rgb(243, 249, 254);
-  overflow: hidden;
+  overflow-x: hidden;
+  overflow-y: auto;
 }
 
 * {

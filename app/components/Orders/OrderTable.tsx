@@ -199,28 +199,26 @@ export default function OrderTable({
     return (
       <div className="bg-white rounded-lg border border-gray-200 overflow-hidden">
         {/* 统计信息 */}
-        <div className="px-4 py-3 bg-gray-50 border-b border-gray-200 flex justify-between items-center">
-          <span className="text-sm text-gray-600">
+        <div className="px-3 sm:px-4 py-2 sm:py-3 bg-gray-50 border-b border-gray-200 flex flex-col xs:flex-row justify-between items-start xs:items-center gap-2">
+          <span className="text-xs sm:text-sm text-gray-600">
             共 <span className="font-medium text-[#0fc6c2]">{orders.length}</span> 条记录
             {selectedIndices.length > 0 && (
-              <span className="ml-2">
-                ，已选择 <span className="font-medium text-[#0fc6c2]">{selectedIndices.length}</span> 条
-              </span>
+              <span className="ml-2">，已选 <span className="font-medium text-[#0fc6c2]">{selectedIndices.length}</span> 条</span>
             )}
           </span>
-        <div className="flex gap-2">
+        <div className="flex gap-1 sm:gap-2 flex-wrap">
           {orders.filter(o => !o.isValid).length > 0 && (
-            <span className="text-sm text-red-500">
-              {orders.filter(o => !o.isValid).length} 条数据有误
+            <span className="text-xs sm:text-sm text-red-500">
+              {orders.filter(o => !o.isValid).length} 条有误
             </span>
           )}
           {duplicateNos.length > 0 && (
-            <span className="text-sm text-yellow-600">
-              ⚠️ {duplicateNos.length} 个重复单号
+            <span className="text-xs sm:text-sm text-yellow-600">
+              ⚠️{duplicateNos.length} 重复
             </span>
           )}
-          <span className="text-xs text-gray-400 bg-gray-100 px-2 py-1 rounded">
-            虚拟滚动模式
+          <span className="text-xs text-gray-400 bg-gray-100 px-2 py-0.5 rounded">
+            虚拟滚动
           </span>
         </div>
         </div>
@@ -257,7 +255,9 @@ export default function OrderTable({
           ))}
         </div>
 
-        {/* 虚拟列表 */}
+        {/* 虚拟列表 - 最小宽度确保横向滚动 */}
+        <div className="overflow-x-auto">
+          <div className="min-w-[800px]">
         <VirtualList
           items={sortedOrders}
           itemHeight={48}
@@ -265,6 +265,8 @@ export default function OrderTable({
           renderItem={renderVirtualRow}
           overscan={10}
         />
+          </div>
+        </div>
       </div>
     );
   }
@@ -272,31 +274,30 @@ export default function OrderTable({
   // 普通表格
   return (
     <div className="bg-white rounded-lg border border-gray-200 overflow-hidden">
-      {/* 统计信息 */}
-      <div className="px-4 py-3 bg-gray-50 border-b border-gray-200 flex justify-between items-center">
-        <span className="text-sm text-gray-600">
+      {/* 统计信息 - 响应式 */}
+      <div className="px-3 sm:px-4 py-2 sm:py-3 bg-gray-50 border-b border-gray-200 flex flex-col xs:flex-row justify-between items-start xs:items-center gap-2">
+        <span className="text-xs sm:text-sm text-gray-600">
           共 <span className="font-medium text-[#0fc6c2]">{orders.length}</span> 条记录
           {selectedIndices.length > 0 && (
-            <span className="ml-2">
-              ，已选择 <span className="font-medium text-[#0fc6c2]">{selectedIndices.length}</span> 条
-            </span>
-          )}
+            <span className="ml-2">，已选 <span className="font-medium text-[#0fc6c2]">{selectedIndices.length}</span> 条</span>
+            )}
         </span>
-        <div className="flex gap-2">
+        <div className="flex gap-1 sm:gap-2 flex-wrap">
           {orders.filter(o => !o.isValid).length > 0 && (
-            <span className="text-sm text-red-500">
-              {orders.filter(o => !o.isValid).length} 条数据有误
+            <span className="text-xs sm:text-sm text-red-500">
+              {orders.filter(o => !o.isValid).length} 条有误
             </span>
           )}
           {duplicateNos.length > 0 && (
-            <span className="text-sm text-yellow-600">
-              ⚠️ {duplicateNos.length} 个重复单号
+            <span className="text-xs sm:text-sm text-yellow-600">
+              ⚠️{duplicateNos.length} 重复
             </span>
           )}
         </div>
       </div>
+      {/* 表格横向滚动容器 - 最小宽度保证列不塌陷 */}
       <div className="overflow-x-auto">
-        <table className="w-full">
+        <table className="w-full min-w-[800px]">
           <thead className="bg-gray-50">
             <tr>
               {selectable && (
