@@ -475,7 +475,7 @@ ${sample}
   };
 
   return (
-    <div className="min-h-screen bg-gray-50">
+    <div className="min-h-screen bg-gray-50 overflow-auto">
       <Toast />
 
       {/* 顶部导航 */}

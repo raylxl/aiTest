@@ -106,8 +106,14 @@ export class ParseEngine {
     const excelData = await parseExcelFile(buffer);
     
     // 多Sheet模式
-    if (rule.parser.type === 'multi-sheet' && rule.parser.multiSource) {
-      return this.parseMultiSheet(excelData, rule);
+    if (rule.parser.type === 'multi-sheet') {
+      if (rule.parser.multiSource) {
+        return this.parseMultiSheet(excelData, rule);
+      }
+      // 如果没有multiSource配置，但有table配置，对所有Sheet应用table规则
+      if (rule.parser.table) {
+        return this.parseAllSheets(excelData, rule);
+      }
     }
 
     // 单Sheet模式
@@ -121,13 +127,19 @@ export class ParseEngine {
         return parseMatrix(sheet.data, rule.parser.matrix!);
       case 'card':
         return parseCards(sheet.data, rule.parser.card!);
+      case 'multi-sheet':
+        // multi-sheet但没有配置，尝试用table模式解析第一个sheet
+        if (rule.parser.table) {
+          return parseTable(sheet.data, rule.parser.table, rule.recipient);
+        }
+        throw new Error('multi-sheet模式需要配置multiSource或table规则');
       default:
         throw new Error(`Excel不支持的解析模式: ${rule.parser.type}`);
     }
   }
 
   /**
-   * 解析多Sheet Excel
+   * 解析多Sheet Excel（使用multiSource配置）
    */
   private parseMultiSheet(excelData: any, rule: ParseRule): ParsedOrder[] {
     const orders: ParsedOrder[] = [];
@@ -144,6 +156,10 @@ export class ParseEngine {
 
       if (subRule.parser.type === 'table' && subRule.parser.table) {
         sheetOrders = parseTable(sheet.data, subRule.parser.table, rule.recipient);
+      } else if (subRule.parser.type === 'matrix' && subRule.parser.matrix) {
+        sheetOrders = parseMatrix(sheet.data, subRule.parser.matrix);
+      } else if (subRule.parser.type === 'card' && subRule.parser.card) {
+        sheetOrders = parseCards(sheet.data, subRule.parser.card);
       }
 
       // 添加Sheet来源信息
@@ -152,6 +168,35 @@ export class ParseEngine {
       }
 
       orders.push(...sheetOrders);
+    }
+
+    return orders;
+  }
+
+  /**
+   * 解析所有Sheet（使用同一个table规则）
+   */
+  private parseAllSheets(excelData: any, rule: ParseRule): ParsedOrder[] {
+    const orders: ParsedOrder[] = [];
+    const tableConfig = rule.parser.table!;
+    
+    for (const sheet of excelData.sheets) {
+      // 跳过空Sheet
+      if (!sheet.data || sheet.data.length === 0) continue;
+
+      try {
+        const sheetOrders = parseTable(sheet.data, tableConfig, rule.recipient);
+        
+        // 添加Sheet来源信息
+        for (const order of sheetOrders) {
+          order.sourceSheet = sheet.name;
+        }
+
+        orders.push(...sheetOrders);
+      } catch (e) {
+        // 单个Sheet解析失败不影响其他Sheet
+        console.warn(`Sheet "${sheet.name}" 解析失败:`, e);
+      }
     }
 
     return orders;
