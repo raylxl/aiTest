@@ -35,6 +35,26 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: '规则缺少必要字段（name, parser.type）' }, { status: 400 });
     }
 
+    const parserType = rule.parser.type;
+    if (parserType === 'table' && !rule.parser.table) {
+      return NextResponse.json({ error: 'table 模式缺少 table 配置' }, { status: 400 });
+    }
+    if (parserType === 'matrix' && !rule.parser.matrix) {
+      return NextResponse.json({ error: 'matrix 模式缺少 matrix 配置' }, { status: 400 });
+    }
+    if (parserType === 'double-matrix' && !rule.parser.matrix) {
+      return NextResponse.json({ error: 'double-matrix 模式缺少 matrix 配置' }, { status: 400 });
+    }
+    if (parserType === 'card' && !rule.parser.card) {
+      return NextResponse.json({ error: 'card 模式缺少 card 配置' }, { status: 400 });
+    }
+    if (parserType === 'text' && !rule.parser.text) {
+      return NextResponse.json({ error: 'text 模式缺少 text 配置' }, { status: 400 });
+    }
+    if ((parserType === 'multi-sheet' || parserType === 'multi-page') && !rule.parser.multiSource) {
+      return NextResponse.json({ error: `${parserType} 模式缺少 multiSource 配置` }, { status: 400 });
+    }
+
     const result = await parseEngine.parseFile(file, file.name, rule);
 
     return NextResponse.json(result);

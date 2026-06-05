@@ -56,6 +56,13 @@ export function parseTable(
   const headerRow = config.headerRow === 'auto' ? findHeaderRow(sheetData, config.columns) : config.headerRow;
   const dataStartRow = config.dataStartRow === 'auto' ? headerRow + 1 : config.dataStartRow;
   const dataEndRow = config.dataEndRow === 'auto' ? sheetData.length : (config.dataEndRow ?? sheetData.length);
+  const stopPatterns = (config.stopWhenPatterns || []).flatMap((pattern) => {
+    try {
+      return [new RegExp(pattern)];
+    } catch {
+      return [];
+    }
+  });
 
   // 提取收货人信息（footer模式 / header模式）
   let footerRecipient: Record<string, string> = {};
@@ -67,42 +74,38 @@ export function parseTable(
     headerRecipient = extractHeaderRecipient(sheetData, recipient);
   }
 
-  for (let i = dataStartRow; i < dataEndRow && i < sheetData.length; i++) {
-    const row = sheetData[i];
-    if (!row || row.length === 0) continue;
-    if (config.skipRows?.includes(i)) continue;
+  const dataRows = buildDataRows(sheetData, config, dataStartRow, dataEndRow, stopPatterns);
 
-    // 检查是否是合计行或空行
-    const firstCell = String(row[0] || '').trim();
-    if (firstCell === '合计' || firstCell === '总计' || firstCell === '') continue;
-
+  for (const { row, rowIndex } of dataRows) {
     const order: ParsedOrder = {
-      sourceRow: i,
+      sourceRow: rowIndex,
       isValid: true,
       validationErrors: [],
     };
-    
-    // 跳过全空行
-    const hasData = config.columns.some(
-      (col: any) => row[col.sourceIndex] !== undefined && String(row[col.sourceIndex] || '').trim() !== ''
-    );
+
+    const hasData = config.columns.some((col: any) => {
+      const rawValue = resolveRawColumnValue(row, col);
+      return rawValue !== undefined && rawValue !== null && String(rawValue).trim() !== '';
+    });
     if (!hasData) continue;
 
     for (const col of config.columns) {
-      const value = row[col.sourceIndex];
+      const rawValue = resolveRawColumnValue(row, col);
+      let processedValue = applyTransforms(rawValue, col.transform);
       const fieldName = col.targetField;
-      
-      let processedValue = value;
-      if (col.dataType === 'number') {
-        processedValue = parseNumber(value);
-      } else if (col.dataType === 'string') {
-        processedValue = String(value || '').trim();
+
+      if ((processedValue === '' || processedValue === undefined || processedValue === null) && col.defaultValue !== undefined) {
+        processedValue = col.defaultValue;
       }
 
-      // 跳过空值——不要用空值覆盖已有值（避免"物品备注"空值覆盖"物品名称"）
+      if (col.dataType === 'number') {
+        processedValue = parseNumber(processedValue);
+      } else if (col.dataType === 'string') {
+        processedValue = String(processedValue || '').trim();
+      }
+
       if (processedValue === '' || processedValue === undefined || processedValue === null) continue;
 
-      // 字段映射
       const mappedField = mapFieldName(fieldName);
       if (mappedField) {
         (order as any)[mappedField] = processedValue;
@@ -112,10 +115,8 @@ export function parseTable(
       }
     }
 
-    // 合并收货人信息（支持两种key格式：name/phone/address 和 receiverName/receiverPhone/receiverAddress/storeName/orderNo）
     const mergeRecipient = (rec: Record<string, string>) => {
       if (!rec) return;
-      // 统一字段名：name→receiverName, phone→receiverPhone, address→receiverAddress
       const name = rec.receiverName || rec.name;
       const phone = rec.receiverPhone || rec.phone;
       const address = rec.receiverAddress || rec.address;
@@ -125,7 +126,7 @@ export function parseTable(
       if (!order.storeName && rec.storeName) order.storeName = rec.storeName;
       if (!order.orderNo && rec.orderNo) order.orderNo = rec.orderNo;
     };
-    
+
     if (recipient?.source === 'footer') mergeRecipient(footerRecipient);
     if (recipient?.source === 'header') mergeRecipient(headerRecipient);
 
@@ -514,10 +515,144 @@ function extractFooterRecipient(data: any[][], recipient: any): Record<string, s
   return result;
 }
 
+function buildDataRows(
+  sheetData: any[][],
+  config: NonNullable<ParseRule['parser']['table']>,
+  dataStartRow: number,
+  dataEndRow: number,
+  stopPatterns: RegExp[]
+): Array<{ row: any[]; rowIndex: number }> {
+  const rows: Array<{ row: any[]; rowIndex: number }> = [];
+  const aggregate = config.rowAggregate;
+  let pending: { row: any[]; rowIndex: number } | null = null;
+
+  for (let i = dataStartRow; i < dataEndRow && i < sheetData.length; i++) {
+    const row = sheetData[i];
+    if (!row || row.length === 0) continue;
+    if (config.skipRows?.includes(i)) continue;
+
+    const rowText = row.map((cell) => String(cell ?? '').trim()).filter(Boolean).join(' ');
+    if (stopPatterns.some((pattern) => pattern.test(rowText))) break;
+
+    const firstCell = String(row[0] || '').trim();
+    if (firstCell === '合计' || firstCell === '总计' || firstCell === '') continue;
+
+    if (!aggregate?.enabled) {
+      rows.push({ row, rowIndex: i });
+      continue;
+    }
+
+    if (!pending) {
+      pending = { row: [...row], rowIndex: i };
+      continue;
+    }
+
+    if (isContinuationRow(pending.row, row, aggregate)) {
+      pending.row = mergeAggregateRow(pending.row, row, aggregate.joinWith || ' ');
+      continue;
+    }
+
+    rows.push(pending);
+    pending = { row: [...row], rowIndex: i };
+  }
+
+  if (pending) rows.push(pending);
+  return rows;
+}
+
+function isContinuationRow(baseRow: any[], currentRow: any[], aggregate: NonNullable<ParseRule['parser']['table']>['rowAggregate']): boolean {
+  if (!aggregate?.enabled) return false;
+
+  const emptyColumns = aggregate.continueWhenColumnsEmpty || [];
+  if (emptyColumns.length > 0) {
+    const allEmpty = emptyColumns.every((index) => String(currentRow[index] ?? '').trim() === '');
+    if (allEmpty) return true;
+  }
+
+  const groupBy = aggregate.groupBy || [];
+  if (groupBy.length > 0) {
+    const baseKey = groupBy.map((index) => String(baseRow[index] ?? '').trim()).join('|');
+    const currentKey = groupBy.map((index) => String(currentRow[index] ?? '').trim()).join('|');
+    if (currentKey && baseKey === currentKey) return true;
+    if (groupBy.every((index) => String(currentRow[index] ?? '').trim() === '')) return true;
+  }
+
+  return false;
+}
+
+function mergeAggregateRow(baseRow: any[], currentRow: any[], joinWith: string): any[] {
+  const maxLength = Math.max(baseRow.length, currentRow.length);
+  const merged = [...baseRow];
+
+  for (let i = 0; i < maxLength; i++) {
+    const baseValue = String(merged[i] ?? '').trim();
+    const currentValue = String(currentRow[i] ?? '').trim();
+    if (!currentValue) continue;
+    if (!baseValue) {
+      merged[i] = currentRow[i];
+      continue;
+    }
+    if (baseValue !== currentValue) {
+      merged[i] = `${baseValue}${joinWith}${currentValue}`;
+    }
+  }
+
+  return merged;
+}
+
 function parseNumber(value: any): number | undefined {
   if (value === undefined || value === null || value === '') return undefined;
   const num = Number(value);
   return isNaN(num) ? undefined : num;
+}
+
+function resolveRawColumnValue(row: any[], col: any): any {
+  if (Array.isArray(col.sourceIndexes) && col.sourceIndexes.length > 0) {
+    const values = col.sourceIndexes
+      .map((index: number) => row[index])
+      .filter((value: any) => value !== undefined && value !== null && String(value).trim() !== '');
+
+    if (values.length === 0) return undefined;
+
+    switch (col.mergeStrategy) {
+      case 'sum':
+        return values.reduce((sum: number, value: any) => sum + (parseNumber(value) || 0), 0);
+      case 'firstNonEmpty':
+        return values[0];
+      case 'concat':
+      default:
+        return values.map((value: any) => String(value).trim()).join(' ');
+    }
+  }
+
+  return row[col.sourceIndex];
+}
+
+function applyTransforms(value: any, transform?: string | string[]): any {
+  if (value === undefined || value === null) return value;
+  const transforms = Array.isArray(transform) ? transform : transform ? [transform] : [];
+  let result = value;
+
+  for (const action of transforms) {
+    switch (action) {
+      case 'trim':
+        result = String(result).trim();
+        break;
+      case 'upper':
+        result = String(result).toUpperCase();
+        break;
+      case 'lower':
+        result = String(result).toLowerCase();
+        break;
+      case 'digitsOnly':
+        result = String(result).replace(/\D+/g, '');
+        break;
+      default:
+        result = result;
+    }
+  }
+
+  return result;
 }
 
 function mapFieldName(sourceName: string): string | null {
