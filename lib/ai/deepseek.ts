@@ -1,4 +1,5 @@
 import type { ParseRule } from '@/types/rule';
+import https from 'https';
 
 const DEEPSEEK_API_URL = 'https://www.vbcode.io/v1/chat/completions';
 
@@ -71,7 +72,59 @@ targetField应使用以下标准字段名：
 `;
 
 /**
- * 调用DeepSeek API生成解析规则
+ * 使用Node.js https模块调用API（绕过Cloudflare检测）
+ */
+function callAPIWithHttps(apiKey: string, body: any): Promise<any> {
+  return new Promise((resolve, reject) => {
+    const url = new URL(DEEPSEEK_API_URL);
+    const postData = JSON.stringify(body);
+    
+    const options = {
+      hostname: url.hostname,
+      port: 443,
+      path: url.pathname,
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${apiKey}`,
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+        'Accept': 'application/json',
+        'Accept-Language': 'en-US,en;q=0.9',
+        'Content-Length': Buffer.byteLength(postData),
+      },
+    };
+
+    const req = https.request(options, (res) => {
+      let data = '';
+      
+      res.on('data', (chunk) => {
+        data += chunk;
+      });
+      
+      res.on('end', () => {
+        if (res.statusCode && res.statusCode >= 200 && res.statusCode < 300) {
+          try {
+            resolve(JSON.parse(data));
+          } catch (e) {
+            reject(new Error(`解析响应失败: ${data.substring(0, 200)}`));
+          }
+        } else {
+          reject(new Error(`API调用失败 (${res.statusCode}): ${data.substring(0, 500)}`));
+        }
+      });
+    });
+
+    req.on('error', (e) => {
+      reject(new Error(`请求错误: ${e.message}`));
+    });
+
+    req.write(postData);
+    req.end();
+  });
+}
+
+/**
+ * 调用AI API生成解析规则
  */
 export async function generateRuleWithAI(
   fileSample: string,
@@ -97,38 +150,22 @@ ${fileSample}
 
 请分析文件结构，生成对应的解析规则JSON。`;
 
-  const response = await fetch(DEEPSEEK_API_URL, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'Authorization': `Bearer ${apiKey}`,
-      'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-      'Accept': 'application/json',
-      'Accept-Language': 'en-US,en;q=0.9',
-      'Origin': 'https://www.vbcode.io',
-      'Referer': 'https://www.vbcode.io/',
-    },
-    body: JSON.stringify({
-      model: 'gpt-5.4',
-      messages: [
-        { role: 'system', content: SYSTEM_PROMPT },
-        { role: 'user', content: userMessage }
-      ],
-      temperature: 0.1,
-      max_tokens: 4000,
-    }),
-  });
+  const body = {
+    model: 'gpt-5.4',
+    messages: [
+      { role: 'system', content: SYSTEM_PROMPT },
+      { role: 'user', content: userMessage }
+    ],
+    temperature: 0.1,
+    max_tokens: 4000,
+  };
 
-  if (!response.ok) {
-    const error = await response.text();
-    throw new Error(`DeepSeek API调用失败: ${error}`);
-  }
-
-  const data = await response.json();
-  const content = data.choices[0]?.message?.content;
+  // 使用Node.js https模块调用（绕过Cloudflare检测）
+  const data = await callAPIWithHttps(apiKey, body);
+  const content = data.choices?.[0]?.message?.content;
 
   if (!content) {
-    throw new Error('DeepSeek API返回空内容');
+    throw new Error('AI API返回空内容');
   }
 
   // 提取JSON内容
