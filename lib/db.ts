@@ -141,16 +141,17 @@ export async function initDB() {
     )
   `;
 
-  // 万能导入V2 - 解析规则表（用户保存的规则）
+  // 万能导入V2 - 解析规则表（用户保存的规则）— 与 route.ts schema 保持一致
   await sql`
     CREATE TABLE IF NOT EXISTS parse_rules (
       id              SERIAL PRIMARY KEY,
       name            VARCHAR(200) NOT NULL,
-      description     TEXT,
-      file_type       VARCHAR(20) NOT NULL,
+      description     TEXT DEFAULT '',
+      file_types      TEXT[] DEFAULT '{}',
       rule_json       JSONB NOT NULL,
-      is_preset       BOOLEAN DEFAULT false,
-      use_count       INTEGER DEFAULT 0,
+      is_active       BOOLEAN DEFAULT TRUE,
+      is_ai_generated BOOLEAN DEFAULT FALSE,
+      usage_count     INTEGER DEFAULT 0,
       created_at      TIMESTAMPTZ DEFAULT NOW(),
       updated_at      TIMESTAMPTZ DEFAULT NOW()
     )
@@ -220,6 +221,40 @@ export async function initDB() {
       await sql`INSERT INTO schema_migrations (version) VALUES ('003')`;
     } catch {
       // 字段可能已存在或权限不足，忽略错误继续运行
+    }
+  }
+
+  // Migration 004: parse_rules 表 schema 升级（旧版→新版字段对齐）
+  // 旧版: file_type(VARCHAR), is_preset(BOOLEAN), use_count(INTEGER)
+  // 新版: file_types(TEXT[]), is_active(BOOLEAN), is_ai_generated(BOOLEAN), usage_count(INTEGER)
+  const [m004] = await sql`SELECT id FROM schema_migrations WHERE version = '004' LIMIT 1`;
+  if (!m004) {
+    try {
+      const cols = await sql`SELECT column_name FROM information_schema.columns WHERE table_name = 'parse_rules'`;
+      const names = (cols as any[]).map((c: any) => c.column_name);
+      // file_type → file_types
+      if (names.includes('file_type') && !names.includes('file_types')) {
+        await sql`ALTER TABLE parse_rules DROP COLUMN file_type`;
+        await sql`ALTER TABLE parse_rules ADD COLUMN file_types TEXT[] DEFAULT '{}'`;
+      }
+      // is_preset → is_active
+      if (names.includes('is_preset') && !names.includes('is_active')) {
+        await sql`ALTER TABLE parse_rules RENAME COLUMN is_preset TO is_active`;
+      }
+      if (!names.includes('is_active') && !names.includes('is_preset')) {
+        await sql`ALTER TABLE parse_rules ADD COLUMN IF NOT EXISTS is_active BOOLEAN DEFAULT TRUE`;
+      }
+      // use_count → usage_count
+      if (names.includes('use_count') && !names.includes('usage_count')) {
+        await sql`ALTER TABLE parse_rules RENAME COLUMN use_count TO usage_count`;
+      }
+      await sql`ALTER TABLE parse_rules ADD COLUMN IF NOT EXISTS usage_count INTEGER DEFAULT 0`;
+      // 新增字段
+      await sql`ALTER TABLE parse_rules ADD COLUMN IF NOT EXISTS is_ai_generated BOOLEAN DEFAULT FALSE`;
+      await sql`ALTER TABLE parse_rules ADD COLUMN IF NOT EXISTS description TEXT DEFAULT ''`;
+      await sql`INSERT INTO schema_migrations (version) VALUES ('004')`;
+    } catch (e: any) {
+      console.warn('[migration-004] parse_rules schema upgrade failed:', e?.message || e);
     }
   }
 }

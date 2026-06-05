@@ -7,11 +7,13 @@ function getDB() {
   return neon(url);
 }
 
-// 初始化规则表（仅执行一次）
+// 初始化规则表（仅执行一次，兼容旧版 lib/db.ts 建表逻辑）
 let tableInitialized = false;
 async function ensureTableExists() {
   if (tableInitialized) return;
   const sql = getDB();
+
+  // 先确保表存在（CREATE TABLE IF NOT EXISTS — 可能被旧版 lib/db.ts 先创建）
   await sql`
     CREATE TABLE IF NOT EXISTS parse_rules (
       id              SERIAL PRIMARY KEY,
@@ -27,41 +29,41 @@ async function ensureTableExists() {
     )
   `;
 
-  // 迁移：旧版 db.ts schema 与新版 route.ts schema 字段对齐
-  // 旧版字段: file_type(VARCHAR), is_preset, use_count
-  // 新版字段: file_types(TEXT[]), is_active, is_ai_generated, usage_count
-  try {
-    const existingCols = await sql`
-      SELECT column_name FROM information_schema.columns
-      WHERE table_name = 'parse_rules'
-    `;
-    const colNames = (existingCols as any[]).map((c: any) => c.column_name);
+  // ===== 迁移：逐列检查并补全（幂等，可重复执行）=====
+  // 旧版 lib/db.ts 创建的字段: file_type(VARCHAR), is_preset(BOOLEAN), use_count(INTEGER)
+  // 新版 route.ts 需要的字段: file_types(TEXT[]), is_active(BOOLEAN), is_ai_generated(BOOLEAN), usage_count(INTEGER)
+  const existingCols = await sql`
+    SELECT column_name, data_type FROM information_schema.columns
+    WHERE table_name = 'parse_rules'
+  `;
+  const colMap = new Map((existingCols as any[]).map((c: any) => [c.column_name, c.data_type]));
 
-    // 1. file_type → file_types
-    if (colNames.includes('file_type') && !colNames.includes('file_types')) {
-      await sql`ALTER TABLE parse_rules DROP COLUMN file_type`;
-      await sql`ALTER TABLE parse_rules ADD COLUMN file_types TEXT[] DEFAULT '{}'`;
-    }
-    // 2. is_preset → is_active
-    if (colNames.includes('is_preset') && !colNames.includes('is_active')) {
-      await sql`ALTER TABLE parse_rules RENAME COLUMN is_preset TO is_active`;
-    }
-    if (!colNames.includes('is_active')) {
-      await sql`ALTER TABLE parse_rules ADD COLUMN is_active BOOLEAN DEFAULT TRUE`;
-    }
-    // 3. use_count → usage_count
-    if (colNames.includes('use_count') && !colNames.includes('usage_count')) {
-      await sql`ALTER TABLE parse_rules RENAME COLUMN use_count TO usage_count`;
-    }
-    if (!colNames.includes('usage_count')) {
-      await sql`ALTER TABLE parse_rules ADD COLUMN usage_count INTEGER DEFAULT 0`;
-    }
-    // 4. is_ai_generated
-    if (!colNames.includes('is_ai_generated')) {
-      await sql`ALTER TABLE parse_rules ADD COLUMN is_ai_generated BOOLEAN DEFAULT FALSE`;
-    }
-  } catch (e: any) {
-    console.warn('[parse_rules migration]', e?.message || e);
+  // 1. file_type(VARCHAR) → 删除 → 新增 file_types(TEXT[])
+  if (colMap.has('file_type') && !colMap.has('file_types')) {
+    await sql`ALTER TABLE parse_rules DROP COLUMN file_type`;
+    await sql`ALTER TABLE parse_rules ADD COLUMN file_types TEXT[] DEFAULT '{}'`;
+  }
+
+  // 2. is_preset(BOOLEAN) → 重命名为 is_active
+  if (colMap.has('is_preset') && !colMap.has('is_active')) {
+    await sql`ALTER TABLE parse_rules RENAME COLUMN is_preset TO is_active`;
+  }
+  // 确保 is_active 存在
+  if (!colMap.has('is_active') && !colMap.has('is_preset')) {
+    await sql`ALTER TABLE parse_rules ADD COLUMN is_active BOOLEAN DEFAULT TRUE`;
+  }
+
+  // 3. use_count(INTEGER) → 确保为 usage_count
+  if (colMap.has('use_count') && !colMap.has('usage_count')) {
+    await sql`ALTER TABLE parse_rules RENAME COLUMN use_count TO usage_count`;
+  }
+  if (!colMap.has('usage_count')) {
+    await sql`ALTER TABLE parse_rules ADD COLUMN usage_count INTEGER DEFAULT 0`;
+  }
+
+  // 4. is_ai_generated — 新版必需字段
+  if (!colMap.has('is_ai_generated')) {
+    await sql`ALTER TABLE parse_rules ADD COLUMN is_ai_generated BOOLEAN DEFAULT FALSE`;
   }
 
   tableInitialized = true;
