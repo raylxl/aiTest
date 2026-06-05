@@ -112,28 +112,7 @@ const MENU_ITEM_MAP: Record<string, { title: string; subtitle?: string }> = {
 const MENU_DATA: MenuItem[] = [
   { key: 'home', label: '首页', icon: 'home' },
   { key: 'cl-finance', label: '冷链财务管理', icon: 'wallet', children: [
-    { key: 'cl-finance-base', label: '基础数据', icon: 'office', children: [
-      { key: 'fee-type-cc', label: '费用类型维护', icon: 'priceTag' },
-      { key: 'fee-rules', label: '费用规则维护', icon: 'priceTag' },
-    ]},
-    { key: 'universal-import', label: '万能导入', icon: 'upload' },
     { key: 'universal-import-v2', label: '万能导入V2', icon: 'upload' },
-    { key: 'waybill', label: '已导入运单', icon: 'truck' },
-    { key: 'template-learning', label: '模板学习记录', icon: 'book' },
-  ]},
-  { key: 'ai-exam', label: 'AI考试', icon: 'exam', children: [
-    { key: 'ai-exam-20260507', label: '20260507', icon: 'document', children: [
-      { key: 'universal-import', label: '万能导入', icon: 'upload' },
-      { key: 'waybill', label: '已导入运单', icon: 'truck' },
-    ]},
-  ]},
-  { key: 'system', label: '系统管理', icon: 'setting', children: [
-    { key: 'user-center', label: '用户中心' }, { key: 'app-set', label: '应用设置' }, { key: 'app-btn', label: '应用按钮' },
-    { key: 'menu-ctrl', label: '菜单管理' }, { key: 'tenant', label: '租户管理' }, { key: 'tenant-id', label: '租户身份' },
-    { key: 'org', label: '组织管理' }, { key: 'role', label: '角色管理' }, { key: 'staff', label: '员工管理' },
-    { key: 'user-ctrl', label: '用户管理' }, { key: 'post', label: '岗位管理' }, { key: 'post-role', label: '岗位角色权限管理' },
-    { key: 'task-center', label: '任务中心' }, { key: 'export-tpl', label: '导出模板设置' }, { key: 'export-task', label: '导出任务' },
-    { key: 'ext-test', label: '外链测试' },
   ]},
 ];
 
@@ -217,8 +196,8 @@ function MenuItemEl({ item, activeMenu, collapsed, expandedKeys, depth = 0, onSe
 // ============ 主组件 ============
 export default function FeeManager() {
   const [collapsed, setCollapsed] = useState(false);
-  const [activeMenu, setActiveMenu] = useState('fee-type-cc');
-  const [expandedKeys, setExpandedKeys] = useState<Set<string>>(new Set(['cl-finance', 'cl-finance-base', 'ai-exam', 'ai-exam-20260507']));
+  const [activeMenu, setActiveMenu] = useState('universal-import-v2');
+  const [expandedKeys, setExpandedKeys] = useState<Set<string>>(new Set(['cl-finance']));
   const [data, setData] = useState<FeeItem[]>([]);
   const [selectedRows, setSelectedRows] = useState<FeeItem[]>([]);
   const [query, setQuery] = useState<QueryForm>({ feeCode: '', feeName: '', businessDomain: '', priceType: '' });
