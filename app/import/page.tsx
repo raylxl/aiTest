@@ -95,7 +95,7 @@ export default function ImportPage() {
   const [searchQuery, setSearchQuery] = useState('');
   const [editingRuleIndex, setEditingRuleIndex] = useState<number | null>(null);
   const [editingRuleJson, setEditingRuleJson] = useState('');
-  const [apiKey, setApiKey] = useState('');
+  const [apiKey, setApiKey] = useState('sk-IoFm2IHaR3vBGy2pxgQWPDOSeOqJNFsDKIEM0X5dmuzT5zMq');
   const [apiUrl, setApiUrl] = useState('https://www.vbcode.io/v1/chat/completions');
   const [modelName, setModelName] = useState('gpt-5.4');
 
