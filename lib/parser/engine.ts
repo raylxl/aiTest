@@ -134,17 +134,61 @@ export class ParseEngine {
         // 如果columns为空，自动检测列配置
         let tableConfig = rule.parser.table!;
         if (!tableConfig.columns || tableConfig.columns.length === 0) {
+          // 先检测是否是卡片式布局，如果是则自动切换到card模式
+          if (this.detectCardLayoutFromData(sheet.data)) {
+            return this.parseCardAuto(sheet.data);
+          }
+          // 检测是否是矩阵模式（门店在列头，如"银泰|金桥|金银潭"）
+          const matrixConfig = this.detectMatrixFromData(sheet.data);
+          if (matrixConfig) {
+            return parseMatrix(sheet.data, matrixConfig);
+          }
           tableConfig = this.autoDetectColumns(sheet.data, tableConfig);
         } else {
           // 检查是否缺少关键必填字段，自动补充
           tableConfig = this.mergeMissingColumns(sheet.data, tableConfig);
         }
-        return parseTable(sheet.data, tableConfig, rule.recipient);
+        
+        // 自动检测dataEndRow：在"合计"行后停止（避免footer元数据行被当数据行）
+        if (tableConfig.dataEndRow === undefined || tableConfig.dataEndRow === 'auto') {
+          const headerRow = typeof tableConfig.headerRow === 'number' ? tableConfig.headerRow : 0;
+          const dataStartRow = typeof tableConfig.dataStartRow === 'number' ? tableConfig.dataStartRow : headerRow + 1;
+          for (let i = dataStartRow; i < sheet.data.length; i++) {
+            const row = sheet.data[i];
+            if (!row) continue;
+            const firstCell = String(row[0] || '').trim();
+            // 合计/总计行之后都是footer区域
+            if (firstCell === '合计' || firstCell === '总计') {
+              tableConfig = { ...tableConfig, dataEndRow: i };
+              break;
+            }
+          }
+        }
+        
+        // 从header区域（表头行之前）提取收货人/门店信息
+        const headerRecipient = this.extractHeaderAreaRecipient(sheet.data, 
+          typeof tableConfig.headerRow === 'number' ? tableConfig.headerRow : 0);
+        
+        // 构建recipient配置（如果没有提供的话）
+        let effectiveRecipient = rule.recipient;
+        if (!effectiveRecipient && Object.keys(headerRecipient).length > 0) {
+          effectiveRecipient = {
+            source: 'header',
+            fields: headerRecipient,
+          } as any;
+        }
+        
+        return parseTable(sheet.data, tableConfig, effectiveRecipient);
       }
       case 'matrix':
         return parseMatrix(sheet.data, rule.parser.matrix!);
-      case 'card':
-        return parseCards(sheet.data, rule.parser.card!);
+      case 'card': {
+        // 如果card配置存在，直接使用；否则自动检测
+        if (rule.parser.card) {
+          return parseCards(sheet.data, rule.parser.card);
+        }
+        return this.parseCardAuto(sheet.data);
+      }
       case 'double-matrix':
         // 双重转置：周配送计划格式 (门店x日期矩阵 + 复合单元格拆分)
         if (rule.parser.matrix) {
@@ -296,7 +340,7 @@ export class ParseEngine {
     // 自动检测列映射 — 使用最长关键词优先匹配，避免「SKU条码」被误匹配为itemName
     const columns: ColumnMapping[] = [];
     const fieldNameMapEntries: [string, string][] = [
-      ['配送单号', 'orderNo'], ['运单号', 'orderNo'], ['订单号', 'orderNo'],
+      ['配送汇总单号', 'orderNo'], ['配送单号', 'orderNo'], ['运单号', 'orderNo'], ['订单号', 'orderNo'],
       ['外部订单号', 'orderNo'], ['客户单号', 'orderNo'], ['参考编码', 'orderNo'],
       ['单据号', 'orderNo'], ['单号', 'orderNo'], ['外部编码', 'orderNo'],
       ['收货门店', 'storeName'], ['收货机构', 'storeName'],
@@ -318,20 +362,60 @@ export class ParseEngine {
       ['规格', 'specification'], ['型号', 'specification'],
       ['发货数量', 'quantity'], ['出库数量', 'quantity'],
       ['订货数量', 'quantity'], ['数量', 'quantity'],
+      ['订货单位', 'unit'], ['发货单位', 'unit'], ['辅助单位', 'unit'],
       ['单位', 'unit'],
       ['物品分类', 'itemCategory'], ['分类', 'itemCategory'],
       ['物品品牌', 'itemCategory'], ['品牌', 'itemCategory'],
+      ['物品行号', 'itemCategory'], ['行号', 'itemCategory'],
+      ['仓库', 'itemCategory'], ['备注', 'remark'],
     ];
     
     for (let i = 0; i < headerRowData.length; i++) {
       const cell = String(headerRowData[i] || '').trim();
       if (!cell) continue;
       
+      // 去掉必填标记（*号）再匹配
+      const cellClean = cell.replace(/\*+$/, '').replace(/（必填）$/, '').trim();
+      
+      // 排除"备注"类列——"物品备注"、"收货机构备注"不应匹配到"物品"→itemName、"收货机构"→storeName
+      if (/备注$/.test(cellClean)) {
+        columns.push({ sourceIndex: i, targetField: 'remark', dataType: 'string' });
+        continue;
+      }
+      
+      // 排除"物品X"类非目标列——"物品重量"、"物品体积"、"物品品牌"包含"物品"但不是物品名称
+      // 同理排除"收货X"非目标列——"收货机构"、"收货日期"不应匹配到"收货"→receiverName
+      // 同理排除"数量X"非目标列——"原订货数量"、"接单数量"等派生数量列
+      const excludePatterns: [RegExp, string][] = [
+        [/^物品(?!名称|编码|分类|行号)/, 'itemName'],  // 物品重量/体积/品牌 → 不是itemName
+        [/重量$|体积$|金额$|单价$|折扣$|费用$/, 'skip'],  // 重量/体积/金额/单价/折扣/费用 → 跳过
+        [/收货(?!人|门店|机构|地址|电话|电话)/, 'skip'], // 收货日期/收货方式 → 跳过(但保留收货人/收货门店)
+        [/^分拣/, 'skip'],   // 分拣员/分拣状态/分拣单位 → 跳过
+        [/^基准/, 'skip'],   // 基准单位/基准数量 → 跳过
+        [/^折[前后]/, 'skip'], // 折前/折后 → 跳过
+        [/^合计/, 'skip'],   // 合计金额/合计单价 → 跳过
+        [/^成本/, 'skip'],   // 成本单价/成本金额 → 跳过
+        [/^支付/, 'skip'],   // 支付折扣 → 跳过
+        [/^促销/, 'skip'],   // 促销折扣 → 跳过
+        [/^手动/, 'skip'],   // 手动折扣 → 跳过
+        [/换算率?$/, 'skip'], // 换算率/换算关系 → 跳过
+        [/^创建/, 'skip'],   // 创建人/创建日期 → 跳过
+      ];
+      
+      let shouldExclude = false;
+      for (const [pattern, reason] of excludePatterns) {
+        if (pattern.test(cellClean)) {
+          shouldExclude = true;
+          break;
+        }
+      }
+      if (shouldExclude) continue;
+      
       // 查找匹配的字段名（最长匹配优先）
       let bestMatch = '';
       let bestField = '';
       for (const [keyword, field] of fieldNameMapEntries) {
-        if (cell.includes(keyword) && keyword.length > bestMatch.length) {
+        if ((cellClean.includes(keyword) || cell.includes(keyword)) && keyword.length > bestMatch.length) {
           bestMatch = keyword;
           bestField = field;
         }
@@ -349,6 +433,14 @@ export class ParseEngine {
       dataStartRow: headerRow + 1,
       columns,
     };
+  }
+
+  /**
+   * 测试用：获取autoDetectColumns的映射结果
+   */
+  public testAutoDetect(data: any[][]): { headerRow: number; columns: ColumnMapping[] } {
+    const config = this.autoDetectColumns(data, { headerRow: 'auto', dataStartRow: 'auto', columns: [] });
+    return { headerRow: config.headerRow as number, columns: config.columns };
   }
 
   /**
@@ -500,10 +592,11 @@ export class ParseEngine {
     );
     
     // 检测文本中是否有表格行样式的物品数据
+    // 使用精确的SKU编码模式（如ZBWP0001），避免匹配到时间/重量/页码等非物品数据
     itemPatterns.push(
-      { field: 'itemCode', regex: '^\\s*(\\S+)\\s+', group: 1 },
-      { field: 'itemName', regex: '^\\s*\\S+\\s+(\\S+)', group: 1 },
-      { field: 'quantity', regex: '^\\s*\\S+\\s+\\S+\\s+(\\d+(?:\\.\\d+)?)', group: 1 },
+      { field: 'itemCode', regex: '([A-Z]{2,4}\\d{4,})', group: 1 },
+      { field: 'itemName', regex: '[A-Z]{2,4}\\d{4,}\\s+(\\S+)', group: 1 },
+      { field: 'quantity', regex: '[A-Z]{2,4}\\d{4,}\\s+\\S+\\s+(?:.*?\\s+)?(\\d+(?:\\.\\d+)?)', group: 1 },
     );
 
     return { patterns, itemPatterns };
@@ -592,6 +685,395 @@ export class ParseEngine {
   }
 
   // matchRule 方法已移除 — 考试要求：规则由用户手动选择
+
+  /**
+   * 检测数据是否是卡片式布局
+   * 特征：行中有"▶ 调拨记录 #N"、门店标签行、物品子表等卡片标记
+   */
+  private detectCardLayoutFromData(data: any[][]): boolean {
+    if (!data || data.length < 5) return false;
+    
+    // 检查前20行是否有卡片起始标记
+    const cardStartPatterns = [
+      /▶\s*(?:调拨|配送|出库)?\s*记录/i,
+      /◆\s*\d+/,
+      /第\d+\s*(?:条|项|笔)/,
+      /---{3,}/,
+      /调拨记录/i,
+    ];
+    
+    for (let i = 0; i < Math.min(data.length, 20); i++) {
+      const rowText = (data[i] || []).join(' ').trim();
+      for (const pattern of cardStartPatterns) {
+        if (pattern.test(rowText)) return true;
+      }
+    }
+    
+    // 备选检测：看是否有"调入门店"+"收货人"+"物品编码"在连续行中反复出现
+    let cardCount = 0;
+    for (let i = 0; i < Math.min(data.length, 30); i++) {
+      const rowText = (data[i] || []).join(' ').trim();
+      if (/调入门店|收货门店/.test(rowText)) cardCount++;
+    }
+    // 如果"门店"标签出现2次以上，很可能是卡片式
+    return cardCount >= 2;
+  }
+
+  /**
+   * 自动解析卡片式布局（无需card配置）
+   * 自动检测卡片边界、收货人信息、物品列表
+   */
+  private parseCardAuto(data: any[][]): ParsedOrder[] {
+    const orders: ParsedOrder[] = [];
+    
+    // 阶段1：识别卡片边界
+    interface CardRegion {
+      startRow: number;
+      endRow: number;
+      headerRows: number[];  // 卡片头部行（收货人信息）
+      itemStartRow: number;  // 物品表起始行
+      itemEndRow: number;    // 物品表结束行
+    }
+    
+    const cards: CardRegion[] = [];
+    let currentCard: CardRegion | null = null;
+    
+    for (let i = 0; i < data.length; i++) {
+      const row = data[i];
+      const rowText = (row || []).join(' ').trim();
+      const firstCell = String(row?.[0] || '').trim();
+      
+      // 检测卡片起始行
+      const isCardStart = /▶\s*(?:调拨|配送|出库)?\s*记录/i.test(rowText) ||
+                         /◆\s*\d+/.test(rowText) ||
+                         /调拨记录/.test(rowText) ||
+                         /---{3,}/.test(firstCell);
+      
+      // 检测"调入门店"行（也是卡片区域的开始）
+      const isStoreRow = /调入门店|收货门店/.test(rowText);
+      
+      if (isCardStart || (isStoreRow && !currentCard)) {
+        // 保存上一个卡片
+        if (currentCard) {
+          currentCard.endRow = i;
+          cards.push(currentCard);
+        }
+        currentCard = {
+          startRow: i,
+          endRow: data.length,
+          headerRows: [],
+          itemStartRow: -1,
+          itemEndRow: data.length,
+        };
+        if (isStoreRow) currentCard.headerRows.push(i);
+        continue;
+      }
+      
+      if (currentCard) {
+        if (isStoreRow) {
+          currentCard.headerRows.push(i);
+        }
+        
+        // 检测物品表头
+        if (/物品编码|物品名称|编码.*名称|SKU/.test(rowText) && currentCard.itemStartRow === -1) {
+          currentCard.itemStartRow = i + 1;
+        }
+      }
+    }
+    
+    // 保存最后一个卡片
+    if (currentCard) {
+      currentCard.endRow = data.length;
+      cards.push(currentCard);
+    }
+    
+    // 如果没有检测到卡片标记，尝试按"门店行"分段
+    if (cards.length === 0) {
+      let cardStart = -1;
+      for (let i = 0; i < data.length; i++) {
+        const rowText = (data[i] || []).join(' ').trim();
+        if (/调入门店|收货门店/.test(rowText)) {
+          if (cardStart >= 0) {
+            cards.push({
+              startRow: cardStart,
+              endRow: i,
+              headerRows: [cardStart],
+              itemStartRow: -1,
+              itemEndRow: i,
+            });
+          }
+          cardStart = i;
+        }
+        if (/物品编码|物品名称|编码.*名称/.test(rowText) && cardStart >= 0) {
+          // 找到物品表头，上一个卡片的itemStartRow
+          const lastCard = cards[cards.length - 1];
+          if (lastCard && lastCard.itemStartRow === -1) {
+            lastCard.itemStartRow = i + 1;
+          }
+        }
+      }
+      if (cardStart >= 0) {
+        cards.push({
+          startRow: cardStart,
+          endRow: data.length,
+          headerRows: [cardStart],
+          itemStartRow: -1,
+          itemEndRow: data.length,
+        });
+      }
+    }
+    
+    // 阶段2：解析每个卡片
+    for (const card of cards) {
+      const cardInfo: Record<string, string> = {};
+      
+      // 提取卡片头部信息（收货人、门店等）
+      for (let i = card.startRow; i < card.endRow && i < data.length; i++) {
+        const row = data[i];
+        if (!row) continue;
+        
+        // key:value 格式提取（如"调入门店  尹三顺自助烤肉（银泰店）  收货人  王店长  电话  13900001111"）
+        const rowText = (row as any[]).join(' ');
+        this.extractKeyValuePairs(row, cardInfo);
+      }
+      
+      // 提取物品行
+      const itemRows = this.findItemRows(data, card);
+      
+      for (const itemRow of itemRows) {
+        const order: ParsedOrder = {
+          storeName: cardInfo.storeName || undefined,
+          receiverName: cardInfo.receiverName || undefined,
+          receiverPhone: cardInfo.receiverPhone || undefined,
+          receiverAddress: cardInfo.receiverAddress || undefined,
+          orderNo: cardInfo.orderNo || undefined,
+          itemCode: itemRow.itemCode || undefined,
+          itemName: itemRow.itemName || undefined,
+          specification: itemRow.specification || undefined,
+          quantity: itemRow.quantity,
+          unit: itemRow.unit || undefined,
+          sourceRow: itemRow.rowIndex,
+          isValid: true,
+          validationErrors: [],
+        };
+        orders.push(order);
+      }
+    }
+    
+    return orders;
+  }
+
+  /**
+   * 从行数据中提取 key:value 对
+   * 支持 "key  value  key  value" 格式
+   */
+  private extractKeyValuePairs(row: any[], result: Record<string, string>): void {
+    const keyPatterns: [string, RegExp][] = [
+      ['storeName', /(?:调入门店|收货门店|门店)[：:]?\s*/],
+      ['receiverName', /收货人[：:]?\s*/],
+      ['receiverPhone', /(?:电话|手机|联系电话)[：:]?\s*/],
+      ['receiverAddress', /(?:收货地址|地址)[：:]?\s*/],
+      ['orderNo', /(?:调拨单号|配送单号|单据号|单号)[：:]?\s*/],
+    ];
+    
+    // 拼接行文本
+    const rowText = row.map(c => String(c || '').trim()).filter(Boolean).join('  ');
+    
+    for (const [field, pattern] of keyPatterns) {
+      if (result[field]) continue; // 已有值不覆盖
+      const match = rowText.match(pattern);
+      if (match && match.index !== undefined) {
+        // 取匹配位置后的文本，到下一个key或行尾
+        const afterMatch = rowText.substring(match.index + match[0].length);
+        // 截取到下一个关键词前
+        const nextKeyMatch = afterMatch.match(/(?:调入门店|收货门店|门店|收货人|电话|手机|收货地址|地址|调拨单号|配送单号|物品编码|物品名称|规格|数量)/);
+        const value = nextKeyMatch 
+          ? afterMatch.substring(0, nextKeyMatch.index).trim()
+          : afterMatch.trim();
+        if (value) result[field] = value;
+      }
+    }
+  }
+
+  /**
+   * 查找卡片内的物品数据行
+   */
+  private findItemRows(data: any[][], card: { startRow: number; endRow: number; itemStartRow: number }): Array<{ rowIndex: number; itemCode: string; itemName: string; specification: string; quantity: number | undefined; unit: string }> {
+    const items: Array<{ rowIndex: number; itemCode: string; itemName: string; specification: string; quantity: number | undefined; unit: string }> = [];
+    
+    const searchStart = card.itemStartRow > 0 ? card.itemStartRow : card.startRow;
+    
+    for (let i = searchStart; i < card.endRow && i < data.length; i++) {
+      const row = data[i];
+      if (!row || row.length === 0) continue;
+      
+      const firstCell = String(row[0] || '').trim();
+      // 跳过空行、合计行、标题行、关键字行
+      if (!firstCell || firstCell === '合计' || firstCell === '总计' || 
+          /调入门店|收货门店|收货人|电话|地址|物品编码|▶|◆|---/.test(firstCell)) continue;
+      
+      // 检查是否像物品编码（字母+数字的组合，如 ZBWP0001）
+      const isItemCode = /^[A-Z]{2,4}\d{3,}/i.test(firstCell) || 
+                         /^\d+$/.test(firstCell) && row.length >= 3;
+      
+      if (isItemCode || (firstCell.length > 2 && row.length >= 3)) {
+        const itemCode = String(row[0] || '').trim();
+        const itemName = String(row[1] || '').trim();
+        const spec = String(row[2] || '').trim();
+        const qtyStr = String(row[3] || '').trim();
+        const unit = String(row[4] || '').trim();
+        
+        // 确保至少有编码和名称
+        if (itemCode && itemName) {
+          const qty = this.parseNumber(qtyStr);
+          items.push({ rowIndex: i, itemCode, itemName, specification: spec, quantity: qty, unit });
+        }
+      }
+    }
+    
+    return items;
+  }
+
+  private parseNumber(value: any): number | undefined {
+    if (value === undefined || value === null || value === '') return undefined;
+    const num = Number(String(value).replace(/[^\d.-]/g, ''));
+    return isNaN(num) ? undefined : num;
+  }
+
+  /**
+   * 检测数据是否是矩阵模式（SKU×门店）
+   * 特征：列头中包含门店名（"银泰"、"金桥"、"金银潭"等），且有SKU名称/条码列
+   */
+  private detectMatrixFromData(data: any[][]): import('@/types/rule').MatrixParserConfig | null {
+    if (!data || data.length < 3) return null;
+    
+    const headerRow = data[0];
+    if (!headerRow) return null;
+    
+    // 检查列头中是否有 SKU 列
+    let skuColumn = -1;
+    let skuCodeColumn = -1;
+    const storeColumns: { index: number; storeName: string }[] = [];
+    
+    // 已知的SKU列名
+    const skuNameKeywords = ['SKU名称', '物品名称', '商品名称', '货品名称', '品名'];
+    const skuCodeKeywords = ['SKU条码', 'SKU编码', '物品编码', '商品编码', '条码', '编码'];
+    
+    // 已知的非门店列名（排除这些列）
+    const nonStoreKeywords = ['仓库', '货主', 'SKU', '物品', '商品', '编码', '条码', '名称', '规格',
+      '库存', '在库', '可用', '待移', '分配', '冻结', '单位', '状态', '结余', '序号', '数量',
+      '分类', '品牌', '地址', '电话', '收货', '备注', '合计', '型号'];
+    
+    for (let i = 0; i < headerRow.length; i++) {
+      const cell = String(headerRow[i] || '').trim();
+      if (!cell) continue;
+      
+      // 检查SKU列
+      for (const kw of skuNameKeywords) {
+        if (cell.includes(kw) && skuColumn === -1) {
+          skuColumn = i;
+          break;
+        }
+      }
+      for (const kw of skuCodeKeywords) {
+        if (cell.includes(kw) && skuCodeColumn === -1) {
+          skuCodeColumn = i;
+          break;
+        }
+      }
+      
+      // 检查门店列：不是已知非门店列，且在SKU列之后
+      if (i > Math.max(skuColumn, skuCodeColumn, 0)) {
+        const isNonStore = nonStoreKeywords.some(kw => cell.includes(kw));
+        if (!isNonStore) {
+          // 门店列特征：简短（≤6字符），通常是店名
+          // 或者列名包含"店"、"门店"
+          if (cell.includes('店') || cell.includes('门店') || cell.length <= 8) {
+            storeColumns.push({ index: i, storeName: cell });
+          }
+        }
+      }
+    }
+    
+    // 如果找到了SKU列和至少2个门店列，认为是矩阵模式
+    if (skuColumn >= 0 && storeColumns.length >= 2) {
+      return {
+        headerRow: 0,
+        skuColumn,
+        skuCodeColumn: skuCodeColumn >= 0 ? skuCodeColumn : undefined,
+        storeColumns,
+      };
+    }
+    
+    return null;
+  }
+
+  /**
+   * 从表头行之前的key:value区域 + 页脚区域提取收货人/门店信息
+   * 用于配送发货单等头部含有收货机构信息的格式
+   */
+  private extractHeaderAreaRecipient(data: any[][], headerRowIndex: number): Record<string, string> {
+    const result: Record<string, string> = {};
+    
+    // 搜索区域1：表头行之前（通常包含收货机构、供货机构等）
+    // 搜索区域2：页脚区域（最后10行，包含收货人、收货地址等）
+    const areas = [
+      { start: 0, end: headerRowIndex },
+      { start: Math.max(0, data.length - 10), end: data.length },
+    ];
+    
+    // key:value 提取模式
+    const fieldPatterns: [string, RegExp][] = [
+      ['storeName', /收货机构[：:\s]+(.+?)(?:\s{2,}|$)/],
+      ['storeName', /收货门店[：:\s]+(.+?)(?:\s{2,}|$)/],
+      ['storeName', /(?:调入门店|门店)[：:\s]+(.+?)(?:\s{2,}|$)/],
+      ['receiverName', /收货人[：:\s]+(.+?)(?:\s{2,}|\s*$)/],
+      ['receiverPhone', /(?:收货电话|联系电话|电话|手机)[：:\s]+([\d]+)/],
+      ['receiverAddress', /(?:收货地址|地址)[：:\s]+(.+?)(?:\s{2,}|$)/],
+      ['orderNo', /(?:单据号|配送单号|运单号)[：:\s]+(\S+)/],
+    ];
+    
+    for (const area of areas) {
+      for (let i = area.start; i < area.end && i < data.length; i++) {
+        const row = data[i];
+        if (!row || row.length === 0) continue;
+        
+        // 方法1：将整行拼接为文本，用正则提取
+        const rowText = row.map(c => String(c || '').trim()).filter(Boolean).join('  ');
+        for (const [field, pattern] of fieldPatterns) {
+          if (result[field]) continue;
+          const match = rowText.match(pattern);
+          if (match) {
+            const value = match[1]?.trim();
+            if (value) result[field] = value;
+          }
+        }
+        
+        // 方法2：key在单元格A，value在单元格B的格式（如 "收货机构" 在 col0，"黎明屯..." 在 col1）
+        for (let c = 0; c < row.length - 1; c++) {
+          const key = String(row[c] || '').trim();
+          const val = String(row[c + 1] || '').trim();
+          if (!key || !val) continue;
+          
+          if (/收货机构/.test(key) && !result.storeName) {
+            result.storeName = val;
+          } else if (/收货门店/.test(key) && !result.storeName) {
+            result.storeName = val;
+          } else if (/^收货人$/.test(key) && !result.receiverName) {
+            result.receiverName = val;
+          } else if (/^(?:收货电话|联系电话|电话)$/.test(key) && !result.receiverPhone) {
+            if (/^\d{7,11}$/.test(val)) result.receiverPhone = val;
+          } else if (/^(?:收货地址|地址)$/.test(key) && !result.receiverAddress) {
+            result.receiverAddress = val;
+          } else if (/^(?:单据号|配送单号)$/.test(key) && !result.orderNo) {
+            result.orderNo = val;
+          }
+        }
+      }
+    }
+    
+    return result;
+  }
 }
 
 // 导出单例

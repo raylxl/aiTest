@@ -224,23 +224,26 @@ export function parsePDFText(
 ): ParsedOrder[] {
   const orders: ParsedOrder[] = [];
   
+  // 跨页累积全局字段（适用于多页单订单场景）
+  const accumulatedFields: Record<string, string> = {};
+  
   for (const page of pages) {
-    // 提取全局字段
-    const globalFields: Record<string, string> = {};
+    // 提取当前页的全局字段，并累积到跨页字段中
     for (const pattern of config.patterns) {
       const regex = new RegExp(pattern.regex, 'gm');
       const match = regex.exec(page.text);
       if (match) {
-        globalFields[pattern.field] = match[pattern.group || 1]?.trim() || '';
+        const val = (match[pattern.group || 1] || '').trim();
+        if (val) accumulatedFields[pattern.field] = val;
       }
     }
     
-    // 提取物品列表
+    // 提取物品列表，合并跨页字段
     if (config.itemPatterns) {
       const items = extractItemsFromText(page.text, config.itemPatterns);
       for (const item of items) {
         orders.push({
-          ...globalFields,
+          ...accumulatedFields,
           ...item,
           sourceSheet: `Page ${page.pageNumber}`,
           isValid: true,
@@ -249,7 +252,7 @@ export function parsePDFText(
       }
     } else {
       orders.push({
-        ...globalFields,
+        ...accumulatedFields,
         sourceSheet: `Page ${page.pageNumber}`,
         isValid: true,
         validationErrors: [],
@@ -349,6 +352,18 @@ function extractItemsFromText(text: string, patterns: any[]): ParsedOrder[] {
   const lines = text.split('\n');
   
   for (const line of lines) {
+    const trimmed = line.trim();
+    if (!trimmed) continue;
+    
+    // 预过滤：跳过明显不是物品行的内容
+    if (/^\d{4}[\/\-]\d{1,2}[\/\-]\d{1,2}/.test(trimmed)) continue;
+    if (/^\d{1,2}:\d{2}/.test(trimmed)) continue;
+    if (/^(第\d+页|共\d+页|页码|page)/i.test(trimmed)) continue;
+    if (/^(单据状态|复审状态|分拣状态|是否需要推送)/.test(trimmed)) continue;
+    if (/^(预计|期望|发货日期|订单日期|发货操作时间)/.test(trimmed)) continue;
+    if (/^配送重量/.test(trimmed)) continue;
+    if (/^(收货机构|订货机构|供货机构|送货机构|业务模式)/.test(trimmed)) continue;
+    
     const item: ParsedOrder = { isValid: true, validationErrors: [] };
     let matched = false;
     
@@ -361,8 +376,155 @@ function extractItemsFromText(text: string, patterns: any[]): ParsedOrder[] {
       }
     }
     
-    if (matched && item.itemName) {
+    // 至少需要itemCode匹配到类似SKU编码的值才认为是有效物品行
+    if (matched && item.itemCode && /^[A-Z0-9]{4,}$/i.test(item.itemCode)) {
       items.push(item);
+    }
+  }
+  
+  // 如果行内匹配失败（pdf2json经常把编码和名称拆到不同行），
+  // 尝试跨行合并策略：编码行 → 名称行 → 数量行
+  // 即使行内匹配找到了条目，如果大部分缺少名称或数量，也回退到跨行合并
+  const incompleteCount = items.filter(it => !it.itemName || it.quantity === undefined).length;
+  if (items.length === 0 || (items.length > 0 && incompleteCount > items.length * 0.5)) {
+    const crossItems = extractItemsCrossLine(text);
+    if (crossItems.length > 0) return crossItems;
+  }
+  
+  return items;
+}
+
+/**
+ * 跨行合并提取物品数据（PDF专用）
+ * pdf2json会将同一逻辑行拆成多行：
+ *   ZBWP0001
+ *   茶语柠听紫苏风味糖浆
+ *   750ml*6瓶/件 件 3
+ * 需要识别编码行，然后合并后续行
+ */
+function extractItemsCrossLine(text: string): ParsedOrder[] {
+  const items: ParsedOrder[] = [];
+  const lines = text.split('\n').map(l => l.trim()).filter(l => l);
+  
+  // 跳过的行模式
+  const skipPatterns = [
+    /^\d{4}[\/\-]\d{1,2}/,  // 日期
+    /^\d{1,2}:\d{2}/,       // 时间
+    /^(第\d+页|共\d+页|page)/i,
+    /^(单据状态|复审状态|分拣状态|是否需要推送|预计|期望|发货日期|订单日期|发货操作时间)/,
+    /^配送重量/,
+    /^(收货机构|订货机构|供货机构|送货机构|业务模式|配送方式)/,
+    /^(单据编号|配送单号|运单号|调拨单号)[：:]/,
+    /^k\s*g$/i,  // "k g" (配送重量的单位被拆行)
+    /^(制单日期|创建人|发货人|收货人[：:]|收货电话|收货地址|打印次数|备注[：:]?$)/,
+    /^\d+$/,  // 纯数字行（可能是页码或序号）
+  ];
+  
+  // SKU编码模式：2-4个大写字母+3位以上数字
+  const skuCodePattern = /^[A-Z]{2,4}\d{3,}$/;
+  
+  // 分类名模式（如"饮品类"、"原切类"等）
+  const categoryPattern = /^[\u4e00-\u9fa5]{2,5}类$/;
+  
+  // 单位词模式
+  const unitPattern = /^(件|包|桶|瓶|箱|个|袋|盒|条|套|双|只|把|台|张|根|本|支|块|片|卷|组)$/;
+  
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i];
+    
+    // 跳过不相关行
+    if (skipPatterns.some(p => p.test(line))) continue;
+    if (categoryPattern.test(line)) continue;
+    
+    // 检测SKU编码行
+    if (skuCodePattern.test(line)) {
+      const itemCode = line;
+      let itemName = '';
+      let specification = '';
+      let quantity: number | undefined;
+      let unit = '';
+      
+      // 收集阶段的跳过模式（不含纯数字，因为纯数字可能是数量值）
+      const collectSkipPatterns = [
+        /^\d{4}[\/\-]\d{1,2}/,
+        /^\d{1,2}:\d{2}/,
+        /^(第\d+页|共\d+页|page)/i,
+        /^(单据状态|复审状态|分拣状态|是否需要推送|预计|期望|发货日期|订单日期|发货操作时间)/,
+        /^配送重量/,
+        /^(收货机构|订货机构|供货机构|送货机构|业务模式|配送方式)/,
+        /^(单据编号|配送单号|运单号|调拨单号)[：:]/,
+        /^k\s*g$/i,
+        /^(制单日期|创建人|发货人|收货人[：:]|收货电话|收货地址|打印次数|备注[：:]?$)/,
+        // 表格列头 + 合计（不在收集阶段跳过纯数字）
+        /^(物品类别|物品编码|物品名称|规格型号|订货单位|发货数量|备注|合[ 　]*计)$/,
+      ];
+      
+      // 第一步：收集编码行之后所有有效行（直到下一个编码或末尾）
+      let lookAhead = 1;
+      const collectedLines: string[] = [];
+      while (i + lookAhead < lines.length && lookAhead <= 10) {
+        const nextLine = lines[i + lookAhead];
+        if (collectSkipPatterns.some(p => p.test(nextLine))) { lookAhead++; continue; }
+        if (categoryPattern.test(nextLine)) { lookAhead++; continue; }
+        if (skuCodePattern.test(nextLine)) break; // 遇到下一个物品编码，停止收集
+        collectedLines.push(nextLine);
+        lookAhead++;
+      }
+      
+      // 第二步：分类收集到的行
+      if (collectedLines.length > 0) {
+        // 第一行始终是物品名称
+        itemName = collectedLines[0];
+        
+        for (let j = 1; j < collectedLines.length; j++) {
+          const l = collectedLines[j];
+          
+          // 模式1: 规格+单位+数量在同一行 如 "750ml*6瓶/件 件 3"
+          const fullMatch = l.match(/^(.+?)\s+(\S+?)\s+(\d+(?:\.\d+)?)$/);
+          if (fullMatch) {
+            if (!specification) specification = fullMatch[1].trim();
+            if (!unit) unit = fullMatch[2].trim();
+            if (quantity === undefined) quantity = parseFloat(fullMatch[3]);
+            continue;
+          }
+          
+          // 模式2: 单位+数量 如 "件 3"
+          const unitQtyMatch = l.match(/^(\S+)\s+(\d+(?:\.\d+)?)$/);
+          if (unitQtyMatch && unitPattern.test(unitQtyMatch[1])) {
+            if (!unit) unit = unitQtyMatch[1];
+            if (quantity === undefined) quantity = parseFloat(unitQtyMatch[2]);
+            continue;
+          }
+          
+          // 模式3: 纯数字 = 数量
+          const qtyMatch = l.match(/^(\d+(?:\.\d+)?)$/);
+          if (qtyMatch) {
+            if (quantity === undefined) quantity = parseFloat(qtyMatch[1]);
+            continue;
+          }
+          
+          // 模式4: 单独的单位词
+          if (unitPattern.test(l)) {
+            if (!unit) unit = l;
+            continue;
+          }
+          
+          // 模式5: 默认当作规格
+          if (!specification) specification = l;
+        }
+      }
+      
+      if (itemName) {
+        items.push({
+          itemCode,
+          itemName,
+          specification: specification || undefined,
+          quantity,
+          unit: unit || undefined,
+          isValid: true,
+          validationErrors: [],
+        });
+      }
     }
   }
   

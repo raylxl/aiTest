@@ -99,6 +99,9 @@ export function parseTable(
         processedValue = String(value || '').trim();
       }
 
+      // 跳过空值——不要用空值覆盖已有值（避免"物品备注"空值覆盖"物品名称"）
+      if (processedValue === '' || processedValue === undefined || processedValue === null) continue;
+
       // 字段映射
       const mappedField = mapFieldName(fieldName);
       if (mappedField) {
@@ -109,19 +112,22 @@ export function parseTable(
       }
     }
 
-    // 合并收货人信息
-    if (recipient?.source === 'footer' && footerRecipient) {
-      if (!order.receiverName && footerRecipient.name) order.receiverName = footerRecipient.name;
-      if (!order.receiverPhone && footerRecipient.phone) order.receiverPhone = footerRecipient.phone;
-      if (!order.receiverAddress && footerRecipient.address) order.receiverAddress = footerRecipient.address;
-      if (!order.storeName && footerRecipient.storeName) order.storeName = footerRecipient.storeName;
-    }
-    if (recipient?.source === 'header' && headerRecipient) {
-      if (!order.receiverName && headerRecipient.name) order.receiverName = headerRecipient.name;
-      if (!order.receiverPhone && headerRecipient.phone) order.receiverPhone = headerRecipient.phone;
-      if (!order.receiverAddress && headerRecipient.address) order.receiverAddress = headerRecipient.address;
-      if (!order.storeName && headerRecipient.storeName) order.storeName = headerRecipient.storeName;
-    }
+    // 合并收货人信息（支持两种key格式：name/phone/address 和 receiverName/receiverPhone/receiverAddress/storeName/orderNo）
+    const mergeRecipient = (rec: Record<string, string>) => {
+      if (!rec) return;
+      // 统一字段名：name→receiverName, phone→receiverPhone, address→receiverAddress
+      const name = rec.receiverName || rec.name;
+      const phone = rec.receiverPhone || rec.phone;
+      const address = rec.receiverAddress || rec.address;
+      if (!order.receiverName && name) order.receiverName = name;
+      if (!order.receiverPhone && phone) order.receiverPhone = phone;
+      if (!order.receiverAddress && address) order.receiverAddress = address;
+      if (!order.storeName && rec.storeName) order.storeName = rec.storeName;
+      if (!order.orderNo && rec.orderNo) order.orderNo = rec.orderNo;
+    };
+    
+    if (recipient?.source === 'footer') mergeRecipient(footerRecipient);
+    if (recipient?.source === 'header') mergeRecipient(headerRecipient);
 
     orders.push(order);
   }
@@ -449,21 +455,27 @@ function extractHeaderRecipient(data: any[][], recipient: any): Record<string, s
         }
       }
     } else if (typeof val === 'string') {
-      // 字符串：当作 label 在前10行搜索
-      const label = val as string;
-      for (let i = 0; i < Math.min(data.length, 10); i++) {
-        const row = data[i] || [];
-        for (let c = 0; c < row.length; c++) {
-          if (String(row[c] || '').includes(label)) {
-            // 取同行右侧单元格
-            const valCell = row[c + 1] || row[c + 2] || '';
-            if (valCell) {
-              result[fieldKey] = String(valCell).trim();
-              break;
+      // 如果值看起来已经是数据值（非label），直接使用
+      // 判断依据：值长度>2且不含"匹配"/"正则"等关键词，直接作为字段值
+      if (val.length > 2 && !/^(?:匹配|正则|搜索|查找)/.test(val)) {
+        result[fieldKey] = val;
+      } else {
+        // 字符串：当作 label 在前10行搜索
+        const label = val as string;
+        for (let i = 0; i < Math.min(data.length, 10); i++) {
+          const row = data[i] || [];
+          for (let c = 0; c < row.length; c++) {
+            if (String(row[c] || '').includes(label)) {
+              // 取同行右侧单元格
+              const valCell = row[c + 1] || row[c + 2] || '';
+              if (valCell) {
+                result[fieldKey] = String(valCell).trim();
+                break;
+              }
             }
           }
+          if (result[fieldKey]) break;
         }
-        if (result[fieldKey]) break;
       }
     }
   }
