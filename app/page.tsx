@@ -111,7 +111,7 @@ const MENU_ITEM_MAP: Record<string, { title: string; subtitle?: string }> = {
 // ============ 菜单数据 ============
 const MENU_DATA: MenuItem[] = [
   { key: 'home', label: '首页', icon: 'home' },
-  { key: 'cl-finance', label: '冷链财务管理', icon: 'wallet', children: [
+  { key: 'cl-finance', label: '智能多格式批量下单系统', icon: 'wallet', children: [
     { key: 'universal-import-v2', label: '万能导入V2', icon: 'upload' },
   ]},
 ];
@@ -225,7 +225,7 @@ export default function FeeManager() {
   // 动态更新页签标题
   useEffect(() => {
     const title = MENU_ITEM_MAP[activeMenu]?.title || '首页';
-    document.title = `鲸天管理系统 - ${title}`;
+    document.title = `智能多格式批量下单系统 - ${title}`;
   }, [activeMenu]);
 
   const fetchData = useCallback(async () => {
@@ -347,7 +347,7 @@ export default function FeeManager() {
             <path d="M48 28 Q56 22 58 30 Q58 36 52 32" fill="rgba(255,255,255,0.85)"/>
             <path d="M12 44 Q6 50 12 54 Q20 58 30 54 Q40 58 48 54 Q56 50 50 44" fill="rgba(255,255,255,0.9)"/>
           </svg>
-          <span style={{ color: '#fff', fontSize: 14, fontWeight: 600, letterSpacing: 0.5, userSelect: 'none', whiteSpace: 'nowrap' }}>中通冷链</span>
+          <span style={{ color: '#fff', fontSize: 14, fontWeight: 600, letterSpacing: 0.5, userSelect: 'none', whiteSpace: 'nowrap' }}>智能多格式批量下单系统</span>
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: 2 }}>
           <button title="消息通知" style={{ background: 'none', border: 'none', color: '#fff', cursor: 'pointer', width: 32, height: 32, display: 'flex', alignItems: 'center', justifyContent: 'center', borderRadius: 4, position: 'relative', transition: 'background 0.15s' }}
@@ -452,15 +452,15 @@ export default function FeeManager() {
             ) : activeMenu === 'ai-exam-20260507' ? (
               <><a href="#" style={{ color: '#8c8c8c', textDecoration: 'none' }}>首页</a><span style={{ color: '#d9d9d9', fontSize: 12 }}>/</span><a href="#" style={{ color: '#8c8c8c', textDecoration: 'none' }}>AI考试</a><span style={{ color: '#d9d9d9', fontSize: 12 }}>/</span><span style={{ color: '#262626' }}>20260507</span></>
             ) : activeMenu === 'universal-import' ? (
-              <><a href="#" style={{ color: '#8c8c8c', textDecoration: 'none' }}>冷链财务管理</a><span style={{ color: '#d9d9d9', fontSize: 12 }}>/</span><span style={{ color: '#262626' }}>万能导入</span></>
+              <><a href="#" style={{ color: '#8c8c8c', textDecoration: 'none' }}>智能多格式批量下单系统</a><span style={{ color: '#d9d9d9', fontSize: 12 }}>/</span><span style={{ color: '#262626' }}>万能导入</span></>
             ) : activeMenu === 'fee-type-cc' ? (
-              <><a href="#" style={{ color: '#8c8c8c', textDecoration: 'none' }}>冷链财务管理</a><span style={{ color: '#d9d9d9', fontSize: 12 }}>/</span><a href="#" style={{ color: '#8c8c8c', textDecoration: 'none' }}>基础数据</a><span style={{ color: '#d9d9d9', fontSize: 12 }}>/</span><span style={{ color: '#262626' }}>费用类型维护</span></>
+              <><a href="#" style={{ color: '#8c8c8c', textDecoration: 'none' }}>智能多格式批量下单系统</a><span style={{ color: '#d9d9d9', fontSize: 12 }}>/</span><a href="#" style={{ color: '#8c8c8c', textDecoration: 'none' }}>基础数据</a><span style={{ color: '#d9d9d9', fontSize: 12 }}>/</span><span style={{ color: '#262626' }}>费用类型维护</span></>
             ) : activeMenu === 'fee-rules' ? (
-              <><a href="#" style={{ color: '#8c8c8c', textDecoration: 'none' }}>冷链财务管理</a><span style={{ color: '#d9d9d9', fontSize: 12 }}>/</span><a href="#" style={{ color: '#8c8c8c', textDecoration: 'none' }}>基础数据</a><span style={{ color: '#d9d9d9', fontSize: 12 }}>/</span><span style={{ color: '#262626' }}>费用规则维护</span></>
+              <><a href="#" style={{ color: '#8c8c8c', textDecoration: 'none' }}>智能多格式批量下单系统</a><span style={{ color: '#d9d9d9', fontSize: 12 }}>/</span><a href="#" style={{ color: '#8c8c8c', textDecoration: 'none' }}>基础数据</a><span style={{ color: '#d9d9d9', fontSize: 12 }}>/</span><span style={{ color: '#262626' }}>费用规则维护</span></>
             ) : activeMenu === 'waybill' ? (
-              <><a href="#" style={{ color: '#8c8c8c', textDecoration: 'none' }}>冷链财务管理</a><span style={{ color: '#d9d9d9', fontSize: 12 }}>/</span><span style={{ color: '#262626' }}>已导入运单</span></>
+              <><a href="#" style={{ color: '#8c8c8c', textDecoration: 'none' }}>智能多格式批量下单系统</a><span style={{ color: '#d9d9d9', fontSize: 12 }}>/</span><span style={{ color: '#262626' }}>已导入运单</span></>
             ) : activeMenu === 'template-learning' ? (
-              <><a href="#" style={{ color: '#8c8c8c', textDecoration: 'none' }}>冷链财务管理</a><span style={{ color: '#d9d9d9', fontSize: 12 }}>/</span><span style={{ color: '#262626' }}>模板学习记录</span></>
+              <><a href="#" style={{ color: '#8c8c8c', textDecoration: 'none' }}>智能多格式批量下单系统</a><span style={{ color: '#d9d9d9', fontSize: 12 }}>/</span><span style={{ color: '#262626' }}>模板学习记录</span></>
             ) : <span style={{ color: '#262626' }}>{MENU_ITEM_MAP[activeMenu]?.title || activeMenu}</span>}
           </div>
 
@@ -519,7 +519,7 @@ export default function FeeManager() {
                 onMessage={(t, y) => { setMsg({ text: t, type: y }); setTimeout(() => setMsg(null), 3000); }}
               />
             ) : activeMenu === 'template-learning' ? (
-              <MenuPlaceholder title="模板学习记录" subtitle="冷链财务管理" />
+              <MenuPlaceholder title="模板学习记录" subtitle="智能多格式批量下单系统" />
             ) : (
               <MenuPlaceholder title={MENU_ITEM_MAP[activeMenu]?.title || activeMenu} subtitle={MENU_ITEM_MAP[activeMenu]?.subtitle} />
             )}
@@ -533,7 +533,7 @@ export default function FeeManager() {
           onClick={e => { if (e.target === e.currentTarget) setLoginModalVisible(false); }}>
           <div style={{ background: '#fff', borderRadius: 8, width: 400, boxShadow: '0 8px 24px rgba(0,0,0,0.2)', overflow: 'hidden' }}>
             <div style={{ padding: '20px 24px 16px', borderBottom: '1px solid #f0f0f0', background: '#00BEBE', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-              <div><div style={{ fontSize: 16, fontWeight: 600, color: '#fff' }}>用户登录</div><div style={{ fontSize: 12, color: 'rgba(255,255,255,0.7)', marginTop: 2 }}>中通冷链 - 费用管理系统</div></div>
+              <div><div style={{ fontSize: 16, fontWeight: 600, color: '#fff' }}>用户登录</div><div style={{ fontSize: 12, color: 'rgba(255,255,255,0.7)', marginTop: 2 }}>智能多格式批量下单系统</div></div>
               <button onClick={() => setLoginModalVisible(false)} style={{ background: 'none', border: 'none', color: 'rgba(255,255,255,0.8)', fontSize: 18, cursor: 'pointer', padding: 4, lineHeight: 1 }}
                 onMouseEnter={e => (e.currentTarget.style.color = '#fff')} onMouseLeave={e => (e.currentTarget.style.color = 'rgba(255,255,255,0.8)')}><Icon name="close" size={16} /></button>
             </div>
@@ -578,7 +578,7 @@ export default function FeeManager() {
           onClick={e => { if (e.target === e.currentTarget) setRegisterModalVisible(false); }}>
           <div style={{ background: '#fff', borderRadius: 8, width: 420, boxShadow: '0 8px 24px rgba(0,0,0,0.2)', overflow: 'hidden' }}>
             <div style={{ padding: '20px 24px 16px', borderBottom: '1px solid #f0f0f0', background: '#00BEBE', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-              <div><div style={{ fontSize: 16, fontWeight: 600, color: '#fff' }}>用户注册</div><div style={{ fontSize: 12, color: 'rgba(255,255,255,0.7)', marginTop: 2 }}>创建您的费用管理系统账号</div></div>
+              <div><div style={{ fontSize: 16, fontWeight: 600, color: '#fff' }}>用户注册</div><div style={{ fontSize: 12, color: 'rgba(255,255,255,0.7)', marginTop: 2 }}>创建您的智能多格式批量下单系统账号</div></div>
               <button onClick={() => setRegisterModalVisible(false)} style={{ background: 'none', border: 'none', color: 'rgba(255,255,255,0.8)', fontSize: 18, cursor: 'pointer', padding: 4, lineHeight: 1 }}
                 onMouseEnter={e => (e.currentTarget.style.color = '#fff')} onMouseLeave={e => (e.currentTarget.style.color = 'rgba(255,255,255,0.8)')}><Icon name="close" size={16} /></button>
             </div>
