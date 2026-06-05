@@ -13,6 +13,7 @@ interface OrderTableProps {
   onSelectionChange?: (indices: number[]) => void;
   useVirtualScroll?: boolean; // 是否使用虚拟滚动
   virtualHeight?: number; // 虚拟列表高度
+  duplicateNos?: string[]; // 重复运单号列表（高亮用）
 }
 
 export default function OrderTable({
@@ -24,7 +25,9 @@ export default function OrderTable({
   onSelectionChange,
   useVirtualScroll = false,
   virtualHeight = 500,
+  duplicateNos = [],
 }: OrderTableProps) {
+  const duplicateSet = useMemo(() => new Set(duplicateNos), [duplicateNos]);
   const [sortField, setSortField] = useState<keyof ParsedOrder | null>(null);
   const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('asc');
 
@@ -80,12 +83,14 @@ export default function OrderTable({
 
   const renderRow = useCallback((order: ParsedOrder, index: number) => {
     const isSelected = selectedIndices.includes(index);
+    const isDuplicate = order.orderNo ? duplicateSet.has(order.orderNo) : false;
     
     return (
       <tr
+        key={index}
         className={`border-b border-gray-200 hover:bg-gray-50 ${
           isSelected ? 'bg-[#0fc6c2]/5' : ''
-        } ${!order.isValid ? 'bg-red-50' : ''}`}
+        } ${!order.isValid ? 'bg-red-50' : ''} ${isDuplicate && order.isValid ? 'bg-yellow-50' : ''}`}
       >
         {selectable && (
           <td className="px-4 py-3 w-10">
@@ -98,7 +103,10 @@ export default function OrderTable({
           </td>
         )}
         <td className="px-4 py-3 text-sm text-gray-500 w-16">{index + 1}</td>
-        <td className="px-4 py-3 text-sm text-gray-900 w-32">{order.orderNo || '-'}</td>
+        <td className={`px-4 py-3 text-sm w-32 font-medium ${isDuplicate ? 'text-yellow-700' : 'text-gray-900'}`}>
+          {order.orderNo || '-'}
+          {isDuplicate && <span className="ml-1 text-xs bg-yellow-200 text-yellow-800 px-1 rounded">重复</span>}
+        </td>
         <td className="px-4 py-3 text-sm text-gray-900 w-24">{order.receiverName || '-'}</td>
         <td className="px-4 py-3 text-sm text-gray-500 w-28">{order.receiverPhone || '-'}</td>
         <td className="px-4 py-3 text-sm text-gray-500 w-48 truncate" title={order.receiverAddress}>
@@ -130,12 +138,13 @@ export default function OrderTable({
         </td>
       </tr>
     );
-  }, [selectedIndices, selectable, onEdit, onDelete, toggleSelect]);
+  }, [selectedIndices, selectable, onEdit, onDelete, toggleSelect, duplicateSet]);
 
   // 虚拟列表渲染单行
   const renderVirtualRow = useCallback((order: ParsedOrder, index: number) => {
+    const isDuplicate = order.orderNo ? duplicateSet.has(order.orderNo) : false;
     return (
-      <div className="flex items-center border-b border-gray-200 hover:bg-gray-50 h-[48px]">
+      <div className={`flex items-center border-b border-gray-200 hover:bg-gray-50 h-[48px] ${!order.isValid ? 'bg-red-50' : ''} ${isDuplicate && order.isValid ? 'bg-yellow-50' : ''}`}>
         {selectable && (
           <div className="px-4 w-10">
             <input
@@ -147,7 +156,10 @@ export default function OrderTable({
           </div>
         )}
         <div className="px-4 text-sm text-gray-500 w-16">{index + 1}</div>
-        <div className="px-4 text-sm text-gray-900 w-32">{order.orderNo || '-'}</div>
+        <div className={`px-4 text-sm w-32 flex items-center gap-1 ${isDuplicate ? 'text-yellow-700 font-medium' : 'text-gray-900'}`}>
+          {order.orderNo || '-'}
+          {isDuplicate && <span className="text-xs bg-yellow-200 text-yellow-800 px-1 rounded">重复</span>}
+        </div>
         <div className="px-4 text-sm text-gray-900 w-24">{order.receiverName || '-'}</div>
         <div className="px-4 text-sm text-gray-500 w-28">{order.receiverPhone || '-'}</div>
         <div className="px-4 text-sm text-gray-500 w-48 truncate" title={order.receiverAddress}>
@@ -160,26 +172,16 @@ export default function OrderTable({
         <div className="px-4 text-sm w-24">
           <div className="flex gap-2">
             {onEdit && (
-              <button
-                onClick={() => onEdit(index, order)}
-                className="text-[#0fc6c2] hover:text-[#0aa8a4]"
-              >
-                编辑
-              </button>
+              <button onClick={() => onEdit(index, order)} className="text-[#0fc6c2] hover:text-[#0aa8a4]">编辑</button>
             )}
             {onDelete && (
-              <button
-                onClick={() => onDelete(index)}
-                className="text-red-500 hover:text-red-700"
-              >
-                删除
-              </button>
+              <button onClick={() => onDelete(index)} className="text-red-500 hover:text-red-700">删除</button>
             )}
           </div>
         </div>
       </div>
     );
-  }, [selectedIndices, selectable, onEdit, onDelete, toggleSelect]);
+  }, [selectedIndices, selectable, onEdit, onDelete, toggleSelect, duplicateSet]);
 
   if (orders.length === 0) {
     return (
@@ -206,16 +208,21 @@ export default function OrderTable({
               </span>
             )}
           </span>
-          <div className="flex gap-2">
-            {orders.filter(o => !o.isValid).length > 0 && (
-              <span className="text-sm text-red-500">
-                {orders.filter(o => !o.isValid).length} 条数据有误
-              </span>
-            )}
-            <span className="text-xs text-gray-400 bg-gray-100 px-2 py-1 rounded">
-              虚拟滚动模式
+        <div className="flex gap-2">
+          {orders.filter(o => !o.isValid).length > 0 && (
+            <span className="text-sm text-red-500">
+              {orders.filter(o => !o.isValid).length} 条数据有误
             </span>
-          </div>
+          )}
+          {duplicateNos.length > 0 && (
+            <span className="text-sm text-yellow-600">
+              ⚠️ {duplicateNos.length} 个重复单号
+            </span>
+          )}
+          <span className="text-xs text-gray-400 bg-gray-100 px-2 py-1 rounded">
+            虚拟滚动模式
+          </span>
+        </div>
         </div>
 
         {/* 表头 */}
@@ -281,10 +288,13 @@ export default function OrderTable({
               {orders.filter(o => !o.isValid).length} 条数据有误
             </span>
           )}
+          {duplicateNos.length > 0 && (
+            <span className="text-sm text-yellow-600">
+              ⚠️ {duplicateNos.length} 个重复单号
+            </span>
+          )}
         </div>
       </div>
-
-      {/* 表格 */}
       <div className="overflow-x-auto">
         <table className="w-full">
           <thead className="bg-gray-50">

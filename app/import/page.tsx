@@ -367,7 +367,65 @@ export default function ImportPage() {
     }
   };
 
-  // 步骤3：用确认后的规则解析所有文件（优先 Web Worker）
+  // 步骤3：用确认后的规则解析所有文件（分片上传 > Web Worker > 主线程）
+  const CHUNK_SIZE = 2 * 1024 * 1024; // 2MB per chunk
+  const CHUNK_THRESHOLD = 10 * 1024 * 1024; // >10MB 使用分片上传
+
+  // 分片上传单个文件
+  const parseFileWithChunks = async (file: File, rule: ParseRule): Promise<{ orders: ParsedOrder[]; totalRows: number }> => {
+    const uploadId = crypto.randomUUID();
+    const totalChunks = Math.ceil(file.size / CHUNK_SIZE);
+
+    // Step 1: 初始化会话
+    const initFd = new FormData();
+    initFd.append('action', 'init');
+    initFd.append('uploadId', uploadId);
+    initFd.append('fileName', file.name);
+    initFd.append('fileType', file.name.split('.').pop() || 'excel');
+    initFd.append('totalChunks', String(totalChunks));
+    initFd.append('rule', JSON.stringify(rule));
+
+    const initRes = await fetch('/api/upload-chunk', { method: 'POST', body: initFd });
+    const initData = await initRes.json();
+    if (!initData.success) throw new Error(initData.error || '初始化分片上传失败');
+
+    // Step 2: 逐片上传
+    showToast('info', `${file.name} 开始分片上传 (${totalChunks} 片, ${(file.size / 1024 / 1024).toFixed(1)}MB)...`);
+
+    for (let i = 0; i < totalChunks; i++) {
+      const start = i * CHUNK_SIZE;
+      const end = Math.min(start + CHUNK_SIZE, file.size);
+      const chunkBlob = file.slice(start, end);
+      const chunkFile = new File([chunkBlob], `chunk_${i}`);
+
+      const fd = new FormData();
+      fd.append('action', 'upload');
+      fd.append('uploadId', uploadId);
+      fd.append('chunkIndex', String(i));
+      fd.append('data', chunkFile);
+
+      const res = await fetch('/api/upload-chunk', { method: 'POST', body: fd });
+      const data = await res.json();
+
+      if (!data.success) throw new Error(`第 ${i + 1}/${totalChunks} 片上传失败: ${data.error || ''}`);
+
+      setProgress(((i + 1) / totalChunks) * 100);
+    }
+
+    // Step 3: 触发合并和解析
+    showToast('info', `所有分片已接收，正在合并解析...`);
+    const finishFd = new FormData();
+    finishFd.append('action', 'finish');
+    finishFd.append('uploadId', uploadId);
+
+    const finishRes = await fetch('/api/upload-chunk', { method: 'POST', body: finishFd });
+    const finishData = await finishRes.json();
+
+    if (!finishData.success) throw new Error(finishData.error || '合并解析失败');
+
+    return { orders: finishData.orders, totalRows: finishData.totalRows };
+  };
+
   const handleParseAll = async () => {
     const filesWithRules = analyzedFiles.filter(f => f.rule);
     if (filesWithRules.length === 0) {
@@ -390,9 +448,15 @@ export default function ImportPage() {
         setProgress(((i + 0.5) / total) * 100);
 
         try {
-          // 优先使用 Web Worker（大文件不卡 UI）
-          if (workerSupported && item.file.size > 500 * 1024) {
-            // 大于 500KB 用 Worker
+          // 策略选择：大文件分片 > 大文件Worker > 普通主线程
+          if (item.file.size > CHUNK_THRESHOLD) {
+            // >10MB：使用分片上传
+            showToast('info', `${item.file.name} 使用分片上传 (${Math.ceil(item.file.size / CHUNK_SIZE)} 片)...`);
+            const result = await parseFileWithChunks(item.file, item.rule!);
+            allOrders.push(...result.orders);
+            showToast('success', `${item.file.name} 分片完成，${result.totalRows} 条记录`);
+          } else if (workerSupported && item.file.size > 500 * 1024) {
+            // >500KB：使用 Web Worker
             showToast('info', `${item.file.name} 使用 Worker 后台解析...`);
             const result = await parseWithWorker(item.file, item.rule!, (p) => {
               const fileProgress = ((i + p.percent / 100) / total) * 100;
@@ -401,7 +465,7 @@ export default function ImportPage() {
             allOrders.push(...result.orders);
             showToast('success', `${item.file.name} Worker解析完成，${result.totalRows} 条记录`);
           } else {
-            // 小文件直接用主线程
+            // 小文件：直接主线程请求
             const formData = new FormData();
             formData.append('file', item.file);
             formData.append('rule', JSON.stringify(item.rule));
@@ -438,7 +502,7 @@ export default function ImportPage() {
             setDupStats({ batchDupCount: dupData.stats.batchDupCount, dbDupCount: dupData.stats.dbDupCount });
             showToast('warning', `检测到 ${dupData.duplicates.length} 个重复运单号（批次内: ${dupData.stats.batchDupCount}，数据库已存在: ${dupData.stats.dbDupCount}）`);
           } else {
-            showToast('success', '✅ 无重复运单号');
+            showToast('success', '无重复运单号');
           }
         } catch {
           // 重复检测失败不影响主流程
@@ -1138,12 +1202,12 @@ function HistoryView({ onBack }: { onBack: () => void }) {
   const [selectedBatch, setSelectedBatch] = useState<number | null>(null);
   const [batchOrders, setBatchOrders] = useState<any[]>([]);
 
-  useState(() => {
+  useEffect(() => {
     fetch('/api/import-orders?action=batches')
       .then(res => res.json())
       .then(data => { if (data.success) setBatches(data.batches); })
       .finally(() => setLoading(false));
-  });
+  }, []);
 
   const loadBatchOrders = async (batchId: number) => {
     setSelectedBatch(batchId);
