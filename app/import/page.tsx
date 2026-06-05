@@ -99,14 +99,15 @@ export default function ImportPage() {
   const [apiUrl, setApiUrl] = useState('https://www.vbcode.io/v1/chat/completions');
   const [modelName, setModelName] = useState('gpt-5.4');
 
-  // 从localStorage加载配置
+  // 从localStorage加载配置（如果有的话，否则使用默认值）
   useEffect(() => {
     const savedKey = localStorage.getItem('ai_api_key');
     const savedUrl = localStorage.getItem('ai_api_url');
     const savedModel = localStorage.getItem('ai_model_name');
-    if (savedKey) setApiKey(savedKey);
-    if (savedUrl) setApiUrl(savedUrl);
-    if (savedModel) setModelName(savedModel);
+    // 只有当localStorage有值且不为空时才覆盖默认值
+    if (savedKey && savedKey !== 'undefined' && savedKey !== 'null') setApiKey(savedKey);
+    if (savedUrl && savedUrl !== 'undefined' && savedUrl !== 'null') setApiUrl(savedUrl);
+    if (savedModel && savedModel !== 'undefined' && savedModel !== 'null') setModelName(savedModel);
   }, []);
 
   // 保存配置到localStorage

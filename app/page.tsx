@@ -323,7 +323,7 @@ export default function FeeManager() {
   const currentNickname = currentUser?.nickname || '匿名用户';
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', height: '100vh', overflow: 'hidden', fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "PingFang SC", sans-serif', background: 'rgb(243,249,254)' }}>
+    <div style={{ display: 'flex', flexDirection: 'column', height: '100vh', overflow: 'auto', fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "PingFang SC", sans-serif', background: 'rgb(243,249,254)' }}>
       {/* 顶部导航 — 鲸天系统渐变顶栏 */}
       <header style={{ background: 'linear-gradient(90deg, rgb(1,190,190) 0%, rgb(0,77,114) 100%)', height: 56, display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '0 16px', boxShadow: '0 1px 4px rgba(0,21,41,.25)', flexShrink: 0, position: 'relative', zIndex: 200 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
@@ -402,7 +402,7 @@ export default function FeeManager() {
       </header>
 
       {/* 主体 */}
-      <div style={{ display: 'flex', flex: 1, overflowX: 'auto', overflowY: 'hidden' }}>
+      <div style={{ display: 'flex', flex: 1, overflowX: 'auto', overflowY: 'auto' }}>
         {/* 侧边栏 */}
         <aside style={{ background: '#00263c', borderRight: '1px solid #004466', width: collapsed ? 60 : 220, overflowY: 'auto', overflowX: 'hidden', flexShrink: 0, transition: 'width 0.2s ease', display: 'flex', flexDirection: 'column' }}>
           {collapsed ? (
