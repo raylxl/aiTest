@@ -641,28 +641,6 @@ ${sample}
           <div className="space-y-6">
             <FileUploader onFilesSelected={handleFilesSelected} />
 
-            {analyzedFiles.length > 0 && (
-              <div className="bg-white rounded-lg border border-gray-200 p-4">
-                <h3 className="text-sm font-medium text-gray-700 mb-3">已选择的文件 ({analyzedFiles.length})</h3>
-                <ul className="space-y-2">
-                  {analyzedFiles.map((item, index) => (
-                    <li key={index} className="flex items-center justify-between py-2 px-3 bg-gray-50 rounded-lg">
-                      <div className="flex items-center gap-3">
-                        <svg className="w-5 h-5 text-[#0fc6c2]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-                        </svg>
-                        <div>
-                          <span className="text-sm text-gray-700">{item.file.name}</span>
-                          <span className="text-xs text-gray-400 ml-2">({(item.file.size / 1024).toFixed(1)} KB)</span>
-                        </div>
-                      </div>
-                      <button onClick={() => handleRemoveFile(index)} className="text-xs text-red-500 hover:text-red-700">移除</button>
-                    </li>
-                  ))}
-                </ul>
-              </div>
-            )}
-
             {/* 核心理念说明 */}
             <div className="bg-blue-50 rounded-lg p-4">
               <h4 className="font-medium text-blue-900 mb-2">💡 核心设计理念</h4>
