@@ -152,7 +152,7 @@ ${fileSample}
 请分析文件结构，生成对应的解析规则JSON。`;
 
   const body = {
-    model: 'gpt-5.4',
+    model: 'deepseek-chat',
     messages: [
       { role: 'system', content: SYSTEM_PROMPT },
       { role: 'user', content: userMessage }

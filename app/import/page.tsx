@@ -104,7 +104,7 @@ export default function ImportPage() {
   const [editingRuleJson, setEditingRuleJson] = useState('');
   const [apiKey, setApiKey] = useState('');
   const [apiUrl, setApiUrl] = useState('https://www.vbcode.io/v1/chat/completions');
-  const [modelName, setModelName] = useState('gpt-5.4');
+  const [modelName, setModelName] = useState('deepseek-chat');
 
   // 重复检测结果
   const [duplicateNos, setDuplicateNos] = useState<string[]>([]);
@@ -148,7 +148,7 @@ export default function ImportPage() {
   const resetConfig = useCallback(() => {
     setApiKey('');
     setApiUrl('https://www.vbcode.io/v1/chat/completions');
-    setModelName('gpt-5.4');
+    setModelName('deepseek-chat');
     localStorage.removeItem('ai_api_key');
     localStorage.removeItem('ai_api_url');
     localStorage.removeItem('ai_model_name');
