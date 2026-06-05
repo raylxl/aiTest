@@ -287,6 +287,11 @@ export default function ImportPage() {
     setAnalyzedFiles(prev => [...prev, ...analyzed]);
   }, []);
 
+  // 步骤1：移除文件（与FileUploader同步）
+  const handleFileRemoved = useCallback((fileName: string) => {
+    setAnalyzedFiles(prev => prev.filter(f => f.file.name !== fileName));
+  }, []);
+
   // 步骤2：AI分析单个文件
   const handleAnalyzeFile = async (index: number) => {
     const item = analyzedFiles[index];
@@ -873,7 +878,7 @@ export default function ImportPage() {
         {/* 步骤1：上传文件 */}
         {step === 'upload' && (
           <div className="space-y-6">
-            <FileUploader onFilesSelected={handleFilesSelected} />
+            <FileUploader onFilesSelected={handleFilesSelected} onFileRemoved={handleFileRemoved} />
             <div className="bg-blue-50 rounded-lg p-4">
               <h4 className="font-medium text-blue-900 mb-2">💡 核心设计理念</h4>
               <p className="text-sm text-blue-800">

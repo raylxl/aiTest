@@ -12,6 +12,7 @@ interface FileInfo {
 
 interface FileUploaderProps {
   onFilesSelected: (files: File[]) => void;
+  onFileRemoved?: (fileName: string) => void;
   accept?: string;
   multiple?: boolean;
   maxSize?: number; // MB
@@ -19,6 +20,7 @@ interface FileUploaderProps {
 
 export default function FileUploader({
   onFilesSelected,
+  onFileRemoved,
   accept = '.xlsx,.xls,.pdf,.docx,.doc,.csv',
   multiple = true,
   maxSize = 50,
@@ -102,7 +104,11 @@ export default function FileUploader({
   };
 
   const removeFile = (id: string) => {
+    const removed = files.find(f => f.id === id);
     setFiles(prev => prev.filter(f => f.id !== id));
+    if (removed && onFileRemoved) {
+      onFileRemoved(removed.file.name);
+    }
   };
 
   const formatFileSize = (bytes: number) => {
