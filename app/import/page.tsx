@@ -205,22 +205,28 @@ ${sample}
 请分析文件结构，生成对应的解析规则JSON。`;
 
     console.log('调用AI API:', fullApiUrl, '模型:', modelName);
+    console.log('系统提示词长度:', AI_SYSTEM_PROMPT.length, '用户消息长度:', userMessage.length);
+    
+    // 构建请求体 - 使用标准OpenAI格式
+    const requestBody = {
+      model: modelName,
+      messages: [
+        { role: 'system', content: AI_SYSTEM_PROMPT },
+        { role: 'user', content: userMessage }
+      ],
+      temperature: 0.3,
+      max_tokens: 4096,
+      stream: false,
+    };
+    console.log('请求体:', JSON.stringify(requestBody).substring(0, 500));
+    
     const response = await fetch(fullApiUrl, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
         'Authorization': `Bearer ${apiKey}`,
       },
-      body: JSON.stringify({
-        model: modelName,
-        messages: [
-          { role: 'system', content: AI_SYSTEM_PROMPT },
-          { role: 'user', content: userMessage }
-        ],
-        temperature: 0.1,
-        max_tokens: 4000,
-        stream: false,  // 禁用流式响应，获取完整JSON
-      }),
+      body: JSON.stringify(requestBody),
     });
 
     if (!response.ok) {
@@ -230,33 +236,50 @@ ${sample}
 
     // 获取响应文本
     const responseText = await response.text();
-    console.log('API响应前500字符:', responseText.substring(0, 500));
+    console.log('API响应前1000字符:', responseText.substring(0, 1000));
     let content = '';
 
     // 先尝试直接解析为JSON（如果API返回标准JSON格式）
     try {
       const data = JSON.parse(responseText);
+      console.log('解析后的JSON:', JSON.stringify(data).substring(0, 500));
+      
       // 检查是否有错误
       if (data.error) {
         throw new Error(`API错误: ${data.error.message || JSON.stringify(data.error)}`);
       }
-      content = data.choices?.[0]?.message?.content || '';
-    } catch (jsonError) {
+      
+      // 检查choices是否为空
+      if (!data.choices || data.choices.length === 0) {
+        console.error('API返回空choices，完整响应:', data);
+        throw new Error(`API返回空结果。模型: ${data.model || 'unknown'}, 使用tokens: ${data.usage?.total_tokens || 0}。请检查模型名称是否正确。`);
+      }
+      
+      content = data.choices[0]?.message?.content || '';
+    } catch (jsonError: any) {
+      // 如果是API错误，直接抛出
+      if (jsonError.message?.startsWith('API错误:') || jsonError.message?.startsWith('API返回空结果')) {
+        throw jsonError;
+      }
+      
       // 如果不是JSON，尝试SSE格式
       if (responseText.includes('data: ')) {
         const lines = responseText.split('\n');
         let fullContent = '';
-        let hasError = false;
+        let lastChunk: any = null;
         
         for (const line of lines) {
           const trimmedLine = line.trim();
           if (trimmedLine.startsWith('data: ') && !trimmedLine.includes('[DONE]')) {
             try {
               const chunk = JSON.parse(trimmedLine.slice(6));
+              lastChunk = chunk;
+              
               // 检查是否有错误
               if (chunk.error) {
                 throw new Error(`API错误: ${chunk.error.message || JSON.stringify(chunk.error)}`);
               }
+              
               // 支持delta格式和message格式
               const delta = chunk.choices?.[0]?.delta?.content || chunk.choices?.[0]?.message?.content;
               if (delta) {
@@ -270,6 +293,15 @@ ${sample}
             }
           }
         }
+        
+        // 如果没有内容，检查最后一个chunk
+        if (!fullContent && lastChunk) {
+          console.error('SSE响应无内容，最后一个chunk:', lastChunk);
+          if (!lastChunk.choices || lastChunk.choices.length === 0) {
+            throw new Error(`API返回空结果。模型: ${lastChunk.model || 'unknown'}, 使用tokens: ${lastChunk.usage?.total_tokens || 0}。请检查模型名称是否正确。`);
+          }
+        }
+        
         content = fullContent;
       } else {
         throw new Error('无法解析API响应: ' + responseText.substring(0, 200));
@@ -277,7 +309,7 @@ ${sample}
     }
 
     if (!content) {
-      throw new Error('AI返回空内容');
+      throw new Error('AI返回空内容，请检查模型名称是否正确（当前: ' + modelName + '）');
     }
 
     // 提取JSON
@@ -652,13 +684,37 @@ ${sample}
               </div>
               <div>
                 <label className="block text-xs text-gray-500 mb-1">模型名称</label>
-                <input
-                  type="text"
+                <select
                   value={modelName}
-                  onChange={e => setModelName(e.target.value)}
-                  placeholder="gpt-5.4"
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#0fc6c2]"
-                />
+                  onChange={e => {
+                    if (e.target.value === 'custom') {
+                      setModelName('');
+                    } else {
+                      setModelName(e.target.value);
+                    }
+                  }}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#0fc6c2] mb-2"
+                >
+                  <option value="gpt-5.4">gpt-5.4 (当前)</option>
+                  <option value="gpt-4o">gpt-4o</option>
+                  <option value="gpt-4o-mini">gpt-4o-mini</option>
+                  <option value="gpt-4-turbo">gpt-4-turbo</option>
+                  <option value="gpt-4">gpt-4</option>
+                  <option value="gpt-3.5-turbo">gpt-3.5-turbo</option>
+                  <option value="claude-3-5-sonnet-20241022">claude-3.5-sonnet</option>
+                  <option value="claude-3-haiku-20240307">claude-3-haiku</option>
+                  <option value="deepseek-chat">deepseek-chat</option>
+                  <option value="custom">自定义...</option>
+                </select>
+                {(modelName === '' || !['gpt-5.4', 'gpt-4o', 'gpt-4o-mini', 'gpt-4-turbo', 'gpt-4', 'gpt-3.5-turbo', 'claude-3-5-sonnet-20241022', 'claude-3-haiku-20240307', 'deepseek-chat'].includes(modelName)) && (
+                  <input
+                    type="text"
+                    value={modelName}
+                    onChange={e => setModelName(e.target.value)}
+                    placeholder="输入自定义模型名称"
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#0fc6c2]"
+                  />
+                )}
               </div>
               <div>
                 <label className="block text-xs text-gray-500 mb-1">API Key</label>
