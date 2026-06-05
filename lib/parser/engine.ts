@@ -1,5 +1,5 @@
 import type { ParseRule, ParsedOrder, ParseResult, RuleMatchResult, FileType, ColumnMapping, TableParserConfig } from '@/types/rule';
-import { parseExcelFile, parseTable, parseMatrix, parseCards } from './excel-parser';
+import { parseExcelFile, parseTable, parseMatrix, parseCards, parseDoubleMatrix } from './excel-parser';
 import { parsePDFFile, parsePDFTable, parsePDFText, parsePDFMultiPage } from './pdf-parser';
 import { parseWordFile, parseWordText } from './word-parser';
 
@@ -136,6 +136,12 @@ export class ParseEngine {
         return parseMatrix(sheet.data, rule.parser.matrix!);
       case 'card':
         return parseCards(sheet.data, rule.parser.card!);
+      case 'double-matrix':
+        // 双重转置：周配送计划格式
+        if (rule.parser.matrix) {
+          return parseMatrix(sheet.data, rule.parser.matrix!);
+        }
+        throw new Error('double-matrix模式需要配置matrix规则');
       case 'multi-sheet':
         // multi-sheet但没有配置，尝试用table模式解析第一个sheet
         if (rule.parser.table) {

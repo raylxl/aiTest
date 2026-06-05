@@ -1,5 +1,5 @@
 import * as XLSX from 'xlsx';
-import type { ParseRule, ParsedOrder, MatrixParserConfig } from '@/types/rule';
+import type { ParseRule, ParsedOrder, MatrixParserConfig, DoubleMatrixParserConfig } from '@/types/rule';
 
 export interface ExcelSheetData {
   name: string;
@@ -153,8 +153,84 @@ export function parseMatrix(
 }
 
 /**
- * 卡片模式解析
+ * 双重转置解析（周配送计划）
+ * 结构：行=门店，列=日期，单元格="物品名x数量\n物品名x数量"
  */
+export function parseDoubleMatrix(
+  sheetData: any[][],
+  config: DoubleMatrixParserConfig
+): ParsedOrder[] {
+  const orders: ParsedOrder[] = [];
+  const headerRow = config.headerRow;
+
+  // 提取日期列头
+  const dateHeaders: string[] = [];
+  const headerRowData = sheetData[headerRow] || [];
+  for (let col = config.dataStartColumn; col < headerRowData.length; col++) {
+    dateHeaders.push(String(headerRowData[col]) || ("日期" + col));
+  }
+
+  // 遍历每个门店行
+  for (let rowIdx = headerRow + 1; rowIdx < sheetData.length; rowIdx++) {
+    const row = sheetData[rowIdx];
+    if (!row || row.length === 0) continue;
+
+    // 提取门店名称
+    const storeName = String(row[config.storeColumnIndex] || '').trim();
+    if (!storeName) continue;
+
+    // 遍历每个日期列
+    for (let colIdx = 0; colIdx < dateHeaders.length; colIdx++) {
+      const cellValue = String(row[config.dataStartColumn + colIdx] || '').trim();
+      if (!cellValue || cellValue === '0' || cellValue === '-') continue;
+
+      // 按换行符拆分复合单元格
+      const lines = cellValue.split(/\r?\n/).filter(line => line.trim());
+      const dateHeader = dateHeaders[colIdx];
+
+      for (const line of lines) {
+        const trimmedLine = line.trim();
+        if (!trimmedLine) continue;
+
+        // 使用配置的正则提取物品名和数量
+        let itemName = '';
+        let qty: number = 0;
+        
+        try {
+          const itemPattern = new RegExp(config.itemPattern, 'i');
+          const m = trimmedLine.match(itemPattern);
+          if (m) {
+            itemName = m[1]?.trim() || trimmedLine;
+            qty = parseInt(m[2] || '0', 10);
+          }
+        } catch {
+          // 正则无效时使用简单拆分
+          const parts = trimmedLine.split(/[xX×]/);
+          if (parts.length >= 2) {
+            itemName = parts[0].trim();
+            qty = parseInt(parts[parts.length - 1].trim(), 10);
+          }
+        }
+
+        // try-catch 之后：如果提取成功，则推入订单
+        if (itemName && qty > 0) {
+          orders.push({
+            storeName,
+            receiverName: storeName, // 门店作为收货人
+            itemName,
+            quantity: qty,
+            orderNo: `${storeName}-${dateHeader}`, // 外部编码 = 门店+日期
+            sourceRow: rowIdx,
+            isValid: true,
+            validationErrors: [],
+          });
+        }
+      }
+    }
+  }
+
+  return orders;
+}
 export function parseCards(
   sheetData: any[][],
   config: NonNullable<ParseRule['parser']['card']>
@@ -192,16 +268,45 @@ export function parseCards(
     }
 
     if (inCard) {
+      const rowText = row?.join(' ') || '';
+      
+      // 检测卡片结束标志
+      if (config.cardEndPattern) {
+        const endPattern = new RegExp(config.cardEndPattern);
+        if (endPattern.test(firstCell) || endPattern.test(rowText)) {
+          // 保存当前卡片的物品
+          if (cardItemStart >= 0) {
+            const items = extractCardItems(sheetData, cardItemStart, i, config);
+            for (const item of items) {
+              orders.push({
+                ...currentCard,
+                ...item,
+                sourceRow: cardItemStart,
+                isValid: true,
+                validationErrors: [],
+              } as ParsedOrder);
+            }
+          }
+          
+          currentCard = {};
+          inCard = false;
+          cardItemStart = -1;
+          continue;
+        }
+      }
+      
       // 提取卡片字段
       for (const field of config.cardFields) {
         const pattern = new RegExp(field.pattern);
-        const rowText = row?.join(' ') || '';
         const match = rowText.match(pattern);
         if (match) {
           currentCard[field.field] = match[field.group || 1]?.trim() || '';
         }
       }
-
+      
+      // 也尝试从整行提取
+      extractCardFields(rowText, config.cardFields, currentCard);
+      
       // 检测物品表头
       if (config.itemTable && hasItemTableHeader(row, config.itemTable.columns)) {
         cardItemStart = i + 1;
@@ -224,6 +329,20 @@ export function parseCards(
   }
 
   return orders;
+}
+
+/**
+ * 从文本中提取卡片字段（不重复提取）
+ */
+function extractCardFields(text: string, fields: any[], card: Record<string, string>): void {
+  for (const field of fields) {
+    if ((card as any)[field.field]) continue; // 已经提取过的字段不再覆盖
+    const pattern = new RegExp(field.pattern, 'i');
+    const match = text.match(pattern);
+    if (match) {
+      (card as any)[field.field] = match[field.group || 1]?.trim() || '';
+    }
+  }
 }
 
 /**

@@ -1,7 +1,7 @@
 // 规则引擎类型定义
 
 export type FileType = 'excel' | 'pdf' | 'word' | 'csv';
-export type ParserType = 'table' | 'matrix' | 'card' | 'text' | 'multi-sheet' | 'multi-page';
+export type ParserType = 'table' | 'matrix' | 'card' | 'text' | 'multi-sheet' | 'multi-page' | 'double-matrix';
 export type DataType = 'string' | 'number' | 'date';
 
 export interface ColumnMapping {
@@ -34,10 +34,34 @@ export interface MatrixParserConfig {
   skuCodeColumn?: number;
   storeColumns: { index: number; storeName: string }[];
   quantityTransform?: 'direct' | 'custom';
+  // 新增：支持复合单元格拆分（周配送计划场景）
+  compositeCellSplit?: {
+    enabled: boolean;
+    delimiter?: string;  // 分隔符，默认换行
+    itemPattern?: string;  // 提取物品名和数量的正则，如 "(.+?)\s*[xX×]\s*(\d+)"
+  };
+}
+
+// 新增：双重转置解析配置（周配送计划）
+export interface DoubleMatrixParserConfig {
+  // 第一行是日期/星期作为列头
+  headerRow: number;
+  // 第一列是门店作为行头
+  firstColumnIsStore: boolean;
+  // 物品提取正则：从单元格"物品名x数量\n物品名x数量"中提取
+  itemPattern: string;  // 如 "(.+?)\s*[xX×]\s*(\d+)"
+  // 日期格式
+  dateFormat?: string;
+  // 门店列索引
+  storeColumnIndex: number;
+  // 数据起始列
+  dataStartColumn: number;
 }
 
 export interface CardParserConfig {
   cardStartPattern: string;
+  // 新增：卡片结束标志（用于更准确地识别卡片边界）
+  cardEndPattern?: string;
   cardFields: {
     field: string;
     pattern: string;
@@ -47,11 +71,19 @@ export interface CardParserConfig {
     headerRowOffset: number;
     columns: ColumnMapping[];
   };
+  // 新增：卡片内收货人信息提取配置
+  recipientInCard?: {
+    namePattern?: string;
+    phonePattern?: string;
+    addressPattern?: string;
+  };
 }
 
 export interface TextParserConfig {
   patterns: TextPattern[];
   itemPatterns?: TextPattern[];
+  // 新增：订单分隔符（用于Word/PDF多订单拆分）
+  orderSeparator?: string;
 }
 
 export interface MultiSourceConfig {
@@ -59,6 +91,8 @@ export interface MultiSourceConfig {
   mergeStrategy: 'union' | 'append';
   filterSources?: string[];
   subRule: Omit<ParseRule, 'id' | 'name' | 'description' | 'fileTypes' | 'identifier'>;
+  // 新增：订单分隔符（用于多Sheet/多页拆分）
+  orderSeparator?: string;
 }
 
 export interface RecipientConfig {

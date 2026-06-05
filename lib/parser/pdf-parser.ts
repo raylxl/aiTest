@@ -234,6 +234,7 @@ export function parsePDFText(
 
 /**
  * 多页PDF拆分解析（一个PDF含多个独立签收单）
+ * 增强版：支持订单分隔符进行更细粒度的拆分
  */
 export function parsePDFMultiPage(
   pages: PDFParseResult['pages'],
@@ -241,13 +242,44 @@ export function parsePDFMultiPage(
 ): ParsedOrder[] {
   const orders: ParsedOrder[] = [];
   
-  // 每页作为独立单元解析
   for (const page of pages) {
-    const pageOrders = parsePDFText([page], {
-      patterns: config.subRule.parser.text?.patterns || [],
-      itemPatterns: config.subRule.parser.text?.itemPatterns,
-    });
-    orders.push(...pageOrders);
+    // 如果配置了订单分隔符，按分隔符拆分
+    if (config.orderSeparator) {
+      try {
+        const separator = new RegExp(config.orderSeparator);
+        const segments = page.text.split(separator);
+        
+        for (let segIdx = 0; segIdx < segments.length; segIdx++) {
+          const segment = segments[segIdx].trim();
+          if (!segment) continue;
+          
+          const segmentOrders = parsePDFText([{...page, text: segment, pageNumber: page.pageNumber }], {
+            patterns: config.subRule.parser.text?.patterns || [],
+            itemPatterns: config.subRule.parser.text?.itemPatterns,
+          });
+          
+          // 为同一页的不同订单添加分段标识
+          for (const order of segmentOrders) {
+            order.orderNo = `${order.orderNo || ''}-P${page.pageNumber}-S${segIdx}`;
+            orders.push(order);
+          }
+        }
+      } catch {
+        // 正则无效，回退到整页解析
+        const pageOrders = parsePDFText([page], {
+          patterns: config.subRule.parser.text?.patterns || [],
+          itemPatterns: config.subRule.parser.text?.itemPatterns,
+        });
+        orders.push(...pageOrders);
+      }
+    } else {
+      // 无分隔符，整页作为独立单元解析
+      const pageOrders = parsePDFText([page], {
+        patterns: config.subRule.parser.text?.patterns || [],
+        itemPatterns: config.subRule.parser.text?.itemPatterns,
+      });
+      orders.push(...pageOrders);
+    }
   }
   
   return orders;
