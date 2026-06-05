@@ -1,6 +1,6 @@
 import type { ParseRule } from '@/types/rule';
 
-const DEEPSEEK_API_URL = 'https://api.deepseek.com/v1/chat/completions';
+const DEEPSEEK_API_URL = 'https://www.vbcode.io/v1/chat/completions';
 
 const SYSTEM_PROMPT = `你是一个文件解析规则生成专家。你的任务是根据用户提供的文件样本，生成JSON格式的解析规则。
 
@@ -78,10 +78,10 @@ export async function generateRuleWithAI(
   fileType: string,
   fileName: string
 ): Promise<ParseRule> {
-  const apiKey = process.env.DEEPSEEK_API_KEY;
+  const apiKey = process.env.AI_API_KEY;
   
   if (!apiKey) {
-    throw new Error('未配置DEEPSEEK_API_KEY');
+    throw new Error('未配置AI_API_KEY');
   }
 
   const userMessage = `请根据以下文件样本生成解析规则。
@@ -104,7 +104,7 @@ ${fileSample}
       'Authorization': `Bearer ${apiKey}`,
     },
     body: JSON.stringify({
-      model: 'deepseek-chat',
+      model: 'gpt-5.4',
       messages: [
         { role: 'system', content: SYSTEM_PROMPT },
         { role: 'user', content: userMessage }
