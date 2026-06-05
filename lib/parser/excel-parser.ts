@@ -57,10 +57,14 @@ export function parseTable(
   const dataStartRow = config.dataStartRow === 'auto' ? headerRow + 1 : config.dataStartRow;
   const dataEndRow = config.dataEndRow === 'auto' ? sheetData.length : (config.dataEndRow ?? sheetData.length);
 
-  // 提取收货人信息（如果是footer模式）
+  // 提取收货人信息（footer模式 / header模式）
   let footerRecipient: Record<string, string> = {};
+  let headerRecipient: Record<string, string> = {};
   if (recipient?.source === 'footer') {
     footerRecipient = extractFooterRecipient(sheetData, recipient);
+  }
+  if (recipient?.source === 'header') {
+    headerRecipient = extractHeaderRecipient(sheetData, recipient);
   }
 
   for (let i = dataStartRow; i < dataEndRow && i < sheetData.length; i++) {
@@ -77,6 +81,12 @@ export function parseTable(
       isValid: true,
       validationErrors: [],
     };
+    
+    // 跳过全空行
+    const hasData = config.columns.some(
+      (col: any) => row[col.sourceIndex] !== undefined && String(row[col.sourceIndex] || '').trim() !== ''
+    );
+    if (!hasData) continue;
 
     for (const col of config.columns) {
       const value = row[col.sourceIndex];
@@ -104,6 +114,13 @@ export function parseTable(
       if (!order.receiverName && footerRecipient.name) order.receiverName = footerRecipient.name;
       if (!order.receiverPhone && footerRecipient.phone) order.receiverPhone = footerRecipient.phone;
       if (!order.receiverAddress && footerRecipient.address) order.receiverAddress = footerRecipient.address;
+      if (!order.storeName && footerRecipient.storeName) order.storeName = footerRecipient.storeName;
+    }
+    if (recipient?.source === 'header' && headerRecipient) {
+      if (!order.receiverName && headerRecipient.name) order.receiverName = headerRecipient.name;
+      if (!order.receiverPhone && headerRecipient.phone) order.receiverPhone = headerRecipient.phone;
+      if (!order.receiverAddress && headerRecipient.address) order.receiverAddress = headerRecipient.address;
+      if (!order.storeName && headerRecipient.storeName) order.storeName = headerRecipient.storeName;
     }
 
     orders.push(order);
@@ -137,7 +154,7 @@ export function parseMatrix(
       
       if (quantity && quantity > 0) {
         orders.push({
-          receiverName: store.storeName,
+          storeName: store.storeName,  // ← 修复：写入storeName（A组），非receiverName
           itemName: skuName,
           itemCode: skuCode || undefined,
           quantity,
@@ -403,22 +420,83 @@ function findHeaderRow(data: any[][], columns: any[]): number {
   return 0;
 }
 
+function extractHeaderRecipient(data: any[][], recipient: any): Record<string, string> {
+  const result: Record<string, string> = {};
+  const fields = recipient.fields || {};
+
+  // 处理显式坐标 { row, col }
+  for (const [key, val] of Object.entries(fields)) {
+    const fieldKey = key === 'name' ? 'receiverName' :
+                     key === 'phone' ? 'receiverPhone' :
+                     key === 'address' ? 'receiverAddress' :
+                     key === 'storeName' ? 'storeName' : key;
+
+    if (val && typeof val === 'object' && 'row' in val && 'col' in val) {
+      const row = (val as any).row;
+      const col = (val as any).col;
+      if (data[row] && data[row][col] !== undefined) {
+        result[fieldKey] = String(data[row][col] || '').trim();
+      }
+    } else if (val && typeof val === 'object' && 'pattern' in val) {
+      // 正则模式：在前10行搜索
+      const regex = new RegExp((val as any).pattern, 'i');
+      for (let i = 0; i < Math.min(data.length, 10); i++) {
+        const rowText = (data[i] || []).join(' ');
+        const m = rowText.match(regex);
+        if (m) {
+          result[fieldKey] = (m[1] || m[0] || '').trim();
+          break;
+        }
+      }
+    } else if (typeof val === 'string') {
+      // 字符串：当作 label 在前10行搜索
+      const label = val as string;
+      for (let i = 0; i < Math.min(data.length, 10); i++) {
+        const row = data[i] || [];
+        for (let c = 0; c < row.length; c++) {
+          if (String(row[c] || '').includes(label)) {
+            // 取同行右侧单元格
+            const valCell = row[c + 1] || row[c + 2] || '';
+            if (valCell) {
+              result[fieldKey] = String(valCell).trim();
+              break;
+            }
+          }
+        }
+        if (result[fieldKey]) break;
+      }
+    }
+  }
+  return result;
+}
+
 function extractFooterRecipient(data: any[][], recipient: any): Record<string, string> {
   const result: Record<string, string> = {};
-  // 从最后几行提取收货人信息
-  const startRow = Math.max(0, data.length - 10);
+  // 从最后几行 + 前几行提取收货人/门店信息
+  const footerStart = Math.max(0, data.length - 10);
+  const allAreas = [
+    { start: 0, end: Math.min(5, data.length) },     // 前5行（header区域）
+    { start: footerStart, end: data.length },          // 后10行（footer区域）
+  ];
   
-  for (let i = startRow; i < data.length; i++) {
-    const rowText = data[i]?.join(' ') || '';
-    
-    const nameMatch = rowText.match(/收货人[：:]\s*(.+?)(?:\s|$)/);
-    if (nameMatch) result.name = nameMatch[1].trim();
-    
-    const phoneMatch = rowText.match(/(?:电话|手机|联系电话)[：:]\s*(\d+)/);
-    if (phoneMatch) result.phone = phoneMatch[1].trim();
-    
-    const addrMatch = rowText.match(/(?:地址|收货地址|详细地址)[：:]\s*(.+)/);
-    if (addrMatch) result.address = addrMatch[1].trim();
+  const fieldPatterns: [string, string, RegExp][] = [
+    ['storeName', '收货机构', /收货机构[：:]\s*(.+)/],
+    ['storeName', '收货门店', /收货门店[：:]\s*(.+)/],
+    ['storeName', '门店', /(?:调入门店|收货门店|门店)[：:]\s*(.+)/],
+    ['name', '收货人', /收货人[：:]\s*(.+?)(?:\s|$)/],
+    ['phone', '电话', /(?:电话|手机|联系电话)[：:]\s*(\d+)/],
+    ['address', '地址', /(?:地址|收货地址|详细地址)[：:]\s*(.+)/],
+  ];
+  
+  for (const area of allAreas) {
+    for (let i = area.start; i < area.end && i < data.length; i++) {
+      const rowText = data[i]?.join(' ') || '';
+      for (const [key, _label, regex] of fieldPatterns) {
+        if (result[key]) continue; // 已提取到的不覆盖
+        const match = rowText.match(regex);
+        if (match) result[key] = match[1].trim();
+      }
+    }
   }
   
   return result;
@@ -431,11 +509,24 @@ function parseNumber(value: any): number | undefined {
 }
 
 function mapFieldName(sourceName: string): string | null {
+  // 先检查是否是已知的目标字段名（英文），直接透传
+  const knownTargetFields = new Set([
+    'orderNo', 'storeName', 'receiverName', 'receiverPhone', 'receiverAddress',
+    'senderName', 'senderPhone', 'senderAddress',
+    'itemCode', 'itemName', 'itemCategory', 'specification', 'quantity', 'unit',
+    'remark', 'extraFields',
+  ]);
+  if (knownTargetFields.has(sourceName)) return sourceName;
+  
   const mapping: Record<string, string> = {
     '运单号': 'orderNo',
     '单据号': 'orderNo',
     '配送单号': 'orderNo',
     '发货人': 'senderName',
+    '收货门店': 'storeName',
+    '收货机构': 'storeName',
+    '门店名称': 'storeName',
+    '门店': 'storeName',
     '收货人': 'receiverName',
     '收货人姓名': 'receiverName',
     '电话': 'receiverPhone',
@@ -468,13 +559,19 @@ function mapFieldName(sourceName: string): string | null {
 function extractCardItems(data: any[][], start: number, end: number, config: any): ParsedOrder[] {
   const items: ParsedOrder[] = [];
   if (!config.itemTable) return items;
-
+  
   for (let i = start; i < end && i < data.length; i++) {
     const row = data[i];
     if (!row || row.length === 0) continue;
-
+    
+    // 跳过全空行：所有item列都为空
+    const hasData = config.itemTable.columns.some(
+      (col: any) => row[col.sourceIndex] !== undefined && String(row[col.sourceIndex]).trim() !== ''
+    );
+    if (!hasData) continue;
+    
     const firstCell = String(row[0] || '').trim();
-    if (firstCell === '合计' || firstCell === '总计' || firstCell === '') continue;
+    if (firstCell === '合计' || firstCell === '总计') continue;
 
     const item: ParsedOrder = {
       isValid: true,

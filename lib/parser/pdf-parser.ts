@@ -87,6 +87,7 @@ export async function parsePDFFile(buffer: ArrayBuffer): Promise<PDFParseResult>
 
 /**
  * 从文本中提取表格结构
+ * 支持多种表格格式：多空格分隔、Tab分隔、固定宽度字符分隔
  */
 function extractTablesFromText(text: string): any[][] {
   const lines = text.split('\n').filter(line => line.trim());
@@ -94,20 +95,47 @@ function extractTablesFromText(text: string): any[][] {
   let currentTable: any[][] = [];
   
   for (const line of lines) {
-    // 检测是否是表格行（包含多个空格分隔的数据）
-    const cells = line.split(/\s{2,}/).filter(cell => cell.trim());
+    const trimmed = line.trim();
     
-    if (cells.length >= 3) {
-      currentTable.push(cells);
-    } else {
-      if (currentTable.length > 0) {
-        tables.push(currentTable);
-        currentTable = [];
+    // 尝试多种分割策略
+    let cells: string[] = [];
+    
+    // 策略1: Tab分隔
+    if (trimmed.includes('\t')) {
+      cells = trimmed.split('\t').filter(cell => cell.trim());
+    }
+    // 策略2: 多空格分隔（至少2个空格）
+    else {
+      const spaceSplit = trimmed.split(/\s{2,}/).filter(cell => cell.trim());
+      if (spaceSplit.length >= 3) {
+        cells = spaceSplit;
+      } else {
+        // 策略3: 尝试检测固定列宽模式（如果行开头有常见的列结构特征）
+        // 检查是否是物品行（如 "ZBWP0001 茶语柠听紫苏风味糖浆 750ml*6瓶/件 件 3"）
+        const singleSpaceSplit = trimmed.split(/\s+/);
+        if (singleSpaceSplit.length >= 4) {
+          // 检查第一个元素是否像编码
+          const first = singleSpaceSplit[0];
+          if (/^[A-Z0-9]+$/i.test(first) || /^\d+$/.test(first)) {
+            cells = singleSpaceSplit;
+          }
+        }
       }
+    }
+    
+    if (cells.length >= 2) {
+      currentTable.push(cells);
+    } else if (currentTable.length > 0) {
+      // 遇到非表格行，结束当前表格
+      if (currentTable.length >= 2) {
+        tables.push(currentTable);
+      }
+      currentTable = [];
     }
   }
   
-  if (currentTable.length > 0) {
+  // 处理最后一个表格
+  if (currentTable.length >= 2) {
     tables.push(currentTable);
   }
   
@@ -348,11 +376,24 @@ function parseNumber(value: any): number | undefined {
 }
 
 function mapFieldName(sourceName: string): string | null {
+  // 已知的英文目标字段直接透传
+  const knownTargetFields = new Set([
+    'orderNo', 'storeName', 'receiverName', 'receiverPhone', 'receiverAddress',
+    'senderName', 'senderPhone', 'senderAddress',
+    'itemCode', 'itemName', 'itemCategory', 'specification', 'quantity', 'unit',
+    'remark', 'extraFields',
+  ]);
+  if (knownTargetFields.has(sourceName)) return sourceName;
+  
   const mapping: Record<string, string> = {
     '运单号': 'orderNo',
     '单据号': 'orderNo',
     '配送单号': 'orderNo',
     '发货人': 'senderName',
+    '收货门店': 'storeName',
+    '收货机构': 'storeName',
+    '门店名称': 'storeName',
+    '门店': 'storeName',
     '收货人': 'receiverName',
     '收货人姓名': 'receiverName',
     '电话': 'receiverPhone',

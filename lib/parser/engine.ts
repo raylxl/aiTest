@@ -130,8 +130,17 @@ export class ParseEngine {
 
     const parserType = rule.parser.type as string;
     switch (parserType) {
-      case 'table':
-        return parseTable(sheet.data, rule.parser.table!, rule.recipient);
+      case 'table': {
+        // 如果columns为空，自动检测列配置
+        let tableConfig = rule.parser.table!;
+        if (!tableConfig.columns || tableConfig.columns.length === 0) {
+          tableConfig = this.autoDetectColumns(sheet.data, tableConfig);
+        } else {
+          // 检查是否缺少关键必填字段，自动补充
+          tableConfig = this.mergeMissingColumns(sheet.data, tableConfig);
+        }
+        return parseTable(sheet.data, tableConfig, rule.recipient);
+      }
       case 'matrix':
         return parseMatrix(sheet.data, rule.parser.matrix!);
       case 'card':
@@ -208,9 +217,14 @@ export class ParseEngine {
         
         const sheetOrders = parseTable(sheet.data, config, rule.recipient);
         
-        // 添加Sheet来源信息
+        // 添加Sheet来源信息 + 补全storeName
+        const sheetStoreName = sheetOrders[0]?.storeName || 
+                              (rule.recipient?.source === 'header' ? undefined : sheet.name);
         for (const order of sheetOrders) {
           order.sourceSheet = sheet.name;
+          if (!order.storeName && sheetStoreName) {
+            order.storeName = sheetStoreName;
+          }
         }
 
         orders.push(...sheetOrders);
@@ -229,51 +243,103 @@ export class ParseEngine {
   private autoDetectColumns(data: any[][], baseConfig: TableParserConfig): TableParserConfig {
     if (!data || data.length < 2) return baseConfig;
     
-    // 查找表头行（第一行非空行）
+    // 智能查找表头行：跳过标题行（单元格内容很长、通常是文档标题），找到真正的列标题行
+    const fieldNameKeywords = ['单号', '编码', '名称', '数量', '门店', '收货', '电话', '地址', '规格', '单位', '日期', '序号', '分类', '备注', '仓库', '品牌'];
     let headerRow = 0;
-    for (let i = 0; i < Math.min(data.length, 10); i++) {
+    let bestScore = 0;
+    
+    for (let i = 0; i < Math.min(data.length, 15); i++) {
       const row = data[i];
-      if (row && row.length > 0 && row.some((cell: any) => cell !== null && cell !== undefined && cell !== '')) {
+      if (!row || row.length === 0) continue;
+      
+      // 检查是否有非空单元格
+      const nonEmptyCells = row.filter((cell: any) => cell !== null && cell !== undefined && String(cell).trim() !== '');
+      if (nonEmptyCells.length === 0) continue;
+      
+      // 评分：匹配到的关键词越多，列数越多（至少3列），越可能是表头
+      let score = 0;
+      let longCellCount = 0;
+      let shortCellCount = 0;
+      for (const cell of nonEmptyCells) {
+        const cellStr = String(cell).trim();
+        const len = cellStr.length;
+        // 极长文本（>30字符）很可能是标题或说明，大幅扣分
+        if (len > 30) { longCellCount++; continue; }
+        // 中等文本（15-30字符）可能是值字段内容，轻微扣分
+        if (len > 15) { score -= 1; continue; }
+        // 短文本（≤15字符）是表头关键词的典型长度
+        shortCellCount++;
+        for (const kw of fieldNameKeywords) {
+          if (cellStr.includes(kw)) score += 3;
+        }
+      }
+      
+      // 加分：列数多（表格特征）
+      if (nonEmptyCells.length >= 3) score += 5;
+      if (nonEmptyCells.length >= 5) score += 5;
+      
+      // 扣分：有长文本单元格（标题/说明行）
+      score -= longCellCount * 5;
+      
+      // 扣分：如果长单元格占比过高，这是header info区域而非列标题
+      if (longCellCount > shortCellCount) score -= 10;
+      
+      if (score > bestScore) {
+        bestScore = score;
         headerRow = i;
-        break;
       }
     }
     
     const headerRowData = data[headerRow];
     if (!headerRowData) return baseConfig;
     
-    // 自动检测列映射
+    // 自动检测列映射 — 使用最长关键词优先匹配，避免「SKU条码」被误匹配为itemName
     const columns: ColumnMapping[] = [];
-    const fieldNameMap: Record<string, string> = {
-      '单号': 'orderNo', '运单号': 'orderNo', '配送单号': 'orderNo', '订单号': 'orderNo',
-      '外部编码': 'orderNo', '外部订单号': 'orderNo', '客户单号': 'orderNo', '参考编码': 'orderNo',
-      '门店': 'storeName', '收货门店': 'storeName', '店铺': 'storeName', '机构': 'storeName',
-      '收货人': 'receiverName', '收件人': 'receiverName',
-      '电话': 'receiverPhone', '手机': 'receiverPhone', '联系电话': 'receiverPhone',
-      '地址': 'receiverAddress', '收货地址': 'receiverAddress', '收件地址': 'receiverAddress',
-      '商品': 'itemName', '物品': 'itemName', '品名': 'itemName', '货品': 'itemName', 'SKU': 'itemName',
-      '编码': 'itemCode', '条码': 'itemCode', 'SKU码': 'itemCode', '物品编码': 'itemCode',
-      '数量': 'quantity', '件数': 'quantity', '发货数量': 'quantity',
-      '规格': 'specification', '型号': 'specification', '规格型号': 'specification',
-      '单位': 'unit',
-    };
+    const fieldNameMapEntries: [string, string][] = [
+      ['配送单号', 'orderNo'], ['运单号', 'orderNo'], ['订单号', 'orderNo'],
+      ['外部订单号', 'orderNo'], ['客户单号', 'orderNo'], ['参考编码', 'orderNo'],
+      ['单据号', 'orderNo'], ['单号', 'orderNo'], ['外部编码', 'orderNo'],
+      ['收货门店', 'storeName'], ['收货机构', 'storeName'],
+      ['门店', 'storeName'], ['店铺', 'storeName'], ['机构', 'storeName'],
+      ['收货人', 'receiverName'], ['收件人', 'receiverName'],
+      ['联系电话', 'receiverPhone'], ['收货人电话', 'receiverPhone'],
+      ['电话', 'receiverPhone'], ['手机', 'receiverPhone'],
+      ['收货地址', 'receiverAddress'], ['收件地址', 'receiverAddress'],
+      ['详细地址', 'receiverAddress'], ['地址', 'receiverAddress'],
+      ['物品编码', 'itemCode'], ['商品编码', 'itemCode'],
+      ['SKU编码', 'itemCode'], ['SKU条码', 'itemCode'], ['SKU码', 'itemCode'],
+      ['条码', 'itemCode'], ['编码', 'itemCode'],
+      ['物品名称', 'itemName'], ['商品名称', 'itemName'],
+      ['货品名称', 'itemName'], ['SKU名称', 'itemName'],
+      ['名称', 'itemName'], ['品名', 'itemName'],
+      ['物品', 'itemName'], ['商品', 'itemName'], ['货品', 'itemName'],
+      ['SKU', 'itemName'],
+      ['规格型号', 'specification'],
+      ['规格', 'specification'], ['型号', 'specification'],
+      ['发货数量', 'quantity'], ['出库数量', 'quantity'],
+      ['订货数量', 'quantity'], ['数量', 'quantity'],
+      ['单位', 'unit'],
+      ['物品分类', 'itemCategory'], ['分类', 'itemCategory'],
+      ['物品品牌', 'itemCategory'], ['品牌', 'itemCategory'],
+    ];
     
     for (let i = 0; i < headerRowData.length; i++) {
       const cell = String(headerRowData[i] || '').trim();
       if (!cell) continue;
       
-      // 查找匹配的字段名
-      let targetField = '';
-      for (const [keyword, field] of Object.entries(fieldNameMap)) {
-        if (cell.includes(keyword)) {
-          targetField = field;
-          break;
+      // 查找匹配的字段名（最长匹配优先）
+      let bestMatch = '';
+      let bestField = '';
+      for (const [keyword, field] of fieldNameMapEntries) {
+        if (cell.includes(keyword) && keyword.length > bestMatch.length) {
+          bestMatch = keyword;
+          bestField = field;
         }
       }
       
-      if (targetField) {
-        const dataType = targetField === 'quantity' ? 'number' : 'string';
-        columns.push({ sourceIndex: i, targetField, dataType });
+      if (bestField) {
+        const dataType = bestField === 'quantity' ? 'number' : 'string';
+        columns.push({ sourceIndex: i, targetField: bestField, dataType });
       }
     }
     
@@ -286,14 +352,99 @@ export class ParseEngine {
   }
 
   /**
+   * 合并缺失的关键字段：如果AI规则缺少必填字段，自动从表头补充
+   * 解决AI提示词缺少storeName等问题时的兜底
+   */
+  private mergeMissingColumns(data: any[][], tableConfig: TableParserConfig): TableParserConfig {
+    if (!tableConfig.columns || tableConfig.columns.length === 0) return tableConfig;
+    
+    const headerRow = typeof tableConfig.headerRow === 'number' ? tableConfig.headerRow : 0;
+    const headerRowData = data[headerRow];
+    if (!headerRowData) return tableConfig;
+
+    const existingFields = new Set(tableConfig.columns.map((c: any) => c.targetField));
+    const newColumns = [...tableConfig.columns];
+    let hasNew = false;
+
+    // 检查A/B组必填字段
+    const hasGroupA = existingFields.has('storeName');
+    const hasGroupB = existingFields.has('receiverName') && existingFields.has('receiverPhone') && existingFields.has('receiverAddress');
+
+    // 如果两组都缺失，且表头中有未映射的列，尝试匹配
+    if (!hasGroupA && !hasGroupB) {
+      for (let i = 0; i < headerRowData.length; i++) {
+        const cell = String(headerRowData[i] || '').trim();
+        if (!cell) continue;
+        // 检查这个列是否已经被映射
+        if (tableConfig.columns.some((c: any) => c.sourceIndex === i)) continue;
+
+        if (/门店|机构|店铺|收货门店|配送门店/.test(cell)) {
+          newColumns.push({ sourceIndex: i, targetField: 'storeName', dataType: 'string' });
+          existingFields.add('storeName');
+          hasNew = true;
+          console.log(`[mergeMissingColumns] 自动补充 storeName ← 列${i} "表头:${cell}"`);
+        } else if (/收货人|收件人|联系人/.test(cell) && !existingFields.has('receiverName')) {
+          newColumns.push({ sourceIndex: i, targetField: 'receiverName', dataType: 'string' });
+          existingFields.add('receiverName');
+          hasNew = true;
+        } else if (/电话|手机|联系方式/.test(cell) && !existingFields.has('receiverPhone')) {
+          newColumns.push({ sourceIndex: i, targetField: 'receiverPhone', dataType: 'string' });
+          existingFields.add('receiverPhone');
+          hasNew = true;
+        } else if (/地址/.test(cell) && !existingFields.has('receiverAddress')) {
+          newColumns.push({ sourceIndex: i, targetField: 'receiverAddress', dataType: 'string' });
+          existingFields.add('receiverAddress');
+          hasNew = true;
+        }
+      }
+    }
+
+    // 补充其他必填字段
+    const requiredFields = [
+      { field: 'itemCode', patterns: [/编码|条码|SKU码|item.?code/i] },
+      { field: 'itemName', patterns: [/名称|品名|货品|商品|item.?name/i] },
+      { field: 'quantity', patterns: [/数量|件数|发货|qty|count/i] },
+    ];
+
+    for (const required of requiredFields) {
+      if (existingFields.has(required.field)) continue;
+      for (let i = 0; i < headerRowData.length; i++) {
+        const cell = String(headerRowData[i] || '').trim();
+        if (!cell) continue;
+        if (tableConfig.columns.some((c: any) => c.sourceIndex === i)) continue;
+        if (required.patterns.some(p => p.test(cell))) {
+          const dataType = required.field === 'quantity' ? 'number' : 'string';
+          newColumns.push({ sourceIndex: i, targetField: required.field, dataType });
+          existingFields.add(required.field);
+          hasNew = true;
+          console.log(`[mergeMissingColumns] 自动补充 ${required.field} ← 列${i} "表头:${cell}"`);
+          break;
+        }
+      }
+    }
+
+    if (!hasNew) return tableConfig;
+    return { ...tableConfig, columns: newColumns };
+  }
+
+  /**
    * 解析PDF文件
    */
   private async parsePDF(buffer: ArrayBuffer, rule: ParseRule): Promise<ParsedOrder[]> {
     const pdfData = await parsePDFFile(buffer);
 
     switch (rule.parser.type) {
-      case 'table':
-        return parsePDFTable(pdfData.pages, rule.parser.table!, rule.recipient);
+      case 'table': {
+        const tableOrders = parsePDFTable(pdfData.pages, rule.parser.table!, rule.recipient);
+        // 如果table模式提取不到数据，尝试text模式作为fallback
+        if (tableOrders.length === 0 && rule.recipient) {
+          // 从recipient配置生成text规则
+          const textConfig = this.generateTextConfigFromRecipient(rule.recipient);
+          const textOrders = parsePDFText(pdfData.pages, textConfig);
+          if (textOrders.length > 0) return textOrders;
+        }
+        return tableOrders;
+      }
       case 'text':
         return parsePDFText(pdfData.pages, rule.parser.text!);
       case 'multi-page':
@@ -314,6 +465,48 @@ export class ParseEngine {
     }
 
     throw new Error(`Word不支持的解析模式: ${rule.parser.type}`);
+  }
+
+  /**
+   * 从 recipient 配置生成 text 模式规则（PDF fallback）
+   */
+  private generateTextConfigFromRecipient(recipient: NonNullable<ParseRule['recipient']>): NonNullable<ParseRule['parser']['text']> {
+    const fields = recipient.fields;
+    const patterns: any[] = [];
+    const itemPatterns: any[] = [];
+    
+    // 生成收货人/门店字段的正则
+    if (fields.storeName) {
+      if (typeof fields.storeName === 'string') {
+        patterns.push({ field: 'storeName', regex: `${fields.storeName}[：:]\\s*(.+)`, group: 1 });
+      } else if (fields.storeName && 'pattern' in fields.storeName) {
+        patterns.push({ field: 'storeName', regex: fields.storeName.pattern, group: 1 });
+      }
+    }
+    // 添加常见的配送单字段匹配
+    patterns.push(
+      { field: 'storeName', regex: '收货机构[：:]\\s*(.+)', group: 1 },
+      { field: 'storeName', regex: '收货门店[：:]\\s*(.+)', group: 1 },
+      { field: 'storeName', regex: '门店[：:]\\s*(.+)', group: 1 },
+      { field: 'orderNo', regex: '(?:单据编号|配送单号|运单号|订单号)[：:]\\s*(\\S+)', group: 1 },
+      { field: 'receiverName', regex: '收货人[：:]\\s*(.+)', group: 1 },
+      { field: 'receiverPhone', regex: '(?:电话|手机|联系电话)[：:]\\s*(\\d+)', group: 1 },
+      { field: 'receiverAddress', regex: '(?:地址|收货地址|详细地址)[：:]\\s*(.+)', group: 1 },
+      { field: 'itemCode', regex: '(?:物品编码|商品编码|SKU编码|SKU条码|编码)[：:]\\s*(\\S+)', group: 1 },
+      { field: 'itemName', regex: '(?:物品名称|商品名称|货品名称|品名)[：:]\\s*(.+)', group: 1 },
+      { field: 'quantity', regex: '(?:数量|发货数量|出库数量)[：:]\\s*(\\d+(?:\\.\\d+)?)', group: 1 },
+      { field: 'specification', regex: '(?:规格型号|规格)[：:]\\s*(.+)', group: 1 },
+      { field: 'unit', regex: '单位[：:]\\s*(.+)', group: 1 },
+    );
+    
+    // 检测文本中是否有表格行样式的物品数据
+    itemPatterns.push(
+      { field: 'itemCode', regex: '^\\s*(\\S+)\\s+', group: 1 },
+      { field: 'itemName', regex: '^\\s*\\S+\\s+(\\S+)', group: 1 },
+      { field: 'quantity', regex: '^\\s*\\S+\\s+\\S+\\s+(\\d+(?:\\.\\d+)?)', group: 1 },
+    );
+
+    return { patterns, itemPatterns };
   }
 
   /**

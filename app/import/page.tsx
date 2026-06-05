@@ -1,4 +1,4 @@
-'use client';
+﻿'use client';
 
 import { useState, useCallback, useMemo, useEffect } from 'react';
 import FileUploader from '../components/Upload/FileUploader';
@@ -35,7 +35,7 @@ interface SavedRule {
 }
 
 // AI系统提示词 - 精简版
-const AI_SYSTEM_PROMPT = `你是文件解析规则生成专家。根据文件样本生成JSON解析规则。
+const AI_SYSTEM_PROMPT = `你是文件解析规则生成专家。根据文件样本生成JSON解析规则，并为每个字段标注置信度。
 
 ## 规则类型：table(标准表格) / matrix(矩阵转置) / card(卡片堆叠) / text(正则提取) / multi-sheet(多Sheet合并) / multi-page(多页PDF)
 
@@ -51,44 +51,73 @@ const AI_SYSTEM_PROMPT = `你是文件解析规则生成专家。根据文件样
       "headerRow": 0,
       "dataStartRow": 1,
       "columns": [
-        {"sourceIndex": 0, "targetField": "字段名", "dataType": "string"}
+        {"sourceIndex": 0, "targetField": "orderNo", "dataType": "string", "confidence": "high", "reason": "表头明确标注'运单号'"}
       ]
     }
   },
   "recipient": {
     "source": "footer",
     "fields": {
-      "name": {"pattern": "收货人[：:]\\\\s*(.+)"},
-      "phone": {"pattern": "电话[：:]\\\\s*(\\\\d+)"},
-      "address": {"pattern": "地址[：:]\\\\s*(.+)"}
+      "name": {"pattern": "收货人[：:]\\s*(.+)", "confidence": "medium", "reason": "页脚区域推测"}
     }
   }
 }
 \`\`\`
 
+## 置信度说明：
+- "confidence": "high" - 明确匹配（表头清晰、字段名标准、可直接确认）
+- "confidence": "medium" - 推测匹配（表头模糊、同音字、缩写、位置推断）
+- "confidence": "low" - 不确定（无明确标识、纯位置推测、可能错误）
+
+## 必须标注的字段：
+每个字段映射必须包含：
+- "confidence": "high" | "medium" | "low"
+- "reason": "中文说明推测依据，例如：表头为'运单号'明确匹配orderNo"
+
+## 业务规则：A/B 组二选一校验
+- A组（门店模式）：只需填写「收货门店」(storeName)，不要求收件人姓名/电话/地址
+- B组（收件人模式）：需填写完整的「收件人姓名(receiverName) + 收件人电话(receiverPhone) + 收件人地址(receiverAddress)」
+- 两组都填也可以，但至少填一组。两组都没填则校验不通过
+- 如果你的文件中某列的列名看起来像「门店/机构/店铺/收货门店」，应该映射到 storeName
+
 ## multi-sheet必须提供table配置
-## targetField标准字段：orderNo(单号) / receiverName(收货人) / receiverPhone(电话) / receiverAddress(地址) / itemName(商品) / quantity(数量) / specification(规格)
+## targetField完整标准字段：
+必填组（至少填一组）：
+  - A组：storeName(收货门店/机构/店铺)
+  - B组：receiverName(收货人) + receiverPhone(电话) + receiverAddress(地址)
+必填字段：
+  - itemCode(物品编码/SKU编码)、itemName(物品名称)、quantity(数量)
+可选字段：
+  - orderNo(单号)、senderName(发货人)、senderPhone(发货电话)、senderAddress(发货地址)
+  - specification(规格)、unit(单位)、itemCategory(分类)
+
 ## 识别表头行，跳过空行和汇总行
 
-targetField应使用以下标准字段名：
-- 运单号/单据号/配送单号 → orderNo
-- 发货人 → senderName
-- 收货人/收货人姓名 → receiverName
-- 电话/手机/联系电话 → receiverPhone
-- 地址/收货地址/详细地址 → receiverAddress
-- 物品名称/商品名称/SKU名称 → itemName
-- 物品编码/商品编码/SKU编码 → itemCode
-- 物品分类 → itemCategory
+targetField应使用以下标准字段名（必须严格使用英文camelCase）：
+- 运单号/单据号/配送单号/单号 → orderNo
+- 收货门店/门店/店铺/机构/收货机构/机构名称/配送门店 → storeName
+- 发货人/发件人/寄件人 → senderName
+- 发货电话/发件人电话/寄件人电话 → senderPhone
+- 发货地址/发件人地址/寄件人地址 → senderAddress
+- 收货人/收件人/收货人姓名/收件人姓名 → receiverName
+- 电话/手机/联系电话/收货电话/收货人电话 → receiverPhone
+- 地址/收货地址/详细地址/收货人地址 → receiverAddress
+- 物品编码/商品编码/SKU编码/SKU条码/条码/编码 → itemCode
+- 物品名称/商品名称/SKU名称/货品名称/品名 → itemName
+- 物品分类/分类 → itemCategory
 - 规格型号/规格 → specification
 - 单位 → unit
-- 数量/发货数量/出库数量 → quantity
+- 数量/发货数量/出库数量/件数 → quantity
+- 备注 → remark
 
-## 重要提示
+## 重要提示：
 
 1. 只输出JSON，不要包含任何解释文字
 2. headerRow和dataStartRow使用0-based索引
 3. sourceIndex是列的索引（0-based）
 4. 正则表达式需要正确转义
+5. 每个字段必须包含confidence和reason字段
+6. confidence为medium或low的字段，reason必须详细说明推测依据
 `;
 
 export default function ImportPage() {
@@ -253,11 +282,109 @@ export default function ImportPage() {
     return JSON.parse(jsonMatch[0]) as ParseRule;
   };
 
-  // 生成默认规则（当AI失败时的备用方案）—— 不使用文件名判断，统一返回通用 table 规则
-  const generateFallbackRule = useCallback((_fileType: string, _fileName: string): ParseRule => {
+  // 生成默认规则（当AI失败时的备用方案）—— 根据文件类型+样本内容智能选择解析模式
+  const generateFallbackRule = useCallback((fileType: string, fileName: string, sample?: string): ParseRule => {
+    // PDF和Word默认使用text模式
+    if (fileType === 'pdf' || fileType === 'word') {
+      return {
+        name: '默认规则（PDF/Word文本模式）',
+        description: 'AI分析失败时生成的通用文本解析规则',
+        fileTypes: [fileType as 'pdf' | 'word'],
+        identifier: {},
+        parser: {
+          type: 'text' as const,
+          text: {
+            patterns: [
+              { field: 'orderNo', regex: '(?:单据编号|配送单号|运单号|订单号|调拨单号)[：:]\\s*(\\S+)', group: 1 },
+              { field: 'storeName', regex: '(?:收货机构|收货门店|门店)[：:]\\s*(.+)', group: 1 },
+              { field: 'receiverName', regex: '收货人[：:]\\s*(.+)', group: 1 },
+              { field: 'receiverPhone', regex: '(?:电话|手机|联系电话)[：:]\\s*(\\d+)', group: 1 },
+              { field: 'receiverAddress', regex: '(?:地址|收货地址|详细地址)[：:]\\s*(.+)', group: 1 },
+            ],
+            itemPatterns: [
+              { field: 'itemCode', regex: '([A-Z]{2,4}\\d{4,})', group: 1 },
+              { field: 'itemName', regex: '(?:茶语|寨寨|麻辣|牛油|肥牛|海老|紫苏|烤肉|火锅|折耳根|牧场|林农|鲜品|酸菜|香肠|豆皮|藕片|鸡爪|鱼丸|牛肉|羊肉|猪肉|排骨|鸡翅|鸭脖|毛肚|百叶|黄喉|鸭肠)[^\\n]{2,30}', group: 0 },
+              { field: 'quantity', regex: '(?<=\\s)\\d+(?:\\.\\d+)?(?=\\s*(?:件|箱|袋|包|瓶|kg|KG|Kg|个|盒|桶|板|条|块|只|对|组|套|份))', group: 0 },
+            ],
+            orderSeparator: '(?:单据编号|配送单号|运单号|订单号|调拨单号)[：:]\\s*\\S+',
+          }
+        },
+        recipient: {
+          source: 'footer',
+          fields: {
+            name: { pattern: '收货人[：:]\\s*(.+?)(?:\\s|$)' },
+            phone: { pattern: '(?:电话|手机)[：:]\\s*(\\d+)' },
+            address: { pattern: '(?:地址|收货地址)[：:]\\s*(.+)' }
+          }
+        }
+      };
+    }
+
+    // Excel：检测是否是卡片式布局
+    if (sample) {
+      const isCardLayout = detectCardLayout(sample);
+      if (isCardLayout) {
+        return {
+          name: '默认规则（卡片式布局）',
+          description: 'AI分析失败时生成的卡片式解析规则',
+          fileTypes: ['excel'],
+          identifier: {},
+          parser: {
+            type: 'card' as const,
+            card: {
+              cardStartPattern: '(?:▶|►|◆|■|●|第\\d+|记录|#\\d+|调拨记录|配送记录|---)',
+              cardFields: [
+                { field: 'storeName', pattern: '(?:调入门店|收货门店|门店)[：:]?\\s*(.+)', group: 1 },
+                { field: 'receiverName', pattern: '收货人[：:]\\s*(.+?)($|\\s{2,})', group: 1 },
+                { field: 'receiverPhone', pattern: '(?:电话|手机|联系电话)[：:]\\s*(\\d+)', group: 1 },
+                { field: 'receiverAddress', pattern: '(?:收货地址|地址)[：:]\\s*(.+)', group: 1 },
+                { field: 'orderNo', pattern: '(?:调拨单号|配送单号|单据号|单号)[：:]\\s*(\\S+)', group: 1 },
+              ],
+              itemTable: {
+                headerRowOffset: 1,
+                columns: [
+                  { sourceIndex: 0, targetField: 'itemCode', dataType: 'string' },
+                  { sourceIndex: 1, targetField: 'itemName', dataType: 'string' },
+                  { sourceIndex: 2, targetField: 'specification', dataType: 'string' },
+                  { sourceIndex: 3, targetField: 'quantity', dataType: 'number' },
+                ]
+              },
+              recipientInCard: {
+                namePattern: '收货人[：:]\\s*(.+?)($|\\s{2,})',
+                phonePattern: '(?:电话|手机|联系电话)[：:]\\s*(\\d+)',
+                addressPattern: '(?:收货地址|地址)[：:]\\s*(.+)',
+              }
+            }
+          },
+          recipient: { source: 'header', fields: {} }
+        };
+      }
+
+      // 检测是否是矩阵模式（门店在列头）
+      const isMatrixMode = detectMatrixMode(sample);
+      if (isMatrixMode) {
+        return {
+          name: '默认规则（矩阵模式）',
+          description: 'AI分析失败时生成的矩阵解析规则',
+          fileTypes: ['excel'],
+          identifier: {},
+          parser: {
+            type: 'matrix' as const,
+            matrix: {
+              headerRow: 0,
+              skuColumn: 2,
+              skuCodeColumn: 1,
+              storeColumns: [], // 运行时自动填充
+            }
+          },
+          recipient: { source: 'header', fields: {} }
+        };
+      }
+    }
+
     return {
-      name: '默认规则（待手动配置）',
-      description: 'AI分析失败时生成的通用规则，请根据实际文件结构手动编辑',
+      name: '默认规则（Excel表格模式）',
+      description: 'AI分析失败时生成的通用表格解析规则',
       fileTypes: ['excel'],
       identifier: {},
       parser: {
@@ -267,6 +394,7 @@ export default function ImportPage() {
       recipient: {
         source: 'footer',
         fields: {
+          storeName: { pattern: '(?:收货机构|收货门店|调入门店)[：:]\\s*(.+)' },
           name: { pattern: '收货人[：:]\\s*(.+?)(?:\\s|$)' },
           phone: { pattern: '(?:电话|手机)[：:]\\s*(\\d+)' },
           address: { pattern: '(?:地址|收货地址)[：:]\\s*(.+)' }
@@ -274,6 +402,29 @@ export default function ImportPage() {
       }
     };
   }, []);
+
+  // 检测卡片式布局：样本中有"▶ 调拨记录"等卡片起始标记
+  const detectCardLayout = (sample: string): boolean => {
+    const cardIndicators = [
+      /▶\s*(?:调拨|配送|出库)?\s*记录/i,
+      /◆\s*\d+/,
+      /第\d+\s*(?:条|项|笔)/,
+      /#\d+/,
+      /---{3,}/,
+    ];
+    return cardIndicators.some(p => p.test(sample));
+  };
+
+  // 检测矩阵模式：列头中有门店名（如"银泰"、"金桥"、"金银潭"）
+  const detectMatrixMode = (sample: string): boolean => {
+    const lines = sample.split('\n');
+    if (lines.length < 2) return false;
+    // 检查第一行是否包含"仓库名称"+"SKU名称"等关键词 + 多个门店名
+    const headerLine = lines[0];
+    const hasSkuKw = /SKU|物品|编码/.test(headerLine);
+    const storeCount = (headerLine.match(/店|门店|仓|银泰|金桥|金银潭/g) || []).length;
+    return hasSkuKw && storeCount >= 2;
+  };
 
   // 步骤1：选择文件
   const handleFilesSelected = useCallback((newFiles: File[]) => {
@@ -308,7 +459,7 @@ export default function ImportPage() {
         rule = await callAIFromClient(extractData.sample, extractData.fileInfo.type, extractData.fileInfo.name);
       } catch (aiError) {
         console.warn('AI分析失败，使用默认规则:', aiError);
-        rule = generateFallbackRule(extractData.fileInfo.type, extractData.fileInfo.name);
+        rule = generateFallbackRule(extractData.fileInfo.type, extractData.fileInfo.name, extractData.sample);
         showToast('warning', `${item.file.name} AI分析失败，已使用默认规则（可手动编辑）`);
       }
       setAnalyzedFiles(prev => prev.map((f, i) => i === index ? {
@@ -919,7 +1070,7 @@ export default function ImportPage() {
           <div className="space-y-4">
             <div className="bg-white rounded-lg border border-gray-200 p-6">
               <h3 className="text-lg font-medium text-gray-900 mb-2">✅ 确认解析规则</h3>
-              <p className="text-sm text-gray-600 mb-4">AI已分析每个文件并生成规则。可编辑调整后保存到规则库供复用。</p>
+              <p className="text-sm text-gray-600 mb-4">AI已分析每个文件并生成规则。可编辑调整后保存到规则库供复用。<span className="text-xs text-gray-500 ml-1">（●高置信度 ▲中置信度 ▼低置信度）</span></p>
               <div className="space-y-4">
                 {analyzedFiles.map((item, index) => (
                   <div key={index} className="border border-gray-200 rounded-lg p-4">
@@ -944,11 +1095,89 @@ export default function ImportPage() {
                       <div className="bg-gray-50 rounded p-3">
                         <div className="flex items-center gap-2 mb-2">
                           <span className="text-sm font-medium">{item.rule.name}</span>
+                          {/* 置信度概览 */}
+                          {item.rule.parser?.table?.columns && (
+                            (() => {
+                              const cols = item.rule.parser.table.columns;
+                              const high = cols.filter((c: any) => c.confidence === 'high').length;
+                              const med = cols.filter((c: any) => c.confidence === 'medium').length;
+                              const low = cols.filter((c: any) => c.confidence !== 'high' && c.confidence !== 'medium').length;
+                              return (
+                                <div className="flex gap-1.5 text-xs">
+                                  {high > 0 && <span className="bg-green-100 text-green-700 px-1.5 py-0.5 rounded">高 {high}</span>}
+                                  {med > 0 && <span className="bg-yellow-100 text-yellow-700 px-1.5 py-0.5 rounded">中 {med}</span>}
+                                  {low > 0 && <span className="bg-red-100 text-red-700 px-1.5 py-0.5 rounded">低 {low}</span>}
+                                </div>
+                              );
+                            })()
+                          )}
                         </div>
                         {item.rule.description && <p className="text-xs text-gray-600 mb-2">{item.rule.description}</p>}
-                        <div className="text-xs text-gray-500">
-                          解析模式: {item.rule.parser.type} | 字段数: {item.rule.parser.table?.columns?.length || item.rule.parser.matrix?.storeColumns?.length || '-'}
-                        </div>
+                        
+                        {/* 字段映射表格 - 含置信度 */}
+                        {item.rule.parser?.table?.columns && (
+                          <div className="mt-2 overflow-x-auto">
+                            <table className="w-full text-xs border-collapse">
+                              <thead>
+                                <tr className="bg-gray-100">
+                                  <th className="px-2 py-1 text-left">列号</th>
+                                  <th className="px-2 py-1 text-left">目标字段</th>
+                                  <th className="px-2 py-1 text-left">置信度</th>
+                                  <th className="px-2 py-1 text-left">推测依据</th>
+                                </tr>
+                              </thead>
+                              <tbody>
+                                {item.rule.parser.table.columns.map((col: any, ci: number) => (
+                                  <tr key={ci} className={`border-t ${
+                                    col.confidence === 'high' ? 'bg-white' : 
+                                    col.confidence === 'medium' ? 'bg-yellow-50' : 'bg-red-50'
+                                  }`}>
+                                    <td className="px-2 py-1">{col.sourceIndex}</td>
+                                    <td className="px-2 py-1 font-medium">{col.targetField || '-'}</td>
+                                    <td className="px-2 py-1">
+                                      {col.confidence === 'high' && <span className="text-green-600">● 高</span>}
+                                      {col.confidence === 'medium' && <span className="text-yellow-600">▲ 中</span>}
+                                      {col.confidence !== 'high' && col.confidence !== 'medium' && <span className="text-red-600">▼ 低</span>}
+                                    </td>
+                                    <td className="px-2 py-1 text-gray-500">{col.reason || '-'}</td>
+                                  </tr>
+                                ))}
+                              </tbody>
+                            </table>
+                          </div>
+                        )}
+                        
+                        {/* AI推测警告 */}
+                        {item.rule.parser?.table?.columns && 
+                          item.rule.parser.table.columns.some((c: any) => c.confidence !== 'high') && (
+                          <div className="mt-2 p-2 bg-yellow-50 border border-yellow-200 rounded text-xs text-yellow-800">
+                            ⚠️ AI对部分字段的映射不确定（标注为"中"或"低"），请仔细确认后再开始解析！
+                          </div>
+                        )}
+                        {/* 缺少关键字段警告 */}
+                        {item.rule.parser?.table?.columns && (() => {
+                          const cols = item.rule.parser.table.columns;
+                          const mappedFields = new Set(cols.map((c: any) => c.targetField));
+                          const hasGroupA = mappedFields.has('storeName');
+                          const hasGroupB = mappedFields.has('receiverName') && mappedFields.has('receiverPhone') && mappedFields.has('receiverAddress');
+                          const hasItemCode = mappedFields.has('itemCode');
+                          const hasItemName = mappedFields.has('itemName');
+                          const hasQuantity = mappedFields.has('quantity');
+                          const missingGroups: string[] = [];
+                          if (!hasGroupA && !hasGroupB) missingGroups.push('收货信息（A组门店或B组收件人）');
+                          if (!hasItemCode) missingGroups.push('SKU物品编码');
+                          if (!hasItemName) missingGroups.push('SKU物品名称');
+                          if (!hasQuantity) missingGroups.push('SKU发货数量');
+                          if (missingGroups.length > 0) {
+                            return (
+                              <div className="mt-2 p-2 bg-red-50 border border-red-200 rounded text-xs text-red-800">
+                                ❌ 规则缺少以下关键字段映射：{missingGroups.join('、')}。
+                                请点击"编辑规则"补充，否则解析后将全部报错！
+                              </div>
+                            );
+                          }
+                          return null;
+                        })()}
                       </div>
                     ) : (
                       <div className="bg-red-50 rounded p-3 text-sm text-red-700">{item.error || '未能生成规则'}</div>
@@ -1253,6 +1482,7 @@ function RulesManager({ onBack, onSelectRule }: { onBack: () => void; onSelectRu
   const [testResult, setTestResult] = useState<any>(null);
   const [testing, setTesting] = useState(false);
   const [searchText, setSearchText] = useState('');
+  const [isCreating, setIsCreating] = useState(false); // 是否正在创建新规则
 
   useEffect(() => {
     loadRules();
@@ -1295,24 +1525,34 @@ function RulesManager({ onBack, onSelectRule }: { onBack: () => void; onSelectRu
   };
 
   const handleEditSave = async () => {
-    if (!editingRule) return;
+    if (!editJson.trim()) { showToast('warning', '规则JSON不能为空'); return; }
     try {
       const ruleJson = JSON.parse(editJson);
-      const res = await fetch('/api/rules', {
-        method: 'PUT',
+      const isNew = isCreating || !editingRule;
+      const url = '/api/rules';
+      const method = isNew ? 'POST' : 'PUT';
+      const body: any = {
+        name: editName || ruleJson.name || '新规则',
+        description: editDesc || ruleJson.description || '',
+        fileTypes: ruleJson.fileTypes || ['excel', 'pdf', 'word'],
+        ruleJson,
+        isAiGenerated: false,
+      };
+      if (!isNew && editingRule) body.id = editingRule.id;
+
+      const res = await fetch(url, {
+        method,
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          id: editingRule.id, name: editName, description: editDesc,
-          fileTypes: ruleJson.fileTypes || editingRule.fileTypes, ruleJson,
-        }),
+        body: JSON.stringify(body),
       });
       const data = await res.json();
       if (data.success) {
-        showToast('success', '规则已更新');
+        showToast('success', isNew ? '规则已创建' : '规则已更新');
+        setIsCreating(false);
         setEditingRule(null);
         loadRules();
-      } else { showToast('error', data.error || '更新失败'); }
-    } catch { showToast('error', 'JSON格式错误，请检查'); }
+      } else { showToast('error', data.error || (isNew ? '创建失败' : '更新失败')); }
+    } catch (e: any) { showToast('error', `JSON格式错误: ${e.message}`); }
   };
 
   // 规则测试
@@ -1348,6 +1588,20 @@ function RulesManager({ onBack, onSelectRule }: { onBack: () => void; onSelectRu
         </div>
         <input type="text" value={searchText} onChange={e => setSearchText(e.target.value)}
           placeholder="搜索规则..." className="w-full sm:w-56 px-3 py-1.5 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#0fc6c2]" />
+        <button onClick={() => {
+          setIsCreating(true);
+          setEditingRule(null);
+          setEditName('');
+          setEditDesc('');
+          setEditJson(JSON.stringify({
+            name: '新规则',
+            description: '请输入描述',
+            parser: { type: 'table' },
+            fields: []
+          }, null, 2));
+        }} className="w-full sm:w-auto px-4 py-1.5 bg-[#0fc6c2] text-white rounded-lg hover:bg-[#0aa8a4] text-sm whitespace-nowrap">
+          ➕ 新建规则
+        </button>
       </div>
 
       {loading ? (
@@ -1371,6 +1625,14 @@ function RulesManager({ onBack, onSelectRule }: { onBack: () => void; onSelectRu
                   <p className="text-xs text-gray-500 mt-0.5">{rule.description || '无描述'}</p>
                 </div>
                 <div className="flex gap-1 ml-2">
+                  <button onClick={() => {
+                    // 复制规则
+                    setIsCreating(true);
+                    setEditingRule(null);
+                    setEditName(rule.name + '（副本）');
+                    setEditDesc(rule.description || '');
+                    setEditJson(JSON.stringify(rule.ruleJson, null, 2));
+                  }} className="text-xs text-gray-500 hover:text-gray-700 px-2 py-1 rounded hover:bg-gray-100">复制</button>
                   <button onClick={() => handleEditOpen(rule)} className="text-xs text-blue-500 hover:text-blue-700 px-2 py-1 rounded hover:bg-blue-50">编辑</button>
                   <button onClick={() => { setTestingRule(rule); setTestFile(null); setTestResult(null); }} className="text-xs text-green-500 hover:text-green-700 px-2 py-1 rounded hover:bg-green-50">测试</button>
                   <button onClick={() => onSelectRule(rule.ruleJson)} className="text-xs text-[#0fc6c2] hover:text-[#0aa8a4] px-2 py-1 rounded hover:bg-[#0fc6c2]/10">应用</button>
@@ -1389,10 +1651,10 @@ function RulesManager({ onBack, onSelectRule }: { onBack: () => void; onSelectRu
       )}
 
       {/* 规则编辑弹窗 - 响应式 */}
-      {editingRule && (
+      {(editingRule || isCreating) && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
           <div className="bg-white rounded-lg p-4 sm:p-6 w-full max-w-2xl max-h-[90vh] overflow-auto">
-            <h3 className="text-lg font-medium mb-4">编辑规则</h3>
+            <h3 className="text-lg font-medium mb-4">{isCreating ? '新建规则' : '编辑规则'}</h3>
             <div className="space-y-3 mb-4">
               <div>
                 <label className="block text-xs text-gray-500 mb-1">规则名称</label>
@@ -1411,8 +1673,8 @@ function RulesManager({ onBack, onSelectRule }: { onBack: () => void; onSelectRu
               </div>
             </div>
             <div className="flex gap-3 justify-end">
-              <button onClick={() => setEditingRule(null)} className="px-4 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200">取消</button>
-              <button onClick={handleEditSave} className="px-4 py-2 bg-[#0fc6c2] text-white rounded-lg hover:bg-[#0aa8a4]">保存</button>
+              <button onClick={() => { setIsCreating(false); setEditingRule(null); }} className="px-4 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200">取消</button>
+              <button onClick={handleEditSave} className="px-4 py-2 bg-[#0fc6c2] text-white rounded-lg hover:bg-[#0aa8a4]">{isCreating ? '创建' : '保存'}</button>
             </div>
           </div>
         </div>
