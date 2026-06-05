@@ -312,6 +312,33 @@ ${sample}
     return JSON.parse(jsonMatch[0]) as ParseRule;
   };
 
+  // 生成默认规则（当AI失败时的备用方案）
+  const generateFallbackRule = useCallback((fileType: string, fileName: string): ParseRule => {
+    const isMultiSheet = fileName.includes('多') || fileName.includes('分') || fileName.includes('门店');
+    
+    return {
+      name: `默认规则 - ${fileName}`,
+      description: `基于文件类型${fileType}自动生成的默认解析规则`,
+      fileTypes: [fileType as any],
+      parser: {
+        type: isMultiSheet ? 'multi-sheet' : 'table',
+        table: {
+          headerRow: 'auto',
+          dataStartRow: 'auto',
+          columns: [] // 空数组，让autoDetectColumns自动检测
+        }
+      },
+      recipient: {
+        source: 'footer',
+        fields: {
+          name: { pattern: '收货人[：:]\\s*(.+?)(?:\\s|$)' },
+          phone: { pattern: '(?:电话|手机)[：:]\\s*(\\d+)' },
+          address: { pattern: '(?:地址|收货地址)[：:]\\s*(.+)' }
+        }
+      }
+    };
+  }, []);
+
   // 步骤1：选择文件
   const handleFilesSelected = useCallback((newFiles: File[]) => {
     const analyzed: AnalyzedFile[] = newFiles.map(file => ({
@@ -344,7 +371,15 @@ ${sample}
       }
 
       // 2. 前端直接调用AI API生成规则
-      const rule = await callAIFromClient(extractData.sample, extractData.fileInfo.type, extractData.fileInfo.name);
+      let rule: ParseRule;
+      try {
+        rule = await callAIFromClient(extractData.sample, extractData.fileInfo.type, extractData.fileInfo.name);
+      } catch (aiError) {
+        // AI失败时使用默认规则
+        console.warn('AI分析失败，使用默认规则:', aiError);
+        rule = generateFallbackRule(extractData.fileInfo.type, extractData.fileInfo.name);
+        showToast('warning', `${item.file.name} AI分析失败，已使用默认规则（可手动编辑）`);
+      }
 
       setAnalyzedFiles(prev => prev.map((f, i) => i === index ? {
         ...f,
@@ -353,7 +388,7 @@ ${sample}
         fileInfo: extractData.fileInfo,
         analyzing: false,
       } : f));
-      showToast('success', `${item.file.name} AI分析完成`);
+      showToast('success', `${item.file.name} 分析完成`);
     } catch (error) {
       const errorMsg = error instanceof Error ? error.message : '分析失败';
       setAnalyzedFiles(prev => prev.map((f, i) => i === index ? {
