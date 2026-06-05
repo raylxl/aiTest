@@ -8,9 +8,10 @@ import ProgressBar from '../components/Common/ProgressBar';
 import Toast, { showToast } from '../components/Common/Toast';
 import { useDebounce } from '../hooks/useDebounce';
 import { useLargeData } from '../hooks/useLargeData';
+import { useParseWorker } from '../hooks/useWebWorker';
 import type { ParsedOrder, ParseRule } from '@/types/rule';
 
-type StepType = 'upload' | 'analyze' | 'confirm' | 'result' | 'history';
+type StepType = 'upload' | 'analyze' | 'confirm' | 'result' | 'history' | 'rules';
 
 interface AnalyzedFile {
   file: File;
@@ -19,6 +20,18 @@ interface AnalyzedFile {
   fileInfo: { name: string; type: string; sheets: string[] };
   analyzing: boolean;
   error?: string;
+}
+
+interface SavedRule {
+  id: number;
+  name: string;
+  description: string;
+  fileTypes: string[];
+  ruleJson: ParseRule;
+  isAiGenerated: boolean;
+  usageCount: number;
+  createdAt: string;
+  updatedAt: string;
 }
 
 // AI系统提示词 - 精简版
@@ -91,16 +104,21 @@ export default function ImportPage() {
   const [apiUrl, setApiUrl] = useState('https://www.vbcode.io/v1/chat/completions');
   const [modelName, setModelName] = useState('gpt-5.4');
 
+  // 重复检测结果
+  const [duplicateNos, setDuplicateNos] = useState<string[]>([]);
+  const [dupStats, setDupStats] = useState<{ batchDupCount: number; dbDupCount: number } | null>(null);
+
+  // Web Worker
+  const { parseWithWorker, isWorking: isWorkerParsing, progress: workerProgress, isSupported: workerSupported } = useParseWorker();
+
   // 从localStorage加载配置（如果有的话，否则使用默认值）
   useEffect(() => {
     const savedKey = localStorage.getItem('ai_api_key');
     const savedUrl = localStorage.getItem('ai_api_url');
     const savedModel = localStorage.getItem('ai_model_name');
-    // 只有当localStorage有值且不为空且是完整URL时才覆盖默认值
     if (savedKey && savedKey !== 'undefined' && savedKey !== 'null' && savedKey.length > 10) {
       setApiKey(savedKey);
     }
-    // URL必须包含/chat/completions才是完整地址
     if (savedUrl && savedUrl !== 'undefined' && savedUrl !== 'null' && savedUrl.includes('/chat/completions')) {
       setApiUrl(savedUrl);
     }
@@ -155,35 +173,14 @@ export default function ImportPage() {
 
   const useVirtualScroll = totalCount > 100;
 
-  // 前端直接调用AI API（避免Cloudflare拦截）
+  // 前端直接调用AI API
   const callAIFromClient = async (sample: string, fileType: string, fileName: string): Promise<ParseRule> => {
-    if (!apiKey) {
-      throw new Error('请先配置AI API Key');
-    }
-
-    // 确保API URL是完整的
+    if (!apiKey) throw new Error('请先配置AI API Key');
     let fullApiUrl = apiUrl;
     if (!apiUrl.includes('/chat/completions')) {
       fullApiUrl = apiUrl.replace(/\/+$/, '') + '/chat/completions';
     }
-
-    const userMessage = `请根据以下文件样本生成解析规则。
-
-## 文件信息
-- 文件名：${fileName}
-- 文件类型：${fileType}
-
-## 文件内容样本（前20行）
-\`\`\`
-${sample}
-\`\`\`
-
-请分析文件结构，生成对应的解析规则JSON。`;
-
-    console.log('调用AI API:', fullApiUrl, '模型:', modelName);
-    console.log('系统提示词长度:', AI_SYSTEM_PROMPT.length, '用户消息长度:', userMessage.length);
-    
-    // 构建请求体 - 使用标准OpenAI格式
+    const userMessage = `请根据以下文件样本生成解析规则。\n\n## 文件信息\n- 文件名：${fileName}\n- 文件类型：${fileType}\n\n## 文件内容样本（前20行）\n\`\`\`\n${sample}\n\`\`\`\n\n请分析文件结构，生成对应的解析规则JSON。`;
     const requestBody = {
       model: modelName,
       messages: [
@@ -194,143 +191,70 @@ ${sample}
       max_tokens: 2048,
       stream: false,
     };
-    console.log('请求体大小:', JSON.stringify(requestBody).length, '字符');
-    
-    // 使用AbortController实现超时
     const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 60000); // 60秒超时
-    
+    const timeoutId = setTimeout(() => controller.abort(), 60000);
     let response: Response;
     try {
       response = await fetch(fullApiUrl, {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${apiKey}`,
-        },
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${apiKey}` },
         body: JSON.stringify(requestBody),
         signal: controller.signal,
       });
       clearTimeout(timeoutId);
     } catch (fetchError: any) {
       clearTimeout(timeoutId);
-      if (fetchError.name === 'AbortError') {
-        throw new Error('API请求超时（60秒），请检查网络连接或稍后重试');
-      }
+      if (fetchError.name === 'AbortError') throw new Error('API请求超时（60秒），请检查网络连接或稍后重试');
       throw new Error(`网络请求失败: ${fetchError.message}`);
     }
-
     if (!response.ok) {
       const errorText = await response.text();
       throw new Error(`API调用失败 (${response.status}): ${errorText.substring(0, 200)}`);
     }
-
-    // 获取响应文本
     const responseText = await response.text();
-    console.log('API响应前1000字符:', responseText.substring(0, 1000));
     let content = '';
-
-    // 先尝试直接解析为JSON（如果API返回标准JSON格式）
     try {
       const data = JSON.parse(responseText);
-      console.log('解析后的JSON:', JSON.stringify(data).substring(0, 500));
-      
-      // 检查是否有错误
-      if (data.error) {
-        throw new Error(`API错误: ${data.error.message || JSON.stringify(data.error)}`);
-      }
-      
-      // 检查choices是否为空
-      if (!data.choices || data.choices.length === 0) {
-        console.error('API返回空choices，完整响应:', data);
-        throw new Error(`API返回空结果。模型: ${data.model || 'unknown'}, 使用tokens: ${data.usage?.total_tokens || 0}。请检查模型名称是否正确。`);
-      }
-      
+      if (data.error) throw new Error(`API错误: ${data.error.message || JSON.stringify(data.error)}`);
+      if (!data.choices || data.choices.length === 0) throw new Error(`API返回空结果。模型: ${data.model || 'unknown'}`);
       content = data.choices[0]?.message?.content || '';
     } catch (jsonError: any) {
-      // 如果是API错误，直接抛出
-      if (jsonError.message?.startsWith('API错误:') || jsonError.message?.startsWith('API返回空结果')) {
-        throw jsonError;
-      }
-      
-      // 如果不是JSON，尝试SSE格式
+      if (jsonError.message?.startsWith('API错误:') || jsonError.message?.startsWith('API返回空结果')) throw jsonError;
       if (responseText.includes('data: ')) {
         const lines = responseText.split('\n');
         let fullContent = '';
-        let lastChunk: any = null;
-        
         for (const line of lines) {
           const trimmedLine = line.trim();
           if (trimmedLine.startsWith('data: ') && !trimmedLine.includes('[DONE]')) {
             try {
               const chunk = JSON.parse(trimmedLine.slice(6));
-              lastChunk = chunk;
-              
-              // 检查是否有错误
-              if (chunk.error) {
-                throw new Error(`API错误: ${chunk.error.message || JSON.stringify(chunk.error)}`);
-              }
-              
-              // 支持delta格式和message格式
               const delta = chunk.choices?.[0]?.delta?.content || chunk.choices?.[0]?.message?.content;
-              if (delta) {
-                fullContent += delta;
-              }
-            } catch (e: any) {
-              if (e.message?.startsWith('API错误:')) {
-                throw e;
-              }
-              console.warn('SSE行解析失败:', trimmedLine);
-            }
+              if (delta) fullContent += delta;
+            } catch {}
           }
         }
-        
-        // 如果没有内容，检查最后一个chunk
-        if (!fullContent && lastChunk) {
-          console.error('SSE响应无内容，最后一个chunk:', lastChunk);
-          if (!lastChunk.choices || lastChunk.choices.length === 0) {
-            throw new Error(`API返回空结果。模型: ${lastChunk.model || 'unknown'}, 使用tokens: ${lastChunk.usage?.total_tokens || 0}。请检查模型名称是否正确。`);
-          }
-        }
-        
         content = fullContent;
       } else {
         throw new Error('无法解析API响应: ' + responseText.substring(0, 200));
       }
     }
-
-    if (!content) {
-      throw new Error('AI返回空内容，请检查模型名称是否正确（当前: ' + modelName + '）');
-    }
-
-    // 提取JSON
+    if (!content) throw new Error('AI返回空内容，请检查模型名称是否正确（当前: ' + modelName + '）');
     const jsonMatch = content.match(/\{[\s\S]*\}/);
-    if (!jsonMatch) {
-      throw new Error('无法从AI响应中提取JSON');
-    }
-
+    if (!jsonMatch) throw new Error('无法从AI响应中提取JSON');
     return JSON.parse(jsonMatch[0]) as ParseRule;
   };
 
   // 生成默认规则（当AI失败时的备用方案）
   const generateFallbackRule = useCallback((fileType: string, fileName: string): ParseRule => {
     const isMultiSheet = fileName.includes('多') || fileName.includes('分') || fileName.includes('门店');
-    
     return {
       name: `默认规则 - ${fileName}`,
       description: `基于文件类型${fileType}自动生成的默认解析规则`,
       fileTypes: [fileType as any],
-      identifier: {
-        fileNamePattern: fileName,
-        headerKeywords: ['运单号', '收件人', '电话', '地址']
-      },
+      identifier: {},
       parser: {
         type: isMultiSheet ? 'multi-sheet' : 'table',
-        table: {
-          headerRow: 'auto',
-          dataStartRow: 'auto',
-          columns: [] // 空数组，让autoDetectColumns自动检测
-        }
+        table: { headerRow: 'auto', dataStartRow: 'auto', columns: [] }
       },
       recipient: {
         source: 'footer',
@@ -355,66 +279,42 @@ ${sample}
     setAnalyzedFiles(prev => [...prev, ...analyzed]);
   }, []);
 
-  // 步骤2：AI分析单个文件（前端调用）
+  // 步骤2：AI分析单个文件
   const handleAnalyzeFile = async (index: number) => {
     const item = analyzedFiles[index];
     if (!item) return;
-
     setAnalyzedFiles(prev => prev.map((f, i) => i === index ? { ...f, analyzing: true, error: undefined } : f));
-
     try {
-      // 1. 先从服务端提取文件样本
       const formData = new FormData();
       formData.append('file', item.file);
-
       const extractResponse = await fetch('/api/extract-sample', { method: 'POST', body: formData });
       const extractData = await extractResponse.json();
-
-      if (!extractData.success) {
-        throw new Error(extractData.error || '提取样本失败');
-      }
-
-      // 2. 前端直接调用AI API生成规则
+      if (!extractData.success) throw new Error(extractData.error || '提取样本失败');
       let rule: ParseRule;
       try {
         rule = await callAIFromClient(extractData.sample, extractData.fileInfo.type, extractData.fileInfo.name);
       } catch (aiError) {
-        // AI失败时使用默认规则
         console.warn('AI分析失败，使用默认规则:', aiError);
         rule = generateFallbackRule(extractData.fileInfo.type, extractData.fileInfo.name);
         showToast('warning', `${item.file.name} AI分析失败，已使用默认规则（可手动编辑）`);
       }
-
       setAnalyzedFiles(prev => prev.map((f, i) => i === index ? {
-        ...f,
-        rule,
-        sample: extractData.sample,
-        fileInfo: extractData.fileInfo,
-        analyzing: false,
+        ...f, rule, sample: extractData.sample, fileInfo: extractData.fileInfo, analyzing: false,
       } : f));
       showToast('success', `${item.file.name} 分析完成`);
     } catch (error) {
       const errorMsg = error instanceof Error ? error.message : '分析失败';
-      setAnalyzedFiles(prev => prev.map((f, i) => i === index ? {
-        ...f,
-        analyzing: false,
-        error: errorMsg,
-      } : f));
+      setAnalyzedFiles(prev => prev.map((f, i) => i === index ? { ...f, analyzing: false, error: errorMsg } : f));
       showToast('error', `${item.file.name} 分析失败: ${errorMsg}`);
     }
   };
 
   // 批量AI分析所有文件
   const handleAnalyzeAll = async () => {
-    if (!apiKey) {
-      showToast('error', '请先配置AI API Key');
-      return;
-    }
+    if (!apiKey) { showToast('error', '请先配置AI API Key'); return; }
     setStep('analyze');
     for (let i = 0; i < analyzedFiles.length; i++) {
-      if (!analyzedFiles[i].rule) {
-        await handleAnalyzeFile(i);
-      }
+      if (!analyzedFiles[i].rule) await handleAnalyzeFile(i);
     }
     setStep('confirm');
   };
@@ -440,18 +340,46 @@ ${sample}
     }
   };
 
-  // 步骤3：用确认后的规则解析所有文件
+  // 保存规则到数据库（规则库）
+  const handleSaveRuleToDB = async (index: number) => {
+    const item = analyzedFiles[index];
+    if (!item?.rule) return;
+    try {
+      const response = await fetch('/api/rules', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          name: item.rule.name,
+          description: item.rule.description || '',
+          fileTypes: item.rule.fileTypes || ['excel'],
+          ruleJson: item.rule,
+          isAiGenerated: true,
+        }),
+      });
+      const data = await response.json();
+      if (data.success) {
+        showToast('success', `规则"${item.rule.name}"已保存到规则库`);
+      } else {
+        showToast('error', data.error || '保存规则失败');
+      }
+    } catch {
+      showToast('error', '保存规则失败');
+    }
+  };
+
+  // 步骤3：用确认后的规则解析所有文件（优先 Web Worker）
   const handleParseAll = async () => {
     const filesWithRules = analyzedFiles.filter(f => f.rule);
     if (filesWithRules.length === 0) {
       showToast('warning', '没有可用的解析规则，请先完成AI分析');
       return;
     }
-
     setParsing(true);
     setProgress(0);
     setOrders([]);
     setSelectedIndices([]);
+    setDuplicateNos([]);
+    setDupStats(null);
 
     try {
       const allOrders: ParsedOrder[] = [];
@@ -461,24 +389,62 @@ ${sample}
         const item = filesWithRules[i];
         setProgress(((i + 0.5) / total) * 100);
 
-        const formData = new FormData();
-        formData.append('file', item.file);
-        formData.append('rule', JSON.stringify(item.rule));
-
-        const response = await fetch('/api/parse', { method: 'POST', body: formData });
-        const data = await response.json();
-
-        if (data.success) {
-          allOrders.push(...data.orders);
-          showToast('success', `${item.file.name} 解析完成，${data.totalRows} 条记录`);
-        } else {
-          showToast('error', `${item.file.name} 解析失败: ${data.error}`);
+        try {
+          // 优先使用 Web Worker（大文件不卡 UI）
+          if (workerSupported && item.file.size > 500 * 1024) {
+            // 大于 500KB 用 Worker
+            showToast('info', `${item.file.name} 使用 Worker 后台解析...`);
+            const result = await parseWithWorker(item.file, item.rule!, (p) => {
+              const fileProgress = ((i + p.percent / 100) / total) * 100;
+              setProgress(fileProgress);
+            });
+            allOrders.push(...result.orders);
+            showToast('success', `${item.file.name} Worker解析完成，${result.totalRows} 条记录`);
+          } else {
+            // 小文件直接用主线程
+            const formData = new FormData();
+            formData.append('file', item.file);
+            formData.append('rule', JSON.stringify(item.rule));
+            const response = await fetch('/api/parse', { method: 'POST', body: formData });
+            const data = await response.json();
+            if (data.success) {
+              allOrders.push(...data.orders);
+              showToast('success', `${item.file.name} 解析完成，${data.totalRows} 条记录`);
+            } else {
+              showToast('error', `${item.file.name} 解析失败: ${data.error}`);
+            }
+          }
+        } catch (fileErr: any) {
+          showToast('error', `${item.file.name} 解析失败: ${fileErr?.message || '未知错误'}`);
         }
 
         setProgress(((i + 1) / total) * 100);
       }
 
       setOrders(allOrders);
+
+      // 解析完成后自动执行重复检测
+      const orderNos = allOrders.map(o => o.orderNo || '').filter(n => n);
+      if (orderNos.length > 0) {
+        try {
+          const dupRes = await fetch('/api/check-duplicates', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ orderNos }),
+          });
+          const dupData = await dupRes.json();
+          if (dupData.success && dupData.duplicates.length > 0) {
+            setDuplicateNos(dupData.duplicates);
+            setDupStats({ batchDupCount: dupData.stats.batchDupCount, dbDupCount: dupData.stats.dbDupCount });
+            showToast('warning', `检测到 ${dupData.duplicates.length} 个重复运单号（批次内: ${dupData.stats.batchDupCount}，数据库已存在: ${dupData.stats.dbDupCount}）`);
+          } else {
+            showToast('success', '✅ 无重复运单号');
+          }
+        } catch {
+          // 重复检测失败不影响主流程
+        }
+      }
+
       setStep('result');
       showToast('success', `全部解析完成，共 ${allOrders.length} 条记录`);
     } catch {
@@ -495,47 +461,31 @@ ${sample}
 
   // 导出Excel
   const handleExport = async () => {
-    if (orders.length === 0) {
-      showToast('warning', '没有可导出的数据');
-      return;
-    }
-
+    if (orders.length === 0) { showToast('warning', '没有可导出的数据'); return; }
     try {
       const exportData = selectedIndices.length > 0
         ? orders.filter((_, i) => selectedIndices.includes(i))
         : filteredOrders;
-
       const response = await fetch('/api/orders/export', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ orders: exportData }),
       });
-
       if (response.ok) {
         const blob = await response.blob();
         const url = URL.createObjectURL(blob);
         const a = document.createElement('a');
-        a.href = url;
-        a.download = `运单数据_${Date.now()}.xlsx`;
-        document.body.appendChild(a);
-        a.click();
-        document.body.removeChild(a);
+        a.href = url; a.download = `运单数据_${Date.now()}.xlsx`;
+        document.body.appendChild(a); a.click(); document.body.removeChild(a);
         URL.revokeObjectURL(url);
         showToast('success', '导出成功');
-      } else {
-        showToast('error', '导出失败');
-      }
-    } catch {
-      showToast('error', '导出失败');
-    }
+      } else { showToast('error', '导出失败'); }
+    } catch { showToast('error', '导出失败'); }
   };
 
   // 删除选中
   const handleDeleteSelected = () => {
-    if (selectedIndices.length === 0) {
-      showToast('warning', '请先选择要删除的记录');
-      return;
-    }
+    if (selectedIndices.length === 0) { showToast('warning', '请先选择要删除的记录'); return; }
     setOrders((prev: ParsedOrder[]) => prev.filter((_, i) => !selectedIndices.includes(i)));
     setSelectedIndices([]);
     showToast('success', `已删除 ${selectedIndices.length} 条记录`);
@@ -561,13 +511,8 @@ ${sample}
 
   // 批量提交
   const handleSubmitOrders = async () => {
-    if (orders.length === 0) {
-      showToast('warning', '没有可提交的数据');
-      return;
-    }
-    const submitData = selectedIndices.length > 0
-      ? orders.filter((_, i) => selectedIndices.includes(i))
-      : filteredOrders;
+    if (orders.length === 0) { showToast('warning', '没有可提交的数据'); return; }
+    const submitData = selectedIndices.length > 0 ? orders.filter((_, i) => selectedIndices.includes(i)) : filteredOrders;
     showToast('info', `准备提交 ${submitData.length} 条运单...`);
     showToast('success', `成功提交 ${submitData.length} 条运单`);
   };
@@ -575,16 +520,10 @@ ${sample}
   // 保存到数据库
   const [saving, setSaving] = useState(false);
   const handleSaveToDB = async () => {
-    if (orders.length === 0) {
-      showToast('warning', '没有可保存的数据');
-      return;
-    }
+    if (orders.length === 0) { showToast('warning', '没有可保存的数据'); return; }
     setSaving(true);
     try {
-      const saveData = selectedIndices.length > 0
-        ? orders.filter((_, i) => selectedIndices.includes(i))
-        : orders;
-
+      const saveData = selectedIndices.length > 0 ? orders.filter((_, i) => selectedIndices.includes(i)) : orders;
       const response = await fetch('/api/import-orders', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -596,32 +535,17 @@ ${sample}
           ruleJson: analyzedFiles[0]?.rule || {},
         }),
       });
-
       const data = await response.json();
-      if (data.success) {
-        showToast('success', `已保存 ${saveData.length} 条运单到数据库`);
-      } else {
-        showToast('error', data.error || '保存失败');
-      }
-    } catch {
-      showToast('error', '保存失败');
-    } finally {
-      setSaving(false);
-    }
+      if (data.success) showToast('success', `已保存 ${saveData.length} 条运单到数据库`);
+      else showToast('error', data.error || '保存失败');
+    } catch { showToast('error', '保存失败'); }
+    finally { setSaving(false); }
   };
 
-  // 返回上传步骤
-  const handleBackToUpload = () => {
-    setStep('upload');
-  };
-
-  // 重新开始
+  const handleBackToUpload = () => setStep('upload');
   const handleRestart = () => {
-    setStep('upload');
-    setAnalyzedFiles([]);
-    setOrders([]);
-    setSelectedIndices([]);
-    setSearchQuery('');
+    setStep('upload'); setAnalyzedFiles([]); setOrders([]); setSelectedIndices([]); setSearchQuery('');
+    setDuplicateNos([]); setDupStats(null);
   };
 
   return (
@@ -647,21 +571,14 @@ ${sample}
               {orders.length > 0 && (
                 <span className="text-sm text-gray-600">
                   已解析 <span className="font-medium text-[#0fc6c2]">{orders.length}</span> 条运单
-                  {useVirtualScroll && (
-                    <span className="ml-2 text-xs bg-blue-100 text-blue-800 px-2 py-0.5 rounded">虚拟滚动</span>
-                  )}
+                  {useVirtualScroll && <span className="ml-2 text-xs bg-blue-100 text-blue-800 px-2 py-0.5 rounded">虚拟滚动</span>}
+                  {workerSupported && <span className="ml-2 text-xs bg-green-100 text-green-800 px-2 py-0.5 rounded">Worker支持</span>}
                 </span>
               )}
-              <button
-                onClick={() => setStep('history')}
-                className="text-sm text-[#0fc6c2] hover:text-[#0aa8a4]"
-              >
-                📋 历史记录
-              </button>
-              {step !== 'upload' && step !== 'history' && (
-                <button onClick={handleRestart} className="text-sm text-gray-500 hover:text-gray-700">
-                  重新开始
-                </button>
+              <button onClick={() => setStep('rules')} className="text-sm text-[#0fc6c2] hover:text-[#0aa8a4]">⚙️ 规则库</button>
+              <button onClick={() => setStep('history')} className="text-sm text-[#0fc6c2] hover:text-[#0aa8a4]">📋 历史记录</button>
+              {step !== 'upload' && step !== 'history' && step !== 'rules' && (
+                <button onClick={handleRestart} className="text-sm text-gray-500 hover:text-gray-700">重新开始</button>
               )}
             </div>
           </div>
@@ -669,30 +586,29 @@ ${sample}
       </header>
 
       {/* 步骤指示器 */}
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-6">
-        <div className="flex items-center justify-center gap-2 mb-6">
-          {[
-            { key: 'upload', label: '上传文件', icon: '📁' },
-            { key: 'analyze', label: 'AI分析', icon: '🤖' },
-            { key: 'confirm', label: '确认规则', icon: '✅' },
-            { key: 'result', label: '解析结果', icon: '📊' },
-          ].map((s, i) => (
-            <div key={s.key} className="flex items-center">
-              <div className={`flex items-center gap-1 px-3 py-1.5 rounded-full text-sm ${
-                step === s.key
-                  ? 'bg-[#0fc6c2] text-white'
-                  : (['upload', 'analyze', 'confirm', 'result'].indexOf(step) > i
-                    ? 'bg-green-100 text-green-700'
-                    : 'bg-gray-100 text-gray-500')
-              }`}>
-                <span>{s.icon}</span>
-                <span>{s.label}</span>
+      {step !== 'history' && step !== 'rules' && (
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-6">
+          <div className="flex items-center justify-center gap-2 mb-6">
+            {[
+              { key: 'upload', label: '上传文件', icon: '📁' },
+              { key: 'analyze', label: 'AI分析', icon: '🤖' },
+              { key: 'confirm', label: '确认规则', icon: '✅' },
+              { key: 'result', label: '解析结果', icon: '📊' },
+            ].map((s, i) => (
+              <div key={s.key} className="flex items-center">
+                <div className={`flex items-center gap-1 px-3 py-1.5 rounded-full text-sm ${
+                  step === s.key ? 'bg-[#0fc6c2] text-white'
+                    : (['upload', 'analyze', 'confirm', 'result'].indexOf(step) > i
+                      ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-500')
+                }`}>
+                  <span>{s.icon}</span><span>{s.label}</span>
+                </div>
+                {i < 3 && <div className="w-8 h-px bg-gray-300 mx-1" />}
               </div>
-              {i < 3 && <div className="w-8 h-px bg-gray-300 mx-1" />}
-            </div>
-          ))}
+            ))}
+          </div>
         </div>
-      </div>
+      )}
 
       {/* 主内容区 */}
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pb-8">
@@ -704,70 +620,23 @@ ${sample}
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
               <div>
                 <label className="block text-xs text-gray-500 mb-1">API地址</label>
-                <input
-                  type="text"
-                  value={apiUrl}
-                  onChange={e => setApiUrl(e.target.value)}
+                <input type="text" value={apiUrl} onChange={e => setApiUrl(e.target.value)}
                   placeholder="https://api.openai.com/v1/chat/completions"
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#0fc6c2]"
-                />
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#0fc6c2]" />
               </div>
               <div>
                 <label className="block text-xs text-gray-500 mb-1">模型名称</label>
-                <select
-                  value={modelName}
-                  onChange={e => {
-                    if (e.target.value === 'custom') {
-                      setModelName('');
-                    } else {
-                      setModelName(e.target.value);
-                    }
-                  }}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#0fc6c2] mb-2"
-                >
-                  <option value="gpt-5.4">gpt-5.4 (当前)</option>
-                  <option value="gpt-4o">gpt-4o</option>
-                  <option value="gpt-4o-mini">gpt-4o-mini</option>
-                  <option value="gpt-4-turbo">gpt-4-turbo</option>
-                  <option value="gpt-4">gpt-4</option>
-                  <option value="gpt-3.5-turbo">gpt-3.5-turbo</option>
-                  <option value="claude-3-5-sonnet-20241022">claude-3.5-sonnet</option>
-                  <option value="claude-3-haiku-20240307">claude-3-haiku</option>
-                  <option value="deepseek-chat">deepseek-chat</option>
-                  <option value="custom">自定义...</option>
-                </select>
-                {(modelName === '' || !['gpt-5.4', 'gpt-4o', 'gpt-4o-mini', 'gpt-4-turbo', 'gpt-4', 'gpt-3.5-turbo', 'claude-3-5-sonnet-20241022', 'claude-3-haiku-20240307', 'deepseek-chat'].includes(modelName)) && (
-                  <input
-                    type="text"
-                    value={modelName}
-                    onChange={e => setModelName(e.target.value)}
-                    placeholder="输入自定义模型名称"
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#0fc6c2]"
-                  />
-                )}
+                <input type="text" value={modelName} onChange={e => setModelName(e.target.value)}
+                  placeholder="例如：gpt-5.4、gpt-4o、deepseek-chat"
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#0fc6c2]" />
               </div>
               <div>
                 <label className="block text-xs text-gray-500 mb-1">API Key</label>
                 <div className="flex gap-2">
-                  <input
-                    type="password"
-                    value={apiKey}
-                    onChange={e => setApiKey(e.target.value)}
-                    placeholder="sk-..."
-                    className="flex-1 px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#0fc6c2]"
-                  />
-                  <button
-                    onClick={saveConfig}
-                    className="px-4 py-2 bg-[#0fc6c2] text-white rounded-lg text-sm hover:bg-[#0aa8a4]"
-                  >
-                    保存
-                  </button>
-                  <button
-                    onClick={resetConfig}
-                    className="px-4 py-2 bg-gray-100 text-gray-600 rounded-lg text-sm hover:bg-gray-200"
-                  >
-                    重置
-                  </button>
+                  <input type="password" value={apiKey} onChange={e => setApiKey(e.target.value)} placeholder="sk-..."
+                    className="flex-1 px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#0fc6c2]" />
+                  <button onClick={saveConfig} className="px-4 py-2 bg-[#0fc6c2] text-white rounded-lg text-sm hover:bg-[#0aa8a4]">保存</button>
+                  <button onClick={resetConfig} className="px-4 py-2 bg-gray-100 text-gray-600 rounded-lg text-sm hover:bg-gray-200">重置</button>
                 </div>
               </div>
             </div>
@@ -779,8 +648,6 @@ ${sample}
         {step === 'upload' && (
           <div className="space-y-6">
             <FileUploader onFilesSelected={handleFilesSelected} />
-
-            {/* 核心理念说明 */}
             <div className="bg-blue-50 rounded-lg p-4">
               <h4 className="font-medium text-blue-900 mb-2">💡 核心设计理念</h4>
               <p className="text-sm text-blue-800">
@@ -788,17 +655,11 @@ ${sample}
                 每种新格式只需"AI分析生成一条规则"即可适配。新增第 5、第 10 种格式时，<strong>系统代码零改动</strong>。
               </p>
             </div>
-
-            <button
-              onClick={handleAnalyzeAll}
-              disabled={analyzedFiles.length === 0 || !apiKey}
-              className="w-full px-6 py-3 bg-[#0fc6c2] text-white rounded-lg font-medium hover:bg-[#0aa8a4] disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-            >
+            <button onClick={handleAnalyzeAll} disabled={analyzedFiles.length === 0 || !apiKey}
+              className="w-full px-6 py-3 bg-[#0fc6c2] text-white rounded-lg font-medium hover:bg-[#0aa8a4] disabled:opacity-50 disabled:cursor-not-allowed transition-colors">
               🤖 开始AI分析 ({analyzedFiles.length} 个文件)
             </button>
-            {!apiKey && (
-              <p className="text-sm text-red-500 text-center">请先配置AI API Key</p>
-            )}
+            {!apiKey && <p className="text-sm text-red-500 text-center">请先配置AI API Key</p>}
           </div>
         )}
 
@@ -811,15 +672,7 @@ ${sample}
               <div className="mt-4 space-y-3">
                 {analyzedFiles.map((item, index) => (
                   <div key={index} className="flex items-center gap-3 p-3 bg-gray-50 rounded-lg">
-                    {item.analyzing ? (
-                      <Loading size="sm" />
-                    ) : item.rule ? (
-                      <span className="text-green-500">✅</span>
-                    ) : item.error ? (
-                      <span className="text-red-500">❌</span>
-                    ) : (
-                      <span className="text-gray-400">⏳</span>
-                    )}
+                    {item.analyzing ? <Loading size="sm" /> : item.rule ? <span className="text-green-500">✅</span> : item.error ? <span className="text-red-500">❌</span> : <span className="text-gray-400">⏳</span>}
                     <span className="text-sm text-gray-700">{item.file.name}</span>
                     {item.rule && <span className="text-xs text-[#0fc6c2]">→ {item.rule.parser.type}</span>}
                     {item.error && <span className="text-xs text-red-500">{item.error}</span>}
@@ -835,10 +688,7 @@ ${sample}
           <div className="space-y-4">
             <div className="bg-white rounded-lg border border-gray-200 p-6">
               <h3 className="text-lg font-medium text-gray-900 mb-2">✅ 确认解析规则</h3>
-              <p className="text-sm text-gray-600 mb-4">
-                AI已分析每个文件的结构并生成解析规则。请检查规则是否正确，可点击"编辑规则"手动调整。
-              </p>
-
+              <p className="text-sm text-gray-600 mb-4">AI已分析每个文件并生成规则。可编辑调整后保存到规则库供复用。</p>
               <div className="space-y-4">
                 {analyzedFiles.map((item, index) => (
                   <div key={index} className="border border-gray-200 rounded-lg p-4">
@@ -846,47 +696,31 @@ ${sample}
                       <div className="flex items-center gap-2">
                         <span className="font-medium text-gray-900">{item.file.name}</span>
                         {item.rule && (
-                          <span className="text-xs bg-[#0fc6c2]/10 text-[#0fc6c2] px-2 py-0.5 rounded">
-                            {item.rule.parser.type}
-                          </span>
+                          <span className="text-xs bg-[#0fc6c2]/10 text-[#0fc6c2] px-2 py-0.5 rounded">{item.rule.parser.type}</span>
                         )}
                       </div>
                       <div className="flex gap-2">
-                        <button
-                          onClick={() => handleAnalyzeFile(index)}
-                          disabled={item.analyzing}
-                          className="text-xs text-[#0fc6c2] hover:text-[#0aa8a4]"
-                        >
-                          重新分析
-                        </button>
+                        <button onClick={() => handleAnalyzeFile(index)} disabled={item.analyzing} className="text-xs text-[#0fc6c2] hover:text-[#0aa8a4]">重新分析</button>
                         {item.rule && (
-                          <button
-                            onClick={() => handleEditRule(index)}
-                            className="text-xs text-blue-500 hover:text-blue-700"
-                          >
-                            编辑规则
-                          </button>
+                          <>
+                            <button onClick={() => handleEditRule(index)} className="text-xs text-blue-500 hover:text-blue-700">编辑规则</button>
+                            <button onClick={() => handleSaveRuleToDB(index)} className="text-xs text-purple-500 hover:text-purple-700">💾 保存到规则库</button>
+                          </>
                         )}
                       </div>
                     </div>
-
                     {item.rule ? (
                       <div className="bg-gray-50 rounded p-3">
                         <div className="flex items-center gap-2 mb-2">
                           <span className="text-sm font-medium">{item.rule.name}</span>
                         </div>
-                        {item.rule.description && (
-                          <p className="text-xs text-gray-600 mb-2">{item.rule.description}</p>
-                        )}
+                        {item.rule.description && <p className="text-xs text-gray-600 mb-2">{item.rule.description}</p>}
                         <div className="text-xs text-gray-500">
-                          解析模式: {item.rule.parser.type} |
-                          字段数: {item.rule.parser.table?.columns?.length || item.rule.parser.matrix?.storeColumns?.length || '-'}
+                          解析模式: {item.rule.parser.type} | 字段数: {item.rule.parser.table?.columns?.length || item.rule.parser.matrix?.storeColumns?.length || '-'}
                         </div>
                       </div>
                     ) : (
-                      <div className="bg-red-50 rounded p-3 text-sm text-red-700">
-                        {item.error || '未能生成规则'}
-                      </div>
+                      <div className="bg-red-50 rounded p-3 text-sm text-red-700">{item.error || '未能生成规则'}</div>
                     )}
                   </div>
                 ))}
@@ -898,49 +732,26 @@ ${sample}
               <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
                 <div className="bg-white rounded-lg p-6 w-full max-w-2xl max-h-[80vh] overflow-auto">
                   <h3 className="text-lg font-medium mb-4">编辑解析规则</h3>
-                  <textarea
-                    value={editingRuleJson}
-                    onChange={e => setEditingRuleJson(e.target.value)}
-                    className="w-full h-96 font-mono text-sm border border-gray-300 rounded-lg p-3 focus:outline-none focus:ring-2 focus:ring-[#0fc6c2]"
-                  />
+                  <textarea value={editingRuleJson} onChange={e => setEditingRuleJson(e.target.value)}
+                    className="w-full h-96 font-mono text-sm border border-gray-300 rounded-lg p-3 focus:outline-none focus:ring-2 focus:ring-[#0fc6c2]" />
                   <div className="flex gap-3 mt-4 justify-end">
-                    <button
-                      onClick={() => setEditingRuleIndex(null)}
-                      className="px-4 py-2 text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200"
-                    >
-                      取消
-                    </button>
-                    <button
-                      onClick={handleSaveRule}
-                      className="px-4 py-2 text-white bg-[#0fc6c2] rounded-lg hover:bg-[#0aa8a4]"
-                    >
-                      保存
-                    </button>
+                    <button onClick={() => setEditingRuleIndex(null)} className="px-4 py-2 text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200">取消</button>
+                    <button onClick={handleSaveRule} className="px-4 py-2 text-white bg-[#0fc6c2] rounded-lg hover:bg-[#0aa8a4]">保存</button>
                   </div>
                 </div>
               </div>
             )}
 
             <div className="flex gap-4">
-              <button
-                onClick={handleBackToUpload}
-                className="px-6 py-3 bg-gray-100 text-gray-700 rounded-lg font-medium hover:bg-gray-200 transition-colors"
-              >
-                ← 返回修改
-              </button>
-              <button
-                onClick={handleParseAll}
-                disabled={parsing || analyzedFiles.every(f => !f.rule)}
-                className="flex-1 px-6 py-3 bg-[#0fc6c2] text-white rounded-lg font-medium hover:bg-[#0aa8a4] disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-              >
+              <button onClick={handleBackToUpload} className="px-6 py-3 bg-gray-100 text-gray-700 rounded-lg font-medium hover:bg-gray-200 transition-colors">← 返回修改</button>
+              <button onClick={handleParseAll} disabled={parsing || analyzedFiles.every(f => !f.rule)}
+                className="flex-1 px-6 py-3 bg-[#0fc6c2] text-white rounded-lg font-medium hover:bg-[#0aa8a4] disabled:opacity-50 disabled:cursor-not-allowed transition-colors">
                 {parsing ? (
                   <div className="flex items-center justify-center gap-2">
                     <Loading size="sm" />
-                    <span>解析中... {Math.round(progress)}%</span>
+                    <span>解析中{workerSupported ? '(Worker)' : ''}... {Math.round(progress)}%</span>
                   </div>
-                ) : (
-                  '确认并开始解析'
-                )}
+                ) : '确认并开始解析'}
               </button>
             </div>
           </div>
@@ -949,60 +760,56 @@ ${sample}
         {/* 步骤4：解析结果 */}
         {step === 'result' && (
           <div className="space-y-4">
+            {/* 重复检测告警 */}
+            {duplicateNos.length > 0 && (
+              <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4">
+                <div className="flex items-start gap-2">
+                  <span className="text-yellow-500 text-xl">⚠️</span>
+                  <div>
+                    <p className="font-medium text-yellow-800">检测到 {duplicateNos.length} 个重复运单号</p>
+                    <p className="text-sm text-yellow-700 mt-1">
+                      批次内重复: {dupStats?.batchDupCount || 0} 个 &nbsp;|&nbsp; 数据库已存在: {dupStats?.dbDupCount || 0} 个
+                    </p>
+                    <p className="text-xs text-yellow-600 mt-1">
+                      重复单号: {duplicateNos.slice(0, 10).join('、')}{duplicateNos.length > 10 ? `...等${duplicateNos.length}个` : ''}
+                    </p>
+                    <p className="text-xs text-yellow-600 mt-1">重复行已用黄色标记，请确认后再提交。</p>
+                  </div>
+                </div>
+              </div>
+            )}
+
             {/* 操作栏 */}
             <div className="bg-white rounded-lg border border-gray-200 p-4">
               <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
                 <div className="flex flex-wrap gap-2">
-                  <button
-                    onClick={handleExport}
-                    disabled={orders.length === 0}
-                    className="px-4 py-2 bg-[#0fc6c2] text-white rounded-lg text-sm font-medium hover:bg-[#0aa8a4] disabled:opacity-50 transition-colors"
-                  >
+                  <button onClick={handleExport} disabled={orders.length === 0}
+                    className="px-4 py-2 bg-[#0fc6c2] text-white rounded-lg text-sm font-medium hover:bg-[#0aa8a4] disabled:opacity-50 transition-colors">
                     📥 导出Excel
                   </button>
-                  <button
-                    onClick={handleDeleteSelected}
-                    disabled={selectedIndices.length === 0}
-                    className="px-4 py-2 bg-red-500 text-white rounded-lg text-sm font-medium hover:bg-red-600 disabled:opacity-50 transition-colors"
-                  >
+                  <button onClick={handleDeleteSelected} disabled={selectedIndices.length === 0}
+                    className="px-4 py-2 bg-red-500 text-white rounded-lg text-sm font-medium hover:bg-red-600 disabled:opacity-50 transition-colors">
                     🗑️ 删除选中 ({selectedIndices.length})
                   </button>
-                  <button
-                    onClick={handleSubmitOrders}
-                    disabled={orders.length === 0}
-                    className="px-4 py-2 bg-green-500 text-white rounded-lg text-sm font-medium hover:bg-green-600 disabled:opacity-50 transition-colors"
-                  >
+                  <button onClick={handleSubmitOrders} disabled={orders.length === 0}
+                    className="px-4 py-2 bg-green-500 text-white rounded-lg text-sm font-medium hover:bg-green-600 disabled:opacity-50 transition-colors">
                     🚀 批量提交下单
                   </button>
-                  <button
-                    onClick={handleSaveToDB}
-                    disabled={orders.length === 0 || saving}
-                    className="px-4 py-2 bg-purple-500 text-white rounded-lg text-sm font-medium hover:bg-purple-600 disabled:opacity-50 transition-colors"
-                  >
+                  <button onClick={handleSaveToDB} disabled={orders.length === 0 || saving}
+                    className="px-4 py-2 bg-purple-500 text-white rounded-lg text-sm font-medium hover:bg-purple-600 disabled:opacity-50 transition-colors">
                     {saving ? '保存中...' : '💾 保存到数据库'}
                   </button>
-                  <button
-                    onClick={handleRestart}
-                    className="px-4 py-2 bg-gray-100 text-gray-700 rounded-lg text-sm font-medium hover:bg-gray-200 transition-colors"
-                  >
-                    📁 继续导入
-                  </button>
+                  <button onClick={handleRestart} className="px-4 py-2 bg-gray-100 text-gray-700 rounded-lg text-sm font-medium hover:bg-gray-200 transition-colors">📁 继续导入</button>
                 </div>
-
                 <div className="flex items-center gap-4">
                   <div className="relative">
-                    <input
-                      type="text"
-                      value={searchQuery}
-                      onChange={e => setSearchQuery(e.target.value)}
+                    <input type="text" value={searchQuery} onChange={e => setSearchQuery(e.target.value)}
                       placeholder="搜索运单号、收货人、电话..."
-                      className="w-64 pl-10 pr-4 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#0fc6c2] focus:border-transparent"
-                    />
+                      className="w-64 pl-10 pr-4 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#0fc6c2] focus:border-transparent" />
                     <svg className="absolute left-3 top-2.5 w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
                     </svg>
                   </div>
-
                   <div className="text-sm text-gray-600">
                     {orders.length > 0 && (
                       <>
@@ -1010,6 +817,9 @@ ${sample}
                         {debouncedSearchQuery && <span className="ml-1">(筛选 {filteredOrders.length} 条)</span>}
                         {orders.filter(o => !o.isValid).length > 0 && (
                           <span className="ml-2 text-red-500">({orders.filter(o => !o.isValid).length} 条有误)</span>
+                        )}
+                        {duplicateNos.length > 0 && (
+                          <span className="ml-2 text-yellow-600">({duplicateNos.length} 重复)</span>
                         )}
                       </>
                     )}
@@ -1028,21 +838,16 @@ ${sample}
               onDelete={handleDeleteOrder}
               useVirtualScroll={useVirtualScroll}
               virtualHeight={600}
+              duplicateNos={duplicateNos}
             />
 
             {/* 分页 */}
             {totalCount > 100 && (
               <div className="bg-white rounded-lg border border-gray-200 p-4 flex justify-between items-center">
-                <div className="text-sm text-gray-600">
-                  显示 {displayedOrders.length} / {totalCount} 条
-                  {totalPages > 1 && <span className="ml-2">(第 {currentPage}/{totalPages} 页)</span>}
-                </div>
+                <div className="text-sm text-gray-600">显示 {displayedOrders.length} / {totalCount} 条{totalPages > 1 && <span className="ml-2">(第 {currentPage}/{totalPages} 页)</span>}</div>
                 <div className="flex gap-2">
-                  <button
-                    onClick={loadMore}
-                    disabled={currentPage >= totalPages || isLoadingMore}
-                    className="px-4 py-2 bg-gray-100 text-gray-700 rounded-lg text-sm hover:bg-gray-200 disabled:opacity-50 transition-colors"
-                  >
+                  <button onClick={loadMore} disabled={currentPage >= totalPages || isLoadingMore}
+                    className="px-4 py-2 bg-gray-100 text-gray-700 rounded-lg text-sm hover:bg-gray-200 disabled:opacity-50 transition-colors">
                     {isLoadingMore ? '加载中...' : '加载更多'}
                   </button>
                   {totalPages > 1 && (
@@ -1050,15 +855,8 @@ ${sample}
                       {Array.from({ length: Math.min(5, totalPages) }, (_, i) => {
                         const page = i + 1;
                         return (
-                          <button
-                            key={page}
-                            onClick={() => goToPage(page)}
-                            className={`w-8 h-8 rounded text-sm ${
-                              currentPage === page
-                                ? 'bg-[#0fc6c2] text-white'
-                                : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-                            }`}
-                          >
+                          <button key={page} onClick={() => goToPage(page)}
+                            className={`w-8 h-8 rounded text-sm ${currentPage === page ? 'bg-[#0fc6c2] text-white' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'}`}>
                             {page}
                           </button>
                         );
@@ -1073,29 +871,280 @@ ${sample}
 
         {/* 历史记录 */}
         {step === 'history' && <HistoryView onBack={() => setStep('upload')} />}
+
+        {/* 规则管理库 */}
+        {step === 'rules' && <RulesManager onBack={() => setStep('upload')} onSelectRule={(rule) => {
+          // 应用规则到第一个未分析的文件
+          const firstUnanalyzed = analyzedFiles.findIndex(f => !f.rule);
+          if (firstUnanalyzed >= 0) {
+            setAnalyzedFiles(prev => prev.map((f, i) => i === firstUnanalyzed ? { ...f, rule } : f));
+            showToast('success', `规则"${rule.name}"已应用到文件`);
+            setStep('confirm');
+          } else {
+            showToast('info', '规则已选择，请先上传文件再应用');
+            setStep('upload');
+          }
+        }} />}
       </main>
     </div>
   );
 }
 
-// 历史记录组件
+// ==================== 规则管理组件 ====================
+function RulesManager({ onBack, onSelectRule }: { onBack: () => void; onSelectRule: (rule: ParseRule) => void }) {
+  const [rules, setRules] = useState<SavedRule[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [editingRule, setEditingRule] = useState<SavedRule | null>(null);
+  const [editJson, setEditJson] = useState('');
+  const [editName, setEditName] = useState('');
+  const [editDesc, setEditDesc] = useState('');
+  const [testingRule, setTestingRule] = useState<SavedRule | null>(null);
+  const [testFile, setTestFile] = useState<File | null>(null);
+  const [testResult, setTestResult] = useState<any>(null);
+  const [testing, setTesting] = useState(false);
+  const [searchText, setSearchText] = useState('');
+
+  useEffect(() => {
+    loadRules();
+  }, []);
+
+  const loadRules = async () => {
+    setLoading(true);
+    try {
+      const res = await fetch('/api/rules');
+      const data = await res.json();
+      if (data.success) {
+        setRules(data.rules.map((r: any) => ({
+          id: r.id, name: r.name, description: r.description,
+          fileTypes: r.fileTypes || r.file_types || ['excel'],
+          ruleJson: r.ruleJson || r.rule_json,
+          isAiGenerated: r.isAiGenerated || r.is_ai_generated,
+          usageCount: r.usageCount || r.usage_count || 0,
+          createdAt: r.createdAt || r.created_at,
+          updatedAt: r.updatedAt || r.updated_at,
+        })));
+      }
+    } catch { showToast('error', '加载规则失败'); }
+    finally { setLoading(false); }
+  };
+
+  const handleDelete = async (id: number) => {
+    if (!confirm('确定要删除此规则吗？')) return;
+    try {
+      await fetch(`/api/rules?id=${id}`, { method: 'DELETE' });
+      setRules(prev => prev.filter(r => r.id !== id));
+      showToast('success', '规则已删除');
+    } catch { showToast('error', '删除失败'); }
+  };
+
+  const handleEditOpen = (rule: SavedRule) => {
+    setEditingRule(rule);
+    setEditName(rule.name);
+    setEditDesc(rule.description || '');
+    setEditJson(JSON.stringify(rule.ruleJson, null, 2));
+  };
+
+  const handleEditSave = async () => {
+    if (!editingRule) return;
+    try {
+      const ruleJson = JSON.parse(editJson);
+      const res = await fetch('/api/rules', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          id: editingRule.id, name: editName, description: editDesc,
+          fileTypes: ruleJson.fileTypes || editingRule.fileTypes, ruleJson,
+        }),
+      });
+      const data = await res.json();
+      if (data.success) {
+        showToast('success', '规则已更新');
+        setEditingRule(null);
+        loadRules();
+      } else { showToast('error', data.error || '更新失败'); }
+    } catch { showToast('error', 'JSON格式错误，请检查'); }
+  };
+
+  // 规则测试
+  const handleTestRule = async () => {
+    if (!testingRule || !testFile) { showToast('warning', '请选择文件'); return; }
+    setTesting(true);
+    setTestResult(null);
+    try {
+      const formData = new FormData();
+      formData.append('file', testFile);
+      formData.append('rule', JSON.stringify(testingRule.ruleJson));
+      const res = await fetch('/api/parse', { method: 'POST', body: formData });
+      const data = await res.json();
+      setTestResult(data);
+      if (data.success) showToast('success', `测试完成，解析出 ${data.totalRows} 条数据`);
+      else showToast('error', `测试失败: ${data.error}`);
+    } catch (e: any) { showToast('error', e.message); }
+    finally { setTesting(false); }
+  };
+
+  const filtered = rules.filter(r =>
+    !searchText || r.name.includes(searchText) || (r.description || '').includes(searchText)
+  );
+
+  return (
+    <div className="space-y-4">
+      {/* 标题栏 */}
+      <div className="bg-white rounded-lg border border-gray-200 p-4 flex items-center justify-between">
+        <div className="flex items-center gap-3">
+          <button onClick={onBack} className="text-sm text-[#0fc6c2] hover:text-[#0aa8a4]">← 返回</button>
+          <h3 className="text-lg font-medium text-gray-900">⚙️ 规则库管理</h3>
+          <span className="text-sm text-gray-500">({rules.length} 条规则)</span>
+        </div>
+        <input type="text" value={searchText} onChange={e => setSearchText(e.target.value)}
+          placeholder="搜索规则名称/描述..." className="w-56 px-3 py-1.5 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#0fc6c2]" />
+      </div>
+
+      {loading ? (
+        <div className="bg-white rounded-lg border border-gray-200 p-8 text-center"><Loading size="md" /><p className="mt-4 text-gray-500">加载规则库...</p></div>
+      ) : filtered.length === 0 ? (
+        <div className="bg-white rounded-lg border border-gray-200 p-8 text-center text-gray-500">
+          <p className="text-4xl mb-3">📭</p>
+          <p>暂无保存的规则</p>
+          <p className="text-sm mt-1">在"确认规则"步骤中点击"保存到规则库"来保存AI生成的规则</p>
+        </div>
+      ) : (
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          {filtered.map(rule => (
+            <div key={rule.id} className="bg-white rounded-lg border border-gray-200 p-4">
+              <div className="flex items-start justify-between mb-2">
+                <div className="flex-1">
+                  <div className="flex items-center gap-2">
+                    <span className="font-medium text-gray-900">{rule.name}</span>
+                    {rule.isAiGenerated && <span className="text-xs bg-blue-100 text-blue-600 px-1.5 py-0.5 rounded">AI生成</span>}
+                  </div>
+                  <p className="text-xs text-gray-500 mt-0.5">{rule.description || '无描述'}</p>
+                </div>
+                <div className="flex gap-1 ml-2">
+                  <button onClick={() => handleEditOpen(rule)} className="text-xs text-blue-500 hover:text-blue-700 px-2 py-1 rounded hover:bg-blue-50">编辑</button>
+                  <button onClick={() => { setTestingRule(rule); setTestFile(null); setTestResult(null); }} className="text-xs text-green-500 hover:text-green-700 px-2 py-1 rounded hover:bg-green-50">测试</button>
+                  <button onClick={() => onSelectRule(rule.ruleJson)} className="text-xs text-[#0fc6c2] hover:text-[#0aa8a4] px-2 py-1 rounded hover:bg-[#0fc6c2]/10">应用</button>
+                  <button onClick={() => handleDelete(rule.id)} className="text-xs text-red-400 hover:text-red-600 px-2 py-1 rounded hover:bg-red-50">删除</button>
+                </div>
+              </div>
+              <div className="flex items-center gap-3 text-xs text-gray-400 mt-2">
+                <span className="bg-gray-100 px-2 py-0.5 rounded">{Array.isArray(rule.ruleJson?.parser?.type) ? rule.ruleJson.parser.type : (rule.ruleJson?.parser?.type || '未知')}</span>
+                <span>{(rule.fileTypes || []).join('/')}</span>
+                <span>使用 {rule.usageCount} 次</span>
+                <span>{new Date(rule.updatedAt).toLocaleDateString('zh-CN')}</span>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* 规则编辑弹窗 */}
+      {editingRule && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-lg p-6 w-full max-w-2xl max-h-[85vh] overflow-auto">
+            <h3 className="text-lg font-medium mb-4">编辑规则</h3>
+            <div className="space-y-3 mb-4">
+              <div>
+                <label className="block text-xs text-gray-500 mb-1">规则名称</label>
+                <input type="text" value={editName} onChange={e => setEditName(e.target.value)}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#0fc6c2]" />
+              </div>
+              <div>
+                <label className="block text-xs text-gray-500 mb-1">描述</label>
+                <input type="text" value={editDesc} onChange={e => setEditDesc(e.target.value)}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#0fc6c2]" />
+              </div>
+              <div>
+                <label className="block text-xs text-gray-500 mb-1">规则JSON</label>
+                <textarea value={editJson} onChange={e => setEditJson(e.target.value)}
+                  className="w-full h-72 font-mono text-sm border border-gray-300 rounded-lg p-3 focus:outline-none focus:ring-2 focus:ring-[#0fc6c2]" />
+              </div>
+            </div>
+            <div className="flex gap-3 justify-end">
+              <button onClick={() => setEditingRule(null)} className="px-4 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200">取消</button>
+              <button onClick={handleEditSave} className="px-4 py-2 bg-[#0fc6c2] text-white rounded-lg hover:bg-[#0aa8a4]">保存</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 规则测试弹窗 */}
+      {testingRule && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-lg p-6 w-full max-w-2xl max-h-[85vh] overflow-auto">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-lg font-medium">🧪 规则测试 - {testingRule.name}</h3>
+              <button onClick={() => setTestingRule(null)} className="text-gray-400 hover:text-gray-600">✕</button>
+            </div>
+            <div className="mb-4">
+              <label className="block text-sm font-medium text-gray-700 mb-2">选择测试文件</label>
+              <input type="file" accept=".xlsx,.xls,.csv,.pdf,.docx,.doc"
+                onChange={e => { setTestFile(e.target.files?.[0] || null); setTestResult(null); }}
+                className="block w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-sm file:font-medium file:bg-[#0fc6c2]/10 file:text-[#0fc6c2] hover:file:bg-[#0fc6c2]/20" />
+              {testFile && <p className="text-xs text-gray-500 mt-1">已选择: {testFile.name} ({(testFile.size / 1024).toFixed(1)} KB)</p>}
+            </div>
+            <button onClick={handleTestRule} disabled={!testFile || testing}
+              className="w-full py-2 bg-[#0fc6c2] text-white rounded-lg hover:bg-[#0aa8a4] disabled:opacity-50 mb-4">
+              {testing ? <span className="flex items-center justify-center gap-2"><Loading size="sm" /> 测试中...</span> : '🚀 开始测试'}
+            </button>
+
+            {testResult && (
+              <div className={`rounded-lg p-4 ${testResult.success ? 'bg-green-50 border border-green-200' : 'bg-red-50 border border-red-200'}`}>
+                {testResult.success ? (
+                  <>
+                    <p className="font-medium text-green-800 mb-2">✅ 测试成功，解析 {testResult.totalRows} 条数据</p>
+                    <div className="overflow-x-auto max-h-48">
+                      <table className="w-full text-xs">
+                        <thead className="bg-green-100">
+                          <tr>
+                            <th className="px-2 py-1 text-left">运单号</th>
+                            <th className="px-2 py-1 text-left">收货人</th>
+                            <th className="px-2 py-1 text-left">电话</th>
+                            <th className="px-2 py-1 text-left">商品</th>
+                            <th className="px-2 py-1 text-left">数量</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {testResult.orders?.slice(0, 5).map((o: any, i: number) => (
+                            <tr key={i} className="border-t border-green-100">
+                              <td className="px-2 py-1">{o.orderNo || '-'}</td>
+                              <td className="px-2 py-1">{o.receiverName || '-'}</td>
+                              <td className="px-2 py-1">{o.receiverPhone || '-'}</td>
+                              <td className="px-2 py-1">{o.itemName || '-'}</td>
+                              <td className="px-2 py-1">{o.quantity ?? '-'}</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                      {testResult.totalRows > 5 && <p className="text-xs text-green-600 mt-1 text-center">仅显示前5条，共 {testResult.totalRows} 条</p>}
+                    </div>
+                  </>
+                ) : (
+                  <p className="text-red-700">❌ 测试失败: {testResult.error}</p>
+                )}
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ==================== 历史记录组件 ====================
 function HistoryView({ onBack }: { onBack: () => void }) {
   const [batches, setBatches] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [selectedBatch, setSelectedBatch] = useState<number | null>(null);
   const [batchOrders, setBatchOrders] = useState<any[]>([]);
 
-  // 加载批次列表
   useState(() => {
     fetch('/api/import-orders?action=batches')
       .then(res => res.json())
-      .then(data => {
-        if (data.success) setBatches(data.batches);
-      })
+      .then(data => { if (data.success) setBatches(data.batches); })
       .finally(() => setLoading(false));
   });
 
-  // 加载批次运单
   const loadBatchOrders = async (batchId: number) => {
     setSelectedBatch(batchId);
     const res = await fetch(`/api/import-orders?batchId=${batchId}&pageSize=100`);
@@ -1106,8 +1155,7 @@ function HistoryView({ onBack }: { onBack: () => void }) {
   if (loading) {
     return (
       <div className="bg-white rounded-lg border border-gray-200 p-8 text-center">
-        <Loading size="md" />
-        <p className="mt-4 text-gray-500">加载历史记录...</p>
+        <Loading size="md" /><p className="mt-4 text-gray-500">加载历史记录...</p>
       </div>
     );
   }
@@ -1117,51 +1165,34 @@ function HistoryView({ onBack }: { onBack: () => void }) {
       <div className="bg-white rounded-lg border border-gray-200 p-4">
         <div className="flex items-center justify-between mb-4">
           <h3 className="text-lg font-medium text-gray-900">📋 历史导入记录</h3>
-          <button onClick={onBack} className="text-sm text-[#0fc6c2] hover:text-[#0aa8a4]">
-            ← 返回上传
-          </button>
+          <button onClick={onBack} className="text-sm text-[#0fc6c2] hover:text-[#0aa8a4]">← 返回上传</button>
         </div>
-
         {batches.length === 0 ? (
           <p className="text-gray-500 text-center py-8">暂无导入记录</p>
         ) : (
           <div className="space-y-3">
             {batches.map((batch: any) => (
-              <div
-                key={batch.id}
-                className={`border rounded-lg p-4 cursor-pointer transition-all ${
-                  selectedBatch === batch.id
-                    ? 'border-[#0fc6c2] bg-[#0fc6c2]/5'
-                    : 'border-gray-200 hover:border-gray-300'
-                }`}
-                onClick={() => loadBatchOrders(batch.id)}
-              >
+              <div key={batch.id}
+                className={`border rounded-lg p-4 cursor-pointer transition-all ${selectedBatch === batch.id ? 'border-[#0fc6c2] bg-[#0fc6c2]/5' : 'border-gray-200 hover:border-gray-300'}`}
+                onClick={() => loadBatchOrders(batch.id)}>
                 <div className="flex items-center justify-between">
                   <div>
                     <span className="font-medium text-gray-900">{batch.file_name}</span>
-                    <span className="ml-2 text-xs bg-gray-100 text-gray-600 px-2 py-0.5 rounded">
-                      {batch.file_type}
-                    </span>
+                    <span className="ml-2 text-xs bg-gray-100 text-gray-600 px-2 py-0.5 rounded">{batch.file_type}</span>
                   </div>
-                  <span className="text-xs text-gray-500">
-                    {new Date(batch.created_at).toLocaleString('zh-CN')}
-                  </span>
+                  <span className="text-xs text-gray-500">{new Date(batch.created_at).toLocaleString('zh-CN')}</span>
                 </div>
                 <div className="mt-2 flex gap-4 text-sm text-gray-600">
                   <span>共 {batch.total_rows} 条</span>
                   <span className="text-green-600">✓ {batch.success_rows} 条</span>
                   {batch.error_rows > 0 && <span className="text-red-600">✗ {batch.error_rows} 条</span>}
                 </div>
-                {batch.rule_name && (
-                  <div className="mt-1 text-xs text-gray-500">规则: {batch.rule_name}</div>
-                )}
+                {batch.rule_name && <div className="mt-1 text-xs text-gray-500">规则: {batch.rule_name}</div>}
               </div>
             ))}
           </div>
         )}
       </div>
-
-      {/* 批次运单详情 */}
       {selectedBatch && batchOrders.length > 0 && (
         <div className="bg-white rounded-lg border border-gray-200 p-4">
           <h4 className="font-medium text-gray-900 mb-3">批次 #{selectedBatch} 运单详情</h4>
