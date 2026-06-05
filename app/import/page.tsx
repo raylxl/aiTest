@@ -191,19 +191,34 @@ ${sample}
         { role: 'user', content: userMessage }
       ],
       temperature: 0.3,
-      max_tokens: 4096,
+      max_tokens: 2048,
       stream: false,
     };
-    console.log('请求体:', JSON.stringify(requestBody).substring(0, 500));
+    console.log('请求体大小:', JSON.stringify(requestBody).length, '字符');
     
-    const response = await fetch(fullApiUrl, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${apiKey}`,
-      },
-      body: JSON.stringify(requestBody),
-    });
+    // 使用AbortController实现超时
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 60000); // 60秒超时
+    
+    let response: Response;
+    try {
+      response = await fetch(fullApiUrl, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${apiKey}`,
+        },
+        body: JSON.stringify(requestBody),
+        signal: controller.signal,
+      });
+      clearTimeout(timeoutId);
+    } catch (fetchError: any) {
+      clearTimeout(timeoutId);
+      if (fetchError.name === 'AbortError') {
+        throw new Error('API请求超时（60秒），请检查网络连接或稍后重试');
+      }
+      throw new Error(`网络请求失败: ${fetchError.message}`);
+    }
 
     if (!response.ok) {
       const errorText = await response.text();
