@@ -206,6 +206,127 @@ const AI_SYSTEM_PROMPT = `你是文件解析规则生成专家。目标不是为
 3. 如果样本不足，可保守输出通用规则，但字段要明确标注 low confidence
 4. 严禁输出伪代码、注释、Markdown 代码块，只能输出 JSON`;
 
+interface SamplePreviewTableRow {
+  rowLabel: string;
+  cells: string[];
+}
+
+interface SamplePreviewData {
+  mode: 'empty' | 'table' | 'text';
+  columns: string[];
+  rows: SamplePreviewTableRow[];
+  text: string;
+  rowCount: number;
+  headerRowLabel?: string;
+  usesFirstRowAsHeader?: boolean;
+}
+
+function isLikelyHeaderRow(cells: string[]): boolean {
+  const normalized = cells.map(cell => cell.trim()).filter(Boolean);
+  if (!normalized.length) return false;
+
+  const uniqueCount = new Set(normalized).size;
+  const textLikeCount = normalized.filter(cell => /[\u4e00-\u9fa5a-zA-Z]/.test(cell)).length;
+  const numericLikeCount = normalized.filter(cell => /^[-+]?\d+(?:\.\d+)?$/.test(cell)).length;
+
+  return uniqueCount === normalized.length && textLikeCount >= Math.max(1, Math.ceil(normalized.length * 0.6)) && numericLikeCount < normalized.length;
+}
+
+function buildTablePreview(rows: SamplePreviewTableRow[], sample: string): SamplePreviewData {
+  if (!rows.length || rows.every(row => row.cells.length <= 1)) return {
+    mode: 'text',
+    columns: [],
+    rows: [],
+    text: sample,
+    rowCount: sample.split(/\r?\n/).filter(Boolean).length,
+  };
+
+  const maxCols = Math.max(...rows.map(row => row.cells.length));
+  const normalizedRows = rows.map(row => ({
+    rowLabel: row.rowLabel,
+    cells: Array.from({ length: maxCols }, (_, index) => row.cells[index] ?? ''),
+  }));
+
+  const firstRow = normalizedRows[0];
+  const useFirstRowAsHeader = firstRow ? isLikelyHeaderRow(firstRow.cells) : false;
+  const columns = useFirstRowAsHeader
+    ? firstRow.cells.map((cell, index) => cell || `列${index + 1}`)
+    : Array.from({ length: maxCols }, (_, index) => `列${index + 1}`);
+  const bodyRows = useFirstRowAsHeader ? normalizedRows.slice(1) : normalizedRows;
+
+  return {
+    mode: 'table',
+    columns,
+    rows: bodyRows,
+    text: sample,
+    rowCount: bodyRows.length,
+    headerRowLabel: useFirstRowAsHeader ? firstRow.rowLabel : undefined,
+    usesFirstRowAsHeader: useFirstRowAsHeader,
+  };
+}
+
+function detectDelimitedRows(sample: string, fileType?: string): SamplePreviewData | null {
+  const lines = sample
+    .split(/\r?\n/)
+    .map(line => line.trim())
+    .filter(Boolean);
+
+  if (lines.length === 0) return null;
+
+  if (fileType === 'excel') {
+    const rows = lines.map((line, index) => {
+      const match = line.match(/^\[(\d+)\]\s*(.*)$/);
+      const rowLabel = match ? `第 ${Number(match[1]) + 1} 行` : `第 ${index + 1} 行`;
+      const content = match ? match[2] : line;
+      const cells = content.split('|').map(cell => cell.trim());
+      return { rowLabel, cells };
+    }).filter(row => row.cells.some(cell => cell.length > 0));
+
+    if (!rows.length || rows.every(row => row.cells.length <= 1)) return null;
+    return buildTablePreview(rows, sample);
+  }
+
+  const firstLine = lines[0] || '';
+  const delimiterCandidates = [',', '\t', ';'] as const;
+  const detectedDelimiter = delimiterCandidates.find(delimiter => firstLine.includes(delimiter));
+
+  if (fileType === 'csv' && detectedDelimiter) {
+    const rows = lines.map((line, index) => ({
+      rowLabel: `第 ${index + 1} 行`,
+      cells: line.split(detectedDelimiter).map(cell => cell.trim()),
+    })).filter(row => row.cells.some(cell => cell.length > 0));
+
+    if (!rows.length || rows.every(row => row.cells.length <= 1)) return null;
+    return buildTablePreview(rows, sample);
+  }
+
+  return null;
+}
+
+function buildSamplePreview(sample: string, fileType?: string): SamplePreviewData {
+  if (!sample.trim()) {
+    return {
+      mode: 'empty',
+      columns: [],
+      rows: [],
+      text: '',
+      rowCount: 0,
+    };
+  }
+
+  const tablePreview = detectDelimitedRows(sample, fileType);
+  if (tablePreview) return tablePreview;
+
+  const textLines = sample.split(/\r?\n/).filter(Boolean);
+  return {
+    mode: 'text',
+    columns: [],
+    rows: [],
+    text: sample,
+    rowCount: textLines.length,
+  };
+}
+
 export default function ImportPage() {
   const [step, setStep] = useState<StepType>('upload');
   const [showMobileMenu, setShowMobileMenu] = useState(false);
@@ -1138,12 +1259,28 @@ export default function ImportPage() {
                       if (!item.fileInfo.type) return true;
                       return (rule.fileTypes || []).includes(item.fileInfo.type as any);
                     });
+                    const samplePreview = buildSamplePreview(item.sample, item.fileInfo.type);
                     return (
-                      <div key={`${item.file.name}-${index}`} className="border border-gray-200 rounded-lg p-4 bg-gray-50">
+                      <div key={`${item.file.name}-${index}`} className="border border-gray-200 rounded-xl p-4 bg-gradient-to-br from-gray-50 to-white shadow-sm">
                         <div className="flex items-start justify-between gap-3 flex-wrap">
-                          <div>
-                            <div className="font-medium text-gray-900">{item.file.name}</div>
-                            <div className="text-xs text-gray-500 mt-1">
+                          <div className="min-w-0">
+                            <div className="font-medium text-gray-900 break-all">{item.file.name}</div>
+                            <div className="mt-2 flex flex-wrap items-center gap-2 text-[11px] text-gray-500">
+                              <span className="inline-flex items-center rounded-full bg-white px-2 py-0.5 border border-gray-200">
+                                类型：{item.fileInfo.type || '待识别'}
+                              </span>
+                              {item.fileInfo.sheets.length > 0 && (
+                                <span className="inline-flex items-center rounded-full bg-white px-2 py-0.5 border border-gray-200">
+                                  Sheet：{item.fileInfo.sheets.length} 个
+                                </span>
+                              )}
+                              {samplePreview.mode !== 'empty' && (
+                                <span className="inline-flex items-center rounded-full bg-white px-2 py-0.5 border border-gray-200">
+                                  样例：{samplePreview.mode === 'table' ? `${samplePreview.rowCount} 行表格` : `${samplePreview.rowCount} 行文本`}
+                                </span>
+                              )}
+                            </div>
+                            <div className="text-xs text-gray-500 mt-2">
                               当前规则：{item.rule?.name || '未选择'}
                               {item.ruleOrigin === 'saved' && ' · 来自规则库'}
                               {item.ruleOrigin === 'ai' && ' · AI推荐'}
@@ -1154,29 +1291,32 @@ export default function ImportPage() {
                             <button
                               onClick={() => handleAnalyzeFile(index)}
                               disabled={item.analyzing || !apiKey}
-                              className="px-3 py-1.5 text-xs bg-[#0fc6c2] text-white rounded-lg hover:bg-[#0aa8a4] disabled:opacity-50"
+                              className="inline-flex items-center gap-1 px-3.5 py-2 text-xs font-medium bg-[#0fc6c2] text-white rounded-lg hover:bg-[#0aa8a4] disabled:opacity-50 disabled:cursor-not-allowed shadow-sm"
                             >
-                              {item.analyzing ? '分析中...' : 'AI生成推荐规则'}
+                              <span>{item.analyzing ? '分析中...' : 'AI生成推荐规则'}</span>
                             </button>
                             <button
                               onClick={() => handleCreateBlankRuleForFile(index)}
-                              className="px-3 py-1.5 text-xs bg-white border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-100"
+                              className="inline-flex items-center gap-1 px-3.5 py-2 text-xs font-medium bg-white border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-100"
                             >
                               新建规则
                             </button>
                             {item.rule && (
                               <button
                                 onClick={() => handleEditRule(index)}
-                                className="px-3 py-1.5 text-xs bg-white border border-blue-200 text-blue-600 rounded-lg hover:bg-blue-50"
+                                className="inline-flex items-center gap-1 px-3.5 py-2 text-xs font-medium bg-white border border-blue-200 text-blue-600 rounded-lg hover:bg-blue-50"
                               >
                                 编辑 / 测试 / 保存
                               </button>
                             )}
                           </div>
                         </div>
-                        <div className="mt-3 grid grid-cols-1 lg:grid-cols-[minmax(0,260px),1fr] gap-3">
-                          <div>
-                            <label className="block text-xs text-gray-500 mb-1">手动选择规则</label>
+                        <div className="mt-3 grid grid-cols-1 xl:grid-cols-[minmax(0,320px),1fr] gap-4">
+                          <div className="rounded-xl border border-gray-200 bg-white p-3">
+                            <div className="flex items-center justify-between gap-2 mb-2">
+                              <label className="block text-xs font-medium text-gray-600">手动选择规则</label>
+                              <span className="text-[11px] text-gray-400">仅手动生效</span>
+                            </div>
                             <select
                               value={item.selectedRuleId ?? ''}
                               onChange={(e) => {
@@ -1184,20 +1324,79 @@ export default function ImportPage() {
                                 if (!value) return;
                                 handleApplySavedRule(index, Number(value));
                               }}
-                              className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#0fc6c2]"
+                              className="w-full px-3 py-2.5 border border-gray-300 rounded-lg text-sm bg-gray-50 focus:bg-white focus:outline-none focus:ring-2 focus:ring-[#0fc6c2]"
                             >
                               <option value="">请选择规则（不自动匹配）</option>
                               {matchedRules.map(rule => (
                                 <option key={rule.id} value={rule.id}>{rule.name}</option>
                               ))}
                             </select>
-                            <p className="mt-1 text-xs text-gray-400">上传时不会自动套规则，必须由你明确选择或先做 AI 分析。</p>
+                            <p className="mt-2 text-xs leading-5 text-gray-400">上传时不会自动套规则，必须由你明确选择，或先通过 AI 生成推荐规则后再确认。</p>
                           </div>
-                          <div>
-                            <label className="block text-xs text-gray-500 mb-1">文件样例预览</label>
-                            <div className="min-h-[112px] max-h-44 overflow-auto rounded-lg border border-gray-200 bg-white p-3 font-mono text-xs text-gray-700 whitespace-pre-wrap">
-                              {item.sample || '点击“AI生成推荐规则”后，可先查看当前文件提取出的样例内容。'}
+                          <div className="rounded-xl border border-gray-200 bg-white p-3">
+                            <div className="flex items-center justify-between gap-2 mb-2">
+                              <div>
+                                <label className="block text-xs font-medium text-gray-600">文件样例预览</label>
+                                <p className="mt-1 text-[11px] text-gray-400">AI 抽取的样例内容优先按表格展示，便于快速确认列结构。</p>
+                              </div>
+                              <div className="flex items-center gap-2 flex-wrap justify-end">
+                                {samplePreview.usesFirstRowAsHeader && samplePreview.headerRowLabel && (
+                                  <span className="text-[11px] text-amber-700 bg-amber-50 border border-amber-200 px-2 py-1 rounded-full">
+                                    已将 {samplePreview.headerRowLabel} 识别为表头
+                                  </span>
+                                )}
+                                {samplePreview.mode === 'table' && (
+                                  <span className="text-[11px] text-[#0fc6c2] bg-[#0fc6c2]/10 px-2 py-1 rounded-full">表格视图</span>
+                                )}
+                              </div>
                             </div>
+
+                            {samplePreview.mode === 'empty' && (
+                              <div className="min-h-[156px] rounded-lg border border-dashed border-gray-200 bg-gray-50 flex items-center justify-center px-4 text-center text-xs text-gray-400">
+                                点击“AI生成推荐规则”后，可先查看当前文件提取出的样例内容。
+                              </div>
+                            )}
+
+                            {samplePreview.mode === 'table' && (
+                              <div className="rounded-lg border border-gray-200 overflow-hidden">
+                                <div className="flex items-center justify-between gap-2 px-3 py-2 bg-gray-50 border-b border-gray-200 text-[11px] text-gray-500">
+                                  <span>共 {samplePreview.rowCount} 行可预览数据</span>
+                                  <span>支持横向滚动查看全部列</span>
+                                </div>
+                                <div className="max-h-56 overflow-auto">
+                                  <table className="min-w-full text-xs text-gray-700 table-fixed">
+                                    <thead className="sticky top-0 z-10 bg-gray-50">
+                                      <tr>
+                                        <th className="w-20 px-3 py-2 text-left font-medium text-gray-500 border-b border-r border-gray-200">行号</th>
+                                        {samplePreview.columns.map((column, colIndex) => (
+                                          <th key={`${item.file.name}-sample-head-${colIndex}`} className="min-w-[140px] px-3 py-2 text-left font-medium text-gray-600 border-b border-gray-200 whitespace-nowrap">
+                                            <div className="truncate" title={column}>{column}</div>
+                                          </th>
+                                        ))}
+                                      </tr>
+                                    </thead>
+                                    <tbody>
+                                      {samplePreview.rows.map((row, rowIndex) => (
+                                        <tr key={`${item.file.name}-sample-row-${rowIndex}`} className={rowIndex % 2 === 0 ? 'bg-white' : 'bg-gray-50/60'}>
+                                          <td className="px-3 py-2 align-top text-gray-400 border-b border-r border-gray-100 whitespace-nowrap">{row.rowLabel}</td>
+                                          {row.cells.map((cell, cellIndex) => (
+                                            <td key={`${item.file.name}-sample-cell-${rowIndex}-${cellIndex}`} className="px-3 py-2 align-top border-b border-gray-100 break-all whitespace-pre-wrap">
+                                              {cell || <span className="text-gray-300">—</span>}
+                                            </td>
+                                          ))}
+                                        </tr>
+                                      ))}
+                                    </tbody>
+                                  </table>
+                                </div>
+                              </div>
+                            )}
+
+                            {samplePreview.mode === 'text' && (
+                              <div className="min-h-[156px] max-h-56 overflow-auto rounded-lg border border-gray-200 bg-gray-50 p-3 font-mono text-xs leading-5 text-gray-700 whitespace-pre-wrap">
+                                {samplePreview.text}
+                              </div>
+                            )}
                           </div>
                         </div>
                         {item.error && <div className="mt-2 text-xs text-red-500">{item.error}</div>}
