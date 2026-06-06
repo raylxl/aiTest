@@ -129,8 +129,8 @@ export async function POST(request: NextRequest) {
     }
 
     const result = await sql`
-      INSERT INTO parse_rules (name, description, file_types, rule_json, is_ai_generated)
-      VALUES (${name}, ${description || ''}, ${fileTypes || ['excel']}, ${JSON.stringify(ruleData)}::jsonb, ${isAiGenerated || false})
+      INSERT INTO parse_rules (name, description, file_types, rule_json, is_ai_generated, is_active)
+      VALUES (${name}, ${description || ''}, ${fileTypes || ['excel']}, ${JSON.stringify(ruleData)}::jsonb, ${isAiGenerated || false}, TRUE)
       RETURNING *
     `;
 
