@@ -324,6 +324,8 @@ export default function ImportPage() {
 
   const stepCanJump = useCallback((target: StepType) => {
     if (target === 'upload') return true;
+    if (target === 'rules') return true;
+    if (target === 'history') return true;
     if (target === 'analyze') return canEnterAnalyze && !parsing;
     if (target === 'confirm') return canEnterConfirm && !parsing;
     if (target === 'result') return canEnterResult && !parsing;
