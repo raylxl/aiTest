@@ -4,74 +4,174 @@ import https from 'https';
 
 const DEEPSEEK_API_URL = 'https://api.siliconflow.cn/v1/chat/completions';
 
-const SYSTEM_PROMPT = `你是一个文件解析规则生成专家。你的任务是根据用户提供的文件样本，生成JSON格式的解析规则。
+const SYSTEM_PROMPT = `你是文件解析规则生成专家。目标不是为某个样例写死逻辑，而是输出一条可复用的通用解析规则 JSON。
 
-## 规则类型说明
+## 基本原则
+1. 只输出 JSON，不要输出解释文字
+2. 规则必须描述“结构”，不能写业务代码
+3. 用户会手动选择规则，不做自动匹配；你输出的是“推荐规则”
+4. 对不确定映射必须标注 confidence 和 reason；可额外标注 inferred: true
 
-1. **table** - 标准表格格式：有明确的表头行和数据行
-2. **matrix** - 矩阵格式：SKU×门店矩阵，需要转置
-3. **card** - 卡片格式：多个独立卡片堆叠
-4. **text** - 纯文本格式：无表格，用正则提取
-5. **multi-sheet** - 多Sheet格式：Excel有多个Sheet
-6. **multi-page** - 多页格式：PDF有多个独立单元
-
-## 输出格式
-
-请输出严格的JSON格式，结构如下：
-
-\`\`\`json
+## 规则顶层结构
 {
   "name": "规则名称",
-  "description": "规则描述",
-  "fileTypes": ["excel"],
+  "description": "规则说明",
+  "fileTypes": ["excel|pdf|word|csv"],
   "identifier": {
-    "fileNamePattern": "文件名正则",
-    "headerKeywords": ["关键词1", "关键词2"]
+    "fileNamePattern": "可选，正则",
+    "headerKeywords": ["可选关键词"],
+    "sheetCount": 1,
+    "minRows": 1,
+    "minCols": 1
   },
-  "parser": {
-    "type": "table|matrix|card|text|multi-sheet",
-    "table": {
-      "headerRow": 0,
-      "dataStartRow": 1,
+  "parser": { ... },
+  "recipient": { ... }
+}
+
+## parser.type 可选值
+- table: 标准表格
+- matrix: SKU × 门店矩阵
+- double-matrix: 门店 × 日期，单元格内再拆物品×数量
+- card: 卡片/单据块堆叠
+- text: 纯文本 / 正则提取
+- multi-sheet: 多 Sheet 合并
+- multi-page: 多页 PDF / 多单拆分
+
+## 各类型 DSL
+1. table
+{
+  "type": "table",
+  "table": {
+    "headerRow": 0,
+    "dataStartRow": 1,
+    "dataEndRow": "auto",
+    "skipRows": [],
+    "columns": [
+      {
+        "sourceIndex": 0,
+        "targetField": "orderNo",
+        "dataType": "string",
+        "transform": "trim",
+        "confidence": "high|medium|low",
+        "reason": "推断依据",
+        "inferred": false
+      }
+    ]
+  }
+}
+
+2. matrix
+{
+  "type": "matrix",
+  "matrix": {
+    "headerRow": 0,
+    "skuColumn": 1,
+    "skuCodeColumn": 0,
+    "storeColumns": [
+      { "index": 2, "storeName": "门店A" }
+    ]
+  }
+}
+
+3. double-matrix
+{
+  "type": "double-matrix",
+  "matrix": {
+    "headerRow": 0,
+    "firstColumnIsStore": true,
+    "storeColumnIndex": 0,
+    "dataStartColumn": 1,
+    "itemPattern": "(.+?)\\\\s*[xX×]\\\\s*(\\\\d+)"
+  }
+}
+
+4. card
+{
+  "type": "card",
+  "card": {
+    "cardStartPattern": "卡片起始正则",
+    "cardEndPattern": "可选，卡片结束正则",
+    "cardFields": [
+      { "field": "storeName", "pattern": "门店[：: ]+(.+)", "group": 1 }
+    ],
+    "itemTable": {
+      "headerRowOffset": 1,
       "columns": [
-        {"sourceIndex": 0, "targetField": "字段名", "dataType": "string|number"}
+        { "sourceIndex": 0, "targetField": "itemCode", "dataType": "string", "confidence": "high", "reason": "列头明确" }
       ]
-    }
-  },
-  "recipient": {
-    "source": "footer|inline|header",
-    "fields": {
-      "name": {"pattern": "收货人[：:]\\\\s*(.+?)(?:\\\\s|$)"},
-      "phone": {"pattern": "(?:电话|手机)[：:]\\\\s*(\\\\d+)"},
-      "address": {"pattern": "(?:地址|收货地址)[：:]\\\\s*(.+)"}
     }
   }
 }
-\`\`\`
 
-## 字段映射规则
+5. text
+{
+  "type": "text",
+  "text": {
+    "patterns": [
+      { "field": "orderNo", "regex": "单据编号[：:]\\\\s*(\\\\S+)", "group": 1 }
+    ],
+    "itemPatterns": [
+      { "field": "itemCode", "regex": "([A-Z0-9]{4,})", "group": 1 }
+    ],
+    "orderSeparator": "可选，多订单分隔正则"
+  }
+}
 
-targetField应使用以下标准字段名：
-- 运单号/单据号/配送单号 → orderNo
-- 发货人 → senderName
-- 收货人/收货人姓名 → receiverName
-- 电话/手机/联系电话 → receiverPhone
-- 地址/收货地址/详细地址 → receiverAddress
-- 物品名称/商品名称/SKU名称 → itemName
-- 物品编码/商品编码/SKU编码 → itemCode
-- 物品分类 → itemCategory
-- 规格型号/规格 → specification
-- 单位 → unit
-- 数量/发货数量/出库数量 → quantity
+6. multi-sheet / multi-page
+{
+  "type": "multi-sheet",
+  "multiSource": {
+    "sourceType": "sheet",
+    "mergeStrategy": "append",
+    "filterSources": ["Sheet1", "Sheet2"],
+    "subRule": {
+      "parser": {
+        "type": "table",
+        "table": { "headerRow": 0, "dataStartRow": 1, "columns": [] }
+      }
+    }
+  }
+}
 
-## 重要提示
+## recipient 结构
+{
+  "source": "header|footer|inline|separate",
+  "fields": {
+    "storeName": { "pattern": "收货门店[：:]\\\\s*(.+)", "confidence": "medium", "reason": "头部标签推断" },
+    "name": { "pattern": "收货人[：:]\\\\s*(.+)", "confidence": "high", "reason": "字段明确" },
+    "phone": { "pattern": "(?:电话|手机)[：:]\\\\s*(\\\\d+)", "confidence": "high", "reason": "字段明确" },
+    "address": { "pattern": "地址[：:]\\\\s*(.+)", "confidence": "medium", "reason": "文本块推断" }
+  }
+}
 
-1. 只输出JSON，不要包含任何解释文字
-2. headerRow和dataStartRow使用0-based索引
-3. sourceIndex是列的索引（0-based）
-4. 正则表达式需要正确转义
-5. **推测标注**：如果某个字段映射是你根据常识推测的（而非从文件样本中明确看到的），请在对应字段中添加 inferred: true 属性。例如：{"sourceIndex": 2, "targetField": "itemName", "dataType": "string", "inferred": true}。AI生成的整体规则JSON中也可以添加 hasInferredFields: true 和 inferredFields: ["字段名"] 来帮助用户识别哪些映射是推测的。
-`;
+## 标准 targetField
+- orderNo
+- storeName
+- receiverName
+- receiverPhone
+- receiverAddress
+- senderName
+- senderPhone
+- senderAddress
+- itemCode
+- itemName
+- itemCategory
+- specification
+- quantity
+- unit
+- remark
+
+## 业务校验要求
+- A组：storeName
+- B组：receiverName + receiverPhone + receiverAddress
+- A/B 至少满足一组
+- itemCode、itemName、quantity 必须尽量识别
+
+## 输出要求
+1. 所有不确定字段都必须给 confidence 和 reason
+2. 如果是多 Sheet / 多页，优先输出 multiSource 规则，不要退化成单页描述
+3. 如果样本不足，可保守输出通用规则，但字段要明确标注 low confidence
+4. 严禁输出伪代码、注释、Markdown 代码块，只能输出 JSON`;
 
 /**
  * 使用Node.js https模块调用API（绕过Cloudflare检测）
@@ -171,13 +271,13 @@ ${fileSample}
   }
 
   // 提取JSON内容
-  const jsonMatch = content.match(/\{[\s\S]*\}/);
+  const jsonMatch = extractJSON(content);
   if (!jsonMatch) {
     throw new Error('无法从AI响应中提取JSON');
   }
 
   try {
-    const rule = JSON.parse(jsonMatch[0]) as ParseRule;
+    const rule = JSON.parse(jsonMatch) as ParseRule;
     
     // 验证规则格式
     validateRule(rule);
@@ -192,13 +292,196 @@ ${fileSample}
 }
 
 /**
+ * 从AI响应中提取JSON内容
+ * 处理嵌套JSON、多个JSON块、Markdown代码块等情况
+ */
+function extractJSON(content: string): string | null {
+  // 1. 尝试从Markdown代码块中提取
+  const codeBlockMatch = content.match(/```(?:json)?\s*\n?([\s\S]*?)\n?\s*```/);
+  if (codeBlockMatch) {
+    const jsonStr = codeBlockMatch[1].trim();
+    if (jsonStr.startsWith('{')) {
+      return jsonStr;
+    }
+  }
+
+  // 2. 尝试匹配完整的JSON对象（考虑嵌套）
+  let braceCount = 0;
+  let startIndex = -1;
+  let inString = false;
+  let escapeNext = false;
+
+  for (let i = 0; i < content.length; i++) {
+    const char = content[i];
+
+    if (escapeNext) {
+      escapeNext = false;
+      continue;
+    }
+
+    if (char === '\\' && inString) {
+      escapeNext = true;
+      continue;
+    }
+
+    if (char === '"' && !escapeNext) {
+      inString = !inString;
+      continue;
+    }
+
+    if (inString) {
+      continue;
+    }
+
+    if (char === '{') {
+      if (braceCount === 0) {
+        startIndex = i;
+      }
+      braceCount++;
+    } else if (char === '}') {
+      braceCount--;
+      if (braceCount === 0 && startIndex !== -1) {
+        const jsonStr = content.substring(startIndex, i + 1);
+        try {
+          // 验证是否为有效JSON
+          JSON.parse(jsonStr);
+          return jsonStr;
+        } catch (e) {
+          // 继续寻找下一个JSON对象
+          startIndex = -1;
+        }
+      }
+    }
+  }
+
+  // 3. 如果上述方法都失败，尝试简单的正则匹配（作为后备）
+  const simpleMatch = content.match(/\{[\s\S]*\}/);
+  if (simpleMatch) {
+    try {
+      JSON.parse(simpleMatch[0]);
+      return simpleMatch[0];
+    } catch (e) {
+      // 忽略无效的JSON
+    }
+  }
+
+  return null;
+}
+
+/**
  * 验证规则格式（使用统一校验器）
+ * 如果校验失败，尝试自动修复常见问题
  */
 function validateRule(rule: any): void {
   const result = validateParseRule(rule);
   if (!result.valid) {
+    // 尝试修复常见问题
+    const repairedRule = tryRepairRule(rule, result.errors);
+    if (repairedRule) {
+      // 修复后重新校验
+      const repairedResult = validateParseRule(repairedRule);
+      if (repairedResult.valid) {
+        // 修复成功，将修复后的规则复制回原对象
+        Object.assign(rule, repairedRule);
+        return;
+      }
+    }
     throw new Error(formatValidationErrors(result));
   }
+}
+
+/**
+ * 尝试修复规则中的常见问题
+ */
+function tryRepairRule(rule: any, errors: any[]): any {
+  if (!rule || typeof rule !== 'object') {
+    return null;
+  }
+
+  // 深拷贝规则以避免修改原始对象
+  const repairedRule = JSON.parse(JSON.stringify(rule));
+  let repaired = false;
+
+  // 修复 matrix 类型缺少 storeColumns 的问题
+  if (repairedRule.parser?.type === 'matrix') {
+    if (!repairedRule.parser.matrix) {
+      repairedRule.parser.matrix = {
+        headerRow: 0,
+        skuColumn: 0,
+        storeColumns: []
+      };
+      repaired = true;
+    } else if (!repairedRule.parser.matrix.storeColumns || !Array.isArray(repairedRule.parser.matrix.storeColumns)) {
+      repairedRule.parser.matrix.storeColumns = [];
+      repaired = true;
+    }
+  }
+
+  // 修复 double-matrix 类型缺少必要字段的问题
+  if (repairedRule.parser?.type === 'double-matrix') {
+    if (!repairedRule.parser.matrix) {
+      repairedRule.parser.matrix = {
+        headerRow: 0,
+        firstColumnIsStore: true,
+        storeColumnIndex: 0,
+        dataStartColumn: 1,
+        itemPattern: '(.+?)\\s*[xX×]\\s*(\\d+)'
+      };
+      repaired = true;
+    }
+  }
+
+  // 修复 card 类型缺少必要字段的问题
+  if (repairedRule.parser?.type === 'card') {
+    if (!repairedRule.parser.card) {
+      repairedRule.parser.card = {
+        cardStartPattern: '',
+        cardFields: []
+      };
+      repaired = true;
+    }
+  }
+
+  // 修复 text 类型缺少必要字段的问题
+  if (repairedRule.parser?.type === 'text') {
+    if (!repairedRule.parser.text) {
+      repairedRule.parser.text = {
+        patterns: []
+      };
+      repaired = true;
+    }
+  }
+
+  // 修复 multi-sheet 类型缺少必要字段的问题
+  if (repairedRule.parser?.type === 'multi-sheet' || repairedRule.parser?.type === 'multi-page') {
+    if (!repairedRule.parser.multiSource) {
+      repairedRule.parser.multiSource = {
+        sourceType: repairedRule.parser.type === 'multi-sheet' ? 'sheet' : 'page',
+        mergeStrategy: 'append',
+        subRule: {
+          parser: {
+            type: 'table',
+            table: { headerRow: 0, dataStartRow: 1, columns: [] }
+          }
+        }
+      };
+      repaired = true;
+    }
+  }
+
+  // 修复 identifier 缺失的问题
+  if (!repairedRule.identifier) {
+    repairedRule.identifier = {};
+    repaired = true;
+  }
+
+  // 修复 fileTypes 缺失的问题
+  if (!repairedRule.fileTypes || !Array.isArray(repairedRule.fileTypes) || repairedRule.fileTypes.length === 0) {
+    repairedRule.fileTypes = ['excel'];
+    repaired = true;
+  }
+
+  return repaired ? repairedRule : null;
 }
 
 /**

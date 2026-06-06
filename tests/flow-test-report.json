@@ -1,0 +1,55 @@
+{
+  "timestamp": "2026-06-06 12:58:01",
+  "results": [
+    {
+      "file": "湖南仓.xlsx",
+      "status": "PASS",
+      "rule_name": "湖南仓配送单解析规则",
+      "rule_source": "ai_generated",
+      "total_rows": 167,
+      "valid_count": 167,
+      "invalid_count": 0,
+      "analyze_time": 54.6,
+      "parse_time": 0.0,
+      "save_time": 0,
+      "total_time": 54.6
+    },
+    {
+      "file": "欢乐牧场模板0430.xlsx",
+      "status": "FAIL",
+      "step": "analyze",
+      "error": "HTTP Error 500: Internal Server Error"
+    },
+    {
+      "file": "12.25海口龙湖天街-配送发货单PS2512220005001(1).xlsx",
+      "status": "PASS",
+      "rule_name": "黎明屯铁锅炖配送发货单",
+      "rule_source": "ai_generated",
+      "total_rows": 2,
+      "valid_count": 0,
+      "invalid_count": 2,
+      "analyze_time": 89.1,
+      "parse_time": 0.0,
+      "save_time": 0,
+      "total_time": 89.1
+    },
+    {
+      "file": "多门店分Sheet出库单.xlsx",
+      "status": "FAIL",
+      "step": "analyze",
+      "error": "HTTP Error 500: Internal Server Error"
+    },
+    {
+      "file": "门店调拨单-卡片式.xlsx",
+      "status": "FAIL",
+      "step": "analyze",
+      "error": "HTTP Error 500: Internal Server Error"
+    },
+    {
+      "file": "黔寨寨贵州烙锅（鞍山店）常温.pdf",
+      "status": "FAIL",
+      "step": "analyze",
+      "error": "HTTP Error 500: Internal Server Error"
+    }
+  ]
+}
