@@ -2093,7 +2093,14 @@ export default function ImportPage() {
                   ) : (
                     <div>
                       <div className="font-medium text-red-700">校验失败</div>
-                      <pre className="mt-2 text-xs text-red-600 whitespace-pre-wrap">{editingRuleTestResult.error || '未知错误'}</pre>
+                      <pre className="mt-2 text-xs text-red-600 whitespace-pre-wrap">{editingRuleTestResult.details || editingRuleTestResult.error || '未知错误'}</pre>
+                      {editingRuleTestResult.validationErrors && editingRuleTestResult.validationErrors.length > 0 && (
+                        <div className="mt-2 space-y-1">
+                          {editingRuleTestResult.validationErrors.map((err: any, i: number) => (
+                            <div key={i} className="text-xs text-red-500">• [{err.field}] {err.message}</div>
+                          ))}
+                        </div>
+                      )}
                     </div>
                   )}
                   {editingRuleTestResult.warnings && editingRuleTestResult.warnings.length > 0 && (

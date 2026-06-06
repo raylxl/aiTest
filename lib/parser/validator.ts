@@ -152,7 +152,8 @@ function validateTableConfig(table: any, errors: ValidationError[], warnings: Va
   if (!table.columns || !Array.isArray(table.columns)) {
     errors.push({ field: 'parser.table.columns', message: 'table 缺少 columns 配置', severity: 'error' });
   } else if (table.columns.length === 0) {
-    errors.push({ field: 'parser.table.columns', message: 'columns 不能为空', severity: 'error' });
+    // 空 columns 允许——引擎会自动检测列
+    warnings.push({ field: 'parser.table.columns', message: 'columns 为空，将由引擎自动检测列结构', severity: 'warning' });
   } else {
     // 校验每个 column
     table.columns.forEach((col: any, index: number) => {
@@ -188,7 +189,7 @@ function validateMatrixConfig(
   if (type === 'matrix') {
     // matrix 模式需要 storeColumns（允许为空数组表示自动检测所有列）
     if (!matrix.storeColumns || !Array.isArray(matrix.storeColumns)) {
-      errors.push({ field: 'parser.matrix.storeColumns', message: 'matrix 缺少 storeColumns 配置', severity: 'error' });
+      warnings.push({ field: 'parser.matrix.storeColumns', message: 'matrix 缺少 storeColumns，将自动检测门店列', severity: 'warning' });
     }
   }
 
@@ -216,7 +217,7 @@ function validateCardConfig(card: any, errors: ValidationError[], warnings: Vali
   if (!card.cardFields || !Array.isArray(card.cardFields)) {
     errors.push({ field: 'parser.card.cardFields', message: 'card 缺少 cardFields 配置', severity: 'error' });
   } else if (card.cardFields.length === 0) {
-    errors.push({ field: 'parser.card.cardFields', message: 'cardFields 不能为空', severity: 'error' });
+    warnings.push({ field: 'parser.card.cardFields', message: 'cardFields 为空，建议补充卡片字段配置', severity: 'warning' });
   }
 }
 
@@ -232,7 +233,7 @@ function validateTextConfig(text: any, errors: ValidationError[], warnings: Vali
   if (!text.patterns || !Array.isArray(text.patterns)) {
     errors.push({ field: 'parser.text.patterns', message: 'text 缺少 patterns 配置', severity: 'error' });
   } else if (text.patterns.length === 0) {
-    errors.push({ field: 'parser.text.patterns', message: 'patterns 不能为空', severity: 'error' });
+    warnings.push({ field: 'parser.text.patterns', message: 'patterns 为空，建议补充正则模式以提取字段', severity: 'warning' });
   } else {
     // 校验每个 pattern
     text.patterns.forEach((p: any, index: number) => {
