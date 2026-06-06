@@ -70,7 +70,7 @@ export default function ConfirmDialog({
               transition: 'all 0.15s',
               fontFamily: 'inherit',
             }}
-            onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.borderColor = '#00BEBE'; (e.currentTarget as HTMLButtonElement).style.color = '#00BEBE'; }}
+            onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.borderColor = '#0fc6c2'; (e.currentTarget as HTMLButtonElement).style.color = '#0fc6c2'; }}
             onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.borderColor = '#d9d9d9'; (e.currentTarget as HTMLButtonElement).style.color = '#595959'; }}
           >
             {cancelText}
@@ -80,14 +80,14 @@ export default function ConfirmDialog({
             style={{
               height: 32, padding: '0 20px',
               border: 'none', borderRadius: 4,
-              background: confirmType === 'danger' ? '#ff4d4f' : '#00BEBE',
+              background: confirmType === 'danger' ? '#ff4d4f' : '#0fc6c2',
               color: '#fff', fontSize: 13, cursor: 'pointer',
               transition: 'background 0.15s',
               fontFamily: 'inherit',
               boxShadow: confirmType === 'danger' ? '0 2px 0 rgba(255,77,79,0.1)' : '0 2px 0 rgba(22,99,196,0.1)',
             }}
             onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.background = confirmType === 'danger' ? '#ff7875' : '#3880d0'; }}
-            onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.background = confirmType === 'danger' ? '#ff4d4f' : '#00BEBE'; }}
+            onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.background = confirmType === 'danger' ? '#ff4d4f' : '#0fc6c2'; }}
           >
             {confirmText}
           </button>

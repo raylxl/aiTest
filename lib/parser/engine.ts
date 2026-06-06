@@ -321,13 +321,13 @@ export class ParseEngine {
       }
 
       if (!normalizedOrder.itemCode) {
-        validationErrors.push('itemCode: 物品编码不能为空');
+        validationErrors.push('itemCode: SKU物品编码不能为空');
       }
       if (!normalizedOrder.itemName) {
-        validationErrors.push('itemName: 物品名称不能为空');
+        validationErrors.push('itemName: SKU物品名称不能为空');
       }
       if (normalizedOrder.quantity === undefined || normalizedOrder.quantity === null || Number(normalizedOrder.quantity) <= 0) {
-        validationErrors.push('quantity: 数量必须大于 0');
+        validationErrors.push('quantity: SKU发货数量必须大于 0');
       }
       if (normalizedOrder.receiverPhone && !/^1\d{10}$/.test(normalizedOrder.receiverPhone)) {
         validationErrors.push('receiverPhone: 电话格式不正确，应为 11 位手机号');

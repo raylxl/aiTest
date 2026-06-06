@@ -234,7 +234,7 @@ export default function WaybillTable({ currentUserNickname = '系统', onMessage
                 onChange={e => updateQuery(prev => ({ ...prev, [field.key]: e.target.value }))}
                 placeholder={field.placeholder}
                 style={{ height: 30, padding: '0 10px', borderRadius: 4, border: '1px solid #d9d9d9', fontSize: 13, outline: 'none', width: 130, fontFamily: 'inherit', boxSizing: 'border-box', transition: 'border-color 0.15s' }}
-                onFocus={e => (e.target.style.borderColor = '#00BEBE')}
+                onFocus={e => (e.target.style.borderColor = '#0fc6c2')}
                 onBlur={e => (e.target.style.borderColor = '#d9d9d9')}
               />
             </div>
@@ -247,7 +247,7 @@ export default function WaybillTable({ currentUserNickname = '系统', onMessage
               value={query.start_date || ''}
               onChange={e => updateQuery(prev => ({ ...prev, start_date: e.target.value }))}
               style={{ height: 30, padding: '0 8px', borderRadius: 4, border: '1px solid #d9d9d9', fontSize: 13, outline: 'none', fontFamily: 'inherit', boxSizing: 'border-box', color: '#262626' }}
-              onFocus={e => (e.target.style.borderColor = '#00BEBE')}
+              onFocus={e => (e.target.style.borderColor = '#0fc6c2')}
               onBlur={e => (e.target.style.borderColor = '#d9d9d9')}
             />
             <span style={{ color: '#8c8c8c', fontSize: 13 }}>至</span>
@@ -256,7 +256,7 @@ export default function WaybillTable({ currentUserNickname = '系统', onMessage
               value={query.end_date || ''}
               onChange={e => updateQuery(prev => ({ ...prev, end_date: e.target.value }))}
               style={{ height: 30, padding: '0 8px', borderRadius: 4, border: '1px solid #d9d9d9', fontSize: 13, outline: 'none', fontFamily: 'inherit', boxSizing: 'border-box', color: '#262626' }}
-              onFocus={e => (e.target.style.borderColor = '#00BEBE')}
+              onFocus={e => (e.target.style.borderColor = '#0fc6c2')}
               onBlur={e => (e.target.style.borderColor = '#d9d9d9')}
             />
           </div>
@@ -268,13 +268,13 @@ export default function WaybillTable({ currentUserNickname = '系统', onMessage
                 <Icon name="delete" size={12} /> 删除({selectedRows.length})
               </button>
             )}
-            <button onClick={() => fetchData()} style={{ height: 30, padding: '0 16px', borderRadius: 4, border: 'none', background: '#00BEBE', color: '#fff', fontSize: 13, cursor: 'pointer', fontFamily: 'inherit', display: 'flex', alignItems: 'center', gap: 4, fontWeight: 500 }}
+            <button onClick={() => fetchData()} style={{ height: 30, padding: '0 16px', borderRadius: 4, border: 'none', background: '#0fc6c2', color: '#fff', fontSize: 13, cursor: 'pointer', fontFamily: 'inherit', display: 'flex', alignItems: 'center', gap: 4, fontWeight: 500 }}
               onMouseEnter={e => (e.currentTarget.style.background = '#00d4d4')}
-              onMouseLeave={e => (e.currentTarget.style.background = '#00BEBE')}>
+              onMouseLeave={e => (e.currentTarget.style.background = '#0fc6c2')}>
               <Icon name="search" size={12} /> 查询
             </button>
             <button onClick={handleReset} style={{ height: 30, padding: '0 16px', borderRadius: 4, border: '1px solid #d9d9d9', background: '#fff', color: '#595959', fontSize: 13, cursor: 'pointer', fontFamily: 'inherit', display: 'flex', alignItems: 'center', gap: 4 }}
-              onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.borderColor = '#00BEBE'; (e.currentTarget as HTMLButtonElement).style.color = '#00BEBE'; }}
+              onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.borderColor = '#0fc6c2'; (e.currentTarget as HTMLButtonElement).style.color = '#0fc6c2'; }}
               onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.borderColor = '#d9d9d9'; (e.currentTarget as HTMLButtonElement).style.color = '#595959'; }}>
               重置
             </button>
@@ -387,7 +387,7 @@ export default function WaybillTable({ currentUserNickname = '系统', onMessage
       {/* 分页 */}
       <div style={{ background: '#fff', borderRadius: 4, border: '1px solid #e4edf7', padding: '10px 16px', marginTop: 12, flexShrink: 0, display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 8 }}>
         <div style={{ fontSize: 13, color: '#595959' }}>
-          共 <span style={{ color: '#00BEBE', fontWeight: 600 }}>{total}</span> 条
+          共 <span style={{ color: '#0fc6c2', fontWeight: 600 }}>{total}</span> 条
           {selectedRows.length > 0 && <span style={{ color: '#1677FF', marginLeft: 12 }}>已选 {selectedRows.length} 项</span>}
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
@@ -400,7 +400,7 @@ export default function WaybillTable({ currentUserNickname = '系统', onMessage
             上一页
           </button>
           <span style={{ fontSize: 13, color: '#595959', minWidth: 80, textAlign: 'center' }}>
-            第 <span style={{ color: '#00BEBE', fontWeight: 600 }}>{page}</span> / {totalPages || 1} 页
+            第 <span style={{ color: '#0fc6c2', fontWeight: 600 }}>{page}</span> / {totalPages || 1} 页
           </span>
           <button onClick={() => updatePage(p => Math.min(totalPages, p + 1))} disabled={page >= totalPages}
             style={{ height: 28, padding: '0 10px', borderRadius: 4, border: '1px solid #d9d9d9', background: page >= totalPages ? '#f5f5f5' : '#fff', color: page >= totalPages ? '#d9d9d9' : '#595959', fontSize: 13, cursor: page >= totalPages ? 'not-allowed' : 'pointer', fontFamily: 'inherit' }}>
@@ -410,9 +410,9 @@ export default function WaybillTable({ currentUserNickname = '系统', onMessage
           <input type="number" value={page} onChange={e => { const v = parseInt(e.target.value); if (!isNaN(v)) updatePage(Math.min(totalPages, Math.max(1, v))); }}
             style={{ width: 52, height: 28, padding: '0 8px', borderRadius: 4, border: '1px solid #d9d9d9', fontSize: 13, textAlign: 'center', fontFamily: 'inherit', outline: 'none', boxSizing: 'border-box' }} />
           <span style={{ fontSize: 13, color: '#8c8c8c' }}>页</span>
-          <button onClick={() => fetchData()} style={{ height: 28, padding: '0 12px', borderRadius: 4, border: '1px solid #00BEBE', background: '#00BEBE', color: '#fff', fontSize: 13, cursor: 'pointer', fontFamily: 'inherit' }}
+          <button onClick={() => fetchData()} style={{ height: 28, padding: '0 12px', borderRadius: 4, border: '1px solid #0fc6c2', background: '#0fc6c2', color: '#fff', fontSize: 13, cursor: 'pointer', fontFamily: 'inherit' }}
             onMouseEnter={e => (e.currentTarget.style.background = '#00d4d4')}
-            onMouseLeave={e => (e.currentTarget.style.background = '#00BEBE')}>跳转</button>
+            onMouseLeave={e => (e.currentTarget.style.background = '#0fc6c2')}>跳转</button>
         </div>
         </div>
       </div>

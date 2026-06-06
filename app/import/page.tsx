@@ -222,10 +222,10 @@ interface SamplePreviewData {
   usesFirstRowAsHeader?: boolean;
 }
 
-const JT_PRIMARY = '#1677ff';
-const JT_PRIMARY_HOVER = '#0958d9';
-const JT_PRIMARY_LIGHT = '#e6f4ff';
-const JT_PRIMARY_BORDER = '#91caff';
+const JT_PRIMARY = '#0fc6c2';
+const JT_PRIMARY_HOVER = '#0aa8a4';
+const JT_PRIMARY_LIGHT = '#e8fafa';
+const JT_PRIMARY_BORDER = '#b5e8e8';
 const JT_SUCCESS = '#52c41a';
 const JT_WARNING = '#faad14';
 const JT_DANGER = '#ff4d4f';

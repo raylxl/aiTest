@@ -78,7 +78,7 @@ function EditableCell({
       <select
         value={editVal} onChange={e => { setEditVal(e.target.value); onChange(rowIndex, field, e.target.value); setEditing(false); }}
         onKeyDown={handleKeyDown}
-        autoFocus style={{ width: '100%', height: 32, border: '1px solid #00BEBE', borderRadius: 4, padding: '0 6px', fontSize: 13, outline: 'none', background: '#fff' }}
+        autoFocus style={{ width: '100%', height: 32, border: '1px solid #0fc6c2', borderRadius: 4, padding: '0 6px', fontSize: 13, outline: 'none', background: '#fff' }}
       >
         <option value="">请选择</option>
         {options.map(o => <option key={o} value={o}>{o}</option>)}
@@ -98,7 +98,7 @@ function EditableCell({
     <input
       ref={inputRef} value={editVal} onChange={e => setEditVal(e.target.value)}
       onBlur={commitEdit} onKeyDown={handleKeyDown}
-      style={{ width: '100%', height: 32, border: '1px solid #00BEBE', borderRadius: 4, padding: '0 6px', fontSize: 13, outline: 'none', boxSizing: 'border-box' }}
+      style={{ width: '100%', height: 32, border: '1px solid #0fc6c2', borderRadius: 4, padding: '0 6px', fontSize: 13, outline: 'none', boxSizing: 'border-box' }}
     />
   ) : (
     <div onClick={() => setEditing(true)} style={{
@@ -155,7 +155,7 @@ function MappingPanel({
         <div style={{ fontSize: 14, fontWeight: 600, color: '#262626', display: 'flex', alignItems: 'center', gap: 8 }}>
           🔗 映射关系配置
           {templateName && (
-            <span style={{ fontSize: 12, padding: '2px 8px', background: '#e6f4ff', color: '#1677ff', borderRadius: 4, fontWeight: 400 }}>
+            <span style={{ fontSize: 12, padding: '2px 8px', background: '#e6f4ff', color: '#0fc6c2', borderRadius: 4, fontWeight: 400 }}>
               {templateName}
             </span>
           )}
@@ -234,7 +234,7 @@ function MappingPanel({
             <button
               onClick={() => !disabled && onReapply(currentMapping)}
               disabled={disabled}
-              style={{ height: 32, padding: '0 16px', border: '1px solid #00BEBE', borderRadius: 4, background: disabled ? '#d9d9d9' : '#00BEBE', color: disabled ? '#8c8c8c' : '#fff', cursor: disabled ? 'not-allowed' : 'pointer', fontSize: 13, fontWeight: 500 }}
+              style={{ height: 32, padding: '0 16px', border: '1px solid #0fc6c2', borderRadius: 4, background: disabled ? '#d9d9d9' : '#0fc6c2', color: disabled ? '#8c8c8c' : '#fff', cursor: disabled ? 'not-allowed' : 'pointer', fontSize: 13, fontWeight: 500 }}
             >
               {disabled ? '⟳ 重新解析中...' : '🔄 重新解析数据'}
             </button>
@@ -270,7 +270,7 @@ function ConfirmImportModal({
       <div
         onClick={() => !loading && setSelectedMode(mode)}
         style={{
-          display: 'block', padding: '12px 14px', border: `2px solid ${isActive ? '#1677ff' : '#d9d9d9'}`,
+          display: 'block', padding: '12px 14px', border: `2px solid ${isActive ? '#0fc6c2' : '#d9d9d9'}`,
           borderRadius: 8, marginBottom: 10, cursor: loading ? 'not-allowed' : 'pointer',
           background: isActive ? '#e6f4ff' : '#fafafa', transition: 'all 0.15s',
         }}
@@ -278,8 +278,8 @@ function ConfirmImportModal({
         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
           <div style={{
             width: 16, height: 16, borderRadius: '50%',
-            border: `2px solid ${isActive ? '#1677ff' : '#d9d9d9'}`,
-            background: isActive ? '#1677ff' : '#fff',
+            border: `2px solid ${isActive ? '#0fc6c2' : '#d9d9d9'}`,
+            background: isActive ? '#0fc6c2' : '#fff',
             flexShrink: 0, transition: 'all 0.15s',
             display: 'flex', alignItems: 'center', justifyContent: 'center',
           }}>
@@ -310,7 +310,7 @@ function ConfirmImportModal({
           确认导入运单
         </div>
         <div style={{ fontSize: 14, color: '#595959', marginBottom: 16, lineHeight: 1.7 }}>
-          即将导入 <strong style={{ color: '#1677ff' }}>{validCount}</strong> 条有效运单到数据库。
+          即将导入 <strong style={{ color: '#0fc6c2' }}>{validCount}</strong> 条有效运单到数据库。
           {duplicateCount > 0 && (
             <span style={{ color: '#faad14', fontWeight: 600 }}>
               {' '}&nbsp;其中 <strong>{duplicateCount}</strong> 条外部编码与已有数据重复
@@ -341,7 +341,7 @@ function ConfirmImportModal({
           <button
             onClick={() => onConfirm(selectedMode)}
             disabled={loading}
-            style={{ height: 34, padding: '0 20px', border: 'none', borderRadius: 4, background: '#1677ff', color: '#fff', cursor: loading ? 'not-allowed' : 'pointer', fontSize: 13, fontWeight: 600 }}>
+            style={{ height: 34, padding: '0 20px', border: 'none', borderRadius: 4, background: '#0fc6c2', color: '#fff', cursor: loading ? 'not-allowed' : 'pointer', fontSize: 13, fontWeight: 600 }}>
             {loading ? '提交中...' : '确认提交'}
           </button>
         </div>
@@ -359,7 +359,7 @@ function ProgressBar({ value, label }: { value: number; label: string }) {
         <span>{value}%</span>
       </div>
       <div style={{ height: 8, background: '#f0f0f0', borderRadius: 4, overflow: 'hidden' }}>
-        <div style={{ height: '100%', width: `${value}%`, background: '#00BEBE', borderRadius: 4, transition: 'width 0.3s' }} />
+        <div style={{ height: '100%', width: `${value}%`, background: '#0fc6c2', borderRadius: 4, transition: 'width 0.3s' }} />
       </div>
     </div>
   );
@@ -1169,8 +1169,8 @@ export default function UniversalImport() {
           <div key={tab.key} onClick={() => setActiveTab(tab.key as 'import' | 'list')}
             style={{
               padding: '12px 20px', cursor: 'pointer', fontSize: 14, fontWeight: activeTab === tab.key ? 600 : 400,
-              color: activeTab === tab.key ? '#00BEBE' : '#595959',
-              borderBottom: activeTab === tab.key ? '2px solid #00BEBE' : '2px solid transparent',
+              color: activeTab === tab.key ? '#0fc6c2' : '#595959',
+              borderBottom: activeTab === tab.key ? '2px solid #0fc6c2' : '2px solid transparent',
               marginBottom: -1, display: 'flex', alignItems: 'center', gap: 6,
             }}>
             <Icon name={tab.icon} size={14} />
@@ -1198,16 +1198,16 @@ export default function UniversalImport() {
                     input.click();
                   }}
                   style={{
-                    border: `2px dashed ${dragOver ? '#00BEBE' : uploading ? '#00BEBE' : '#d9d9d9'}`,
+                    border: `2px dashed ${dragOver ? '#0fc6c2' : uploading ? '#0fc6c2' : '#d9d9d9'}`,
                     borderRadius: 8, padding: '40px 20px', textAlign: 'center', cursor: 'pointer',
                     background: dragOver ? '#e6fffb' : '#fafafa', transition: 'all 0.2s',
                   }}>
                   {uploading ? (
-                    <div style={{ color: '#00BEBE' }}>
+                    <div style={{ color: '#0fc6c2' }}>
                         <div style={{ animation: 'spin 1s linear infinite', fontSize: 28, marginBottom: 8 }}>⟳</div>
                         <div style={{ fontSize: 14, fontWeight: 600 }}>{uploadProgressText || '正在解析 Excel...'}</div>
                         <div style={{ height: 6, background: '#e8e8e8', borderRadius: 3, marginTop: 12, overflow: 'hidden', maxWidth: 320, margin: '0 auto' }}>
-                          <div style={{ height: '100%', width: `${uploadProgress}%`, background: '#00BEBE', transition: 'width 0.4s ease' }} />
+                          <div style={{ height: '100%', width: `${uploadProgress}%`, background: '#0fc6c2', transition: 'width 0.4s ease' }} />
                         </div>
                         <div style={{ fontSize: 12, color: '#595959', marginTop: 6 }}>文件已上传，正在解析数据，请稍候...</div>
                     </div>
@@ -1215,7 +1215,7 @@ export default function UniversalImport() {
                     <>
                       <Icon name="upload" size={32} />
                       <div style={{ fontSize: 14, color: '#595959', marginTop: 8 }}>
-                        拖拽 Excel 文件到此处，或<span style={{ color: '#00BEBE', fontWeight: 600 }}>点击选择文件</span>
+                        拖拽 Excel 文件到此处，或<span style={{ color: '#0fc6c2', fontWeight: 600 }}>点击选择文件</span>
                       </div>
                       <div style={{ fontSize: 12, color: '#bfbfbf', marginTop: 4 }}>支持 .xlsx / .xls 格式，拖拽或点击上传</div>
                     </>
@@ -1260,7 +1260,7 @@ export default function UniversalImport() {
               <div style={{
                 padding: '10px 14px', borderRadius: 6, background: '#e6f4ff',
                 border: '1px solid #91caff', display: 'flex', alignItems: 'center', gap: 8,
-                fontSize: 13, color: '#1677ff', marginBottom: 8,
+                fontSize: 13, color: '#0fc6c2', marginBottom: 8,
               }}>
                 <span style={{ fontSize: 16 }}>🔮</span>
                 <span style={{ flex: 1 }}>
@@ -1268,7 +1268,7 @@ export default function UniversalImport() {
                 </span>
                 <button
                   onClick={() => setDismissAutoApply(true)}
-                  style={{ fontSize: 12, padding: '2px 8px', border: '1px solid #91caff', borderRadius: 4, background: '#fff', color: '#1677ff', cursor: 'pointer' }}>
+                  style={{ fontSize: 12, padding: '2px 8px', border: '1px solid #91caff', borderRadius: 4, background: '#fff', color: '#0fc6c2', cursor: 'pointer' }}>
                   重新选择映射
                 </button>
               </div>
@@ -1301,13 +1301,13 @@ export default function UniversalImport() {
                         </button>
                       )}
                       <button onClick={addEmptyRow} style={{ height: 30, padding: '0 12px', border: '1px solid #d9d9d9', borderRadius: 4, background: '#fff', cursor: 'pointer', fontSize: 13, color: '#595959', display: 'flex', alignItems: 'center', gap: 4 }}
-                        onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.borderColor = '#00BEBE'; (e.currentTarget as HTMLButtonElement).style.color = '#00BEBE'; }}
+                        onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.borderColor = '#0fc6c2'; (e.currentTarget as HTMLButtonElement).style.color = '#0fc6c2'; }}
                         onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.borderColor = '#d9d9d9'; (e.currentTarget as HTMLButtonElement).style.color = '#595959'; }}>
                         <Icon name="plus" size={12} /> 新增行
                       </button>
                       <button onClick={handleExport} disabled={exportLoading}
                         style={{ height: 30, padding: '0 12px', border: '1px solid #d9d9d9', borderRadius: 4, background: exportLoading ? '#d9d9d9' : '#fff', cursor: exportLoading ? 'not-allowed' : 'pointer', fontSize: 13, color: exportLoading ? '#8c8c8c' : '#595959', display: 'flex', alignItems: 'center', gap: 4 }}
-                        onMouseEnter={e => { if (!exportLoading) { (e.currentTarget as HTMLButtonElement).style.borderColor = '#00BEBE'; (e.currentTarget as HTMLButtonElement).style.color = '#00BEBE'; } }}
+                        onMouseEnter={e => { if (!exportLoading) { (e.currentTarget as HTMLButtonElement).style.borderColor = '#0fc6c2'; (e.currentTarget as HTMLButtonElement).style.color = '#0fc6c2'; } }}
                         onMouseLeave={e => { if (!exportLoading) { (e.currentTarget as HTMLButtonElement).style.borderColor = '#d9d9d9'; (e.currentTarget as HTMLButtonElement).style.color = '#595959'; } }}>
                         {exportLoading ? '导出中...' : <><Icon name="download" size={12} /> 导出Excel</>}
                       </button>
@@ -1433,7 +1433,7 @@ export default function UniversalImport() {
                         disabled={submitting || invalidCount > 0 || totalSelected === 0}
                         style={{
                           height: 36, padding: '0 24px', border: 'none', borderRadius: 4,
-                          background: (submitting || invalidCount > 0 || totalSelected === 0) ? '#d9d9d9' : '#1677ff',
+                          background: (submitting || invalidCount > 0 || totalSelected === 0) ? '#d9d9d9' : '#0fc6c2',
                           color: '#fff', cursor: (submitting || invalidCount > 0 || totalSelected === 0) ? 'not-allowed' : 'pointer',
                           fontSize: 14, fontWeight: 600,
                         }}>
@@ -1579,7 +1579,7 @@ export default function UniversalImport() {
                       onChange={e => setListQuery(q => ({ ...q, [f.key]: e.target.value }))}
                       placeholder={f.placeholder}
                       style={{ height: 32, padding: '0 10px', border: '1px solid #d9d9d9', borderRadius: 4, fontSize: 13, outline: 'none', width: '100%', boxSizing: 'border-box' }}
-                      onFocus={e => (e.target.style.borderColor = '#00BEBE')}
+                      onFocus={e => (e.target.style.borderColor = '#0fc6c2')}
                       onBlur={e => (e.target.style.borderColor = '#d9d9d9')}
                     />
                   </div>
@@ -1589,11 +1589,11 @@ export default function UniversalImport() {
                 <button onClick={() => fetchWaybillList(1)} disabled={listLoading}
                   style={{
                     height: 32, padding: '0 16px', border: 'none', borderRadius: 4,
-                    background: listLoading ? '#d9d9d9' : '#00BEBE', color: '#fff',
+                    background: listLoading ? '#d9d9d9' : '#0fc6c2', color: '#fff',
                     cursor: listLoading ? 'not-allowed' : 'pointer', fontSize: 13
                   }}
                   onMouseEnter={e => { if (!listLoading) (e.currentTarget as HTMLButtonElement).style.background = '#00c4c4'; }}
-                  onMouseLeave={e => { if (!listLoading) (e.currentTarget as HTMLButtonElement).style.background = '#00BEBE'; }}>
+                  onMouseLeave={e => { if (!listLoading) (e.currentTarget as HTMLButtonElement).style.background = '#0fc6c2'; }}>
                   {listLoading ? '查询中...' : '查询'}
                 </button>
                 <button onClick={() => { setListQuery({ external_code: '', sender_name: '', sender_phone: '', receiver_name: '', receiver_phone: '', start_date: '', end_date: '' }); }}
@@ -1622,7 +1622,7 @@ export default function UniversalImport() {
                     background: exportLoading ? '#d9d9d9' : '#fff', color: exportLoading ? '#8c8c8c' : '#595959',
                     cursor: exportLoading ? 'not-allowed' : 'pointer', fontSize: 13, display: 'flex', alignItems: 'center', gap: 4,
                   }}
-                  onMouseEnter={e => { if (!exportLoading) { (e.currentTarget as HTMLButtonElement).style.borderColor = '#1677ff'; (e.currentTarget as HTMLButtonElement).style.color = '#1677ff'; } }}
+                  onMouseEnter={e => { if (!exportLoading) { (e.currentTarget as HTMLButtonElement).style.borderColor = '#0fc6c2'; (e.currentTarget as HTMLButtonElement).style.color = '#0fc6c2'; } }}
                   onMouseLeave={e => { if (!exportLoading) { (e.currentTarget as HTMLButtonElement).style.borderColor = '#d9d9d9'; (e.currentTarget as HTMLButtonElement).style.color = '#595959'; } }}>
                   {exportLoading ? '导出中...' : <><Icon name="download" size={13} /> 导出</>}
                 </button>
@@ -1635,7 +1635,7 @@ export default function UniversalImport() {
                 <div>
                   运单列表 <span style={{ fontWeight: 400, color: '#8c8c8c' }}>（共 {listTotal} 条）</span>
                   {selectedWaybillIds.size > 0 && (
-                    <span style={{ marginLeft: 12, fontSize: 13, color: '#1677ff' }}>已选 {selectedWaybillIds.size} 条</span>
+                    <span style={{ marginLeft: 12, fontSize: 13, color: '#0fc6c2' }}>已选 {selectedWaybillIds.size} 条</span>
                   )}
                 </div>
               </div>
@@ -1680,7 +1680,7 @@ export default function UniversalImport() {
                         <td style={{ padding: '8px 10px', whiteSpace: 'nowrap' }}>{w.weight}</td>
                         <td style={{ padding: '8px 10px', whiteSpace: 'nowrap' }}>{w.quantity}</td>
                         <td style={{ padding: '8px 10px', whiteSpace: 'nowrap' }}>
-                          <span style={{ padding: '2px 6px', borderRadius: 4, fontSize: 12, background: w.temp_layer === '冷藏' ? '#e6f7ff' : w.temp_layer === '冷冻' ? '#f0f5ff' : '#f6ffed', color: '#1677ff' }}>{w.temp_layer}</span>
+                          <span style={{ padding: '2px 6px', borderRadius: 4, fontSize: 12, background: w.temp_layer === '冷藏' ? '#e6f7ff' : w.temp_layer === '冷冻' ? '#f0f5ff' : '#f6ffed', color: '#0fc6c2' }}>{w.temp_layer}</span>
                         </td>
                         <td style={{ padding: '8px 10px', maxWidth: 150, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{w.remark || '-'}</td>
                         <td style={{ padding: '8px 10px', whiteSpace: 'nowrap' }}>

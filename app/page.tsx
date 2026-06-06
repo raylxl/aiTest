@@ -69,7 +69,7 @@ function MenuPlaceholder({ title, subtitle }: { title: string; subtitle?: string
       </div>
       {/* 标题 */}
       <div style={{ textAlign: 'center', marginTop: 32, zIndex: 2 }}>
-        <div style={{ fontSize: 20, fontWeight: 700, color: '#00BEBE', letterSpacing: 4, marginBottom: 8, textShadow: '0 2px 8px rgba(0,190,190,0.2)' }}>{title}</div>
+        <div style={{ fontSize: 20, fontWeight: 700, color: '#0fc6c2', letterSpacing: 4, marginBottom: 8, textShadow: '0 2px 8px rgba(0,190,190,0.2)' }}>{title}</div>
         {subtitle && <div style={{ fontSize: 13, color: '#8c8c8c', letterSpacing: 1 }}>{subtitle}</div>}
       </div>
       <div style={{ position: 'absolute', bottom: 0, left: 0, right: 0, height: 4, background: 'linear-gradient(90deg, transparent, #ffd700, #ffd700, transparent)', opacity: 0.6 }} />
@@ -340,9 +340,9 @@ export default function FeeManager() {
           {/* 鲸鱼 Logo */}
           <svg width="26" height="26" viewBox="0 0 64 64" fill="none">
             <ellipse cx="32" cy="38" rx="26" ry="18" fill="rgba(255,255,255,0.9)"/>
-            <ellipse cx="32" cy="38" rx="20" ry="14" fill="#00BEBE"/>
+            <ellipse cx="32" cy="38" rx="20" ry="14" fill="#0fc6c2"/>
             <circle cx="24" cy="34" r="3" fill="rgba(255,255,255,0.9)"/>
-            <circle cx="23" cy="33" r="1.5" fill="#00BEBE"/>
+            <circle cx="23" cy="33" r="1.5" fill="#0fc6c2"/>
             <path d="M8 34 Q2 26 10 22 Q18 18 24 26" fill="rgba(255,255,255,0.85)"/>
             <path d="M48 28 Q56 22 58 30 Q58 36 52 32" fill="rgba(255,255,255,0.85)"/>
             <path d="M12 44 Q6 50 12 54 Q20 58 30 54 Q40 58 48 54 Q56 50 50 44" fill="rgba(255,255,255,0.9)"/>
@@ -368,7 +368,7 @@ export default function FeeManager() {
                 style={{ display: 'flex', alignItems: 'center', gap: 6, cursor: 'pointer', padding: '0 8px', borderRadius: 4, height: 32, transition: 'background 0.15s' }}
                 onMouseEnter={e => (e.currentTarget.style.background = 'rgba(255,255,255,0.15)')}
                 onMouseLeave={e => (e.currentTarget.style.background = 'none')}>
-                <div style={{ width: 24, height: 24, borderRadius: '50%', background: currentUser.role === 'admin' ? '#e6f4ff' : getAvatarColor(currentUser.username), color: '#00BEBE', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 11, fontWeight: 600, flexShrink: 0 }}>{currentUser.nickname[0].toUpperCase()}</div>
+                <div style={{ width: 24, height: 24, borderRadius: '50%', background: currentUser.role === 'admin' ? '#e6f4ff' : getAvatarColor(currentUser.username), color: '#0fc6c2', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 11, fontWeight: 600, flexShrink: 0 }}>{currentUser.nickname[0].toUpperCase()}</div>
                 <span style={{ color: '#fff', fontSize: 13 }}>{currentUser.nickname}</span>
                 <Icon name="arrowDown" size={9} />
               </div>
@@ -377,7 +377,7 @@ export default function FeeManager() {
                   <div style={{ padding: '10px 16px', borderBottom: '1px solid #f0f0f0' }}>
                     <div style={{ fontSize: 13, fontWeight: 600, color: '#262626' }}>{currentUser.nickname}</div>
                     <div style={{ fontSize: 12, color: '#8c8c8c', marginTop: 2 }}>@{currentUser.username}</div>
-                    <div style={{ marginTop: 4 }}><span style={{ fontSize: 11, padding: '1px 6px', borderRadius: 2, background: currentUser.role === 'admin' ? '#e6f4ff' : '#f5f5f5', color: currentUser.role === 'admin' ? '#00BEBE' : '#595959' }}>{currentUser.role === 'admin' ? '管理员' : '普通用户'}</span></div>
+                    <div style={{ marginTop: 4 }}><span style={{ fontSize: 11, padding: '1px 6px', borderRadius: 2, background: currentUser.role === 'admin' ? '#e6f4ff' : '#f5f5f5', color: currentUser.role === 'admin' ? '#0fc6c2' : '#595959' }}>{currentUser.role === 'admin' ? '管理员' : '普通用户'}</span></div>
                   </div>
                   {['个人信息', '修改密码'].map(item => (
                     <div key={item} style={{ padding: '9px 16px', fontSize: 13, color: '#262626', cursor: 'pointer', transition: 'background 0.15s' }} onMouseEnter={e => (e.currentTarget.style.background = '#f5f5f5')} onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}>{item}</div>
@@ -393,7 +393,7 @@ export default function FeeManager() {
               <button onClick={() => setLoginModalVisible(true)} style={{ height: 28, padding: '0 12px', border: '1px solid rgba(255,255,255,0.5)', borderRadius: 4, background: 'rgba(255,255,255,0.1)', color: '#fff', cursor: 'pointer', fontSize: 12, fontFamily: 'inherit', transition: 'all 0.15s', fontWeight: 500 }}
                 onMouseEnter={e => { const b = e.currentTarget as HTMLButtonElement; b.style.background = 'rgba(255,255,255,0.2)'; b.style.borderColor = '#fff'; }}
                 onMouseLeave={e => { const b = e.currentTarget as HTMLButtonElement; b.style.background = 'rgba(255,255,255,0.1)'; b.style.borderColor = 'rgba(255,255,255,0.5)'; }}>登录</button>
-              <button onClick={() => setRegisterModalVisible(true)} style={{ height: 28, padding: '0 12px', border: 'none', borderRadius: 4, background: '#fff', color: '#00BEBE', cursor: 'pointer', fontSize: 12, fontFamily: 'inherit', transition: 'all 0.15s', fontWeight: 600 }}
+              <button onClick={() => setRegisterModalVisible(true)} style={{ height: 28, padding: '0 12px', border: 'none', borderRadius: 4, background: '#fff', color: '#0fc6c2', cursor: 'pointer', fontSize: 12, fontFamily: 'inherit', transition: 'all 0.15s', fontWeight: 600 }}
                 onMouseEnter={e => (e.currentTarget.style.background = '#f0f0f0')}
                 onMouseLeave={e => (e.currentTarget.style.background = '#fff')}>注册</button>
             </div>
@@ -482,17 +482,17 @@ export default function FeeManager() {
                 <div style={{ fontSize: 48, marginBottom: 16 }}>
                   <svg width="64" height="64" viewBox="0 0 1024 1024" fill="none">
                     <circle cx="512" cy="512" r="480" fill="#e8f4fd" />
-                    <text x="512" y="580" textAnchor="middle" fontSize="280" fill="#1677ff" fontWeight="bold">AI</text>
+                    <text x="512" y="580" textAnchor="middle" fontSize="280" fill="#0fc6c2" fontWeight="bold">AI</text>
                   </svg>
                 </div>
-                <div style={{ fontSize: 22, fontWeight: 700, color: '#1677ff', marginBottom: 8 }}>AI 考试</div>
+                <div style={{ fontSize: 22, fontWeight: 700, color: '#0fc6c2', marginBottom: 8 }}>AI 考试</div>
                 <div style={{ fontSize: 14, color: '#8c8c8c', marginBottom: 32, textAlign: 'center' }}>
                   <div>完整前后端 + 数据库应用部署</div>
                   <div style={{ marginTop: 4 }}>指定平台：Vercel</div>
                 </div>
                 <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', justifyContent: 'center', marginBottom: 32 }}>
                   {[
-                    { tag: '前后端 + 数据库', color: '#1677ff', bg: '#e6f4ff' },
+                    { tag: '前后端 + 数据库', color: '#0fc6c2', bg: '#e6f4ff' },
                     { tag: 'Vercel 部署', color: '#fa541c', bg: '#fff2e8' },
                     { tag: '导入导出 Excel', color: '#52c41a', bg: '#f6ffed' },
                     { tag: 'GitHub / Gitee', color: '#722ed1', bg: '#f9f0ff' },
@@ -534,7 +534,7 @@ export default function FeeManager() {
         <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.45)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000 }}
           onClick={e => { if (e.target === e.currentTarget) setLoginModalVisible(false); }}>
           <div style={{ background: '#fff', borderRadius: 8, width: 400, boxShadow: '0 8px 24px rgba(0,0,0,0.2)', overflow: 'hidden' }}>
-            <div style={{ padding: '20px 24px 16px', borderBottom: '1px solid #f0f0f0', background: '#00BEBE', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <div style={{ padding: '20px 24px 16px', borderBottom: '1px solid #f0f0f0', background: '#0fc6c2', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
               <div><div style={{ fontSize: 16, fontWeight: 600, color: '#fff' }}>用户登录</div><div style={{ fontSize: 12, color: 'rgba(255,255,255,0.7)', marginTop: 2 }}>智能多格式批量下单系统</div></div>
               <button onClick={() => setLoginModalVisible(false)} style={{ background: 'none', border: 'none', color: 'rgba(255,255,255,0.8)', fontSize: 18, cursor: 'pointer', padding: 4, lineHeight: 1 }}
                 onMouseEnter={e => (e.currentTarget.style.color = '#fff')} onMouseLeave={e => (e.currentTarget.style.color = 'rgba(255,255,255,0.8)')}><Icon name="close" size={16} /></button>
@@ -545,7 +545,7 @@ export default function FeeManager() {
                 <div style={{ fontSize: 13, color: '#595959', marginBottom: 6, fontWeight: 500 }}>账号</div>
                 <input value={loginForm.username} onChange={e => setLoginForm(f => ({ ...f, username: e.target.value }))} onKeyDown={e => e.key === 'Enter' && handleLoginSubmit()} placeholder="请输入账号" autoFocus
                   style={{ width: '100%', height: 36, padding: '0 12px', borderRadius: 4, border: `1px solid ${authErrors.username ? '#ff4d4f' : '#d9d9d9'}`, fontSize: 13, outline: 'none', color: '#262626', background: '#fff', fontFamily: 'inherit', boxSizing: 'border-box', transition: 'border-color 0.15s' }}
-                  onFocus={e => (e.target.style.borderColor = authErrors.username ? '#ff4d4f' : '#00BEBE')}
+                  onFocus={e => (e.target.style.borderColor = authErrors.username ? '#ff4d4f' : '#0fc6c2')}
                   onBlur={e => (e.target.style.borderColor = authErrors.username ? '#ff4d4f' : '#d9d9d9')} />
                 {authErrors.username && <div style={{ fontSize: 12, color: '#ff4d4f', marginTop: 4 }}>{authErrors.username}</div>}
               </div>
@@ -553,22 +553,22 @@ export default function FeeManager() {
                 <div style={{ fontSize: 13, color: '#595959', marginBottom: 6, fontWeight: 500 }}>密码</div>
                 <input type="password" value={loginForm.password} onChange={e => setLoginForm(f => ({ ...f, password: e.target.value }))} onKeyDown={e => e.key === 'Enter' && handleLoginSubmit()} placeholder="请输入密码"
                   style={{ width: '100%', height: 36, padding: '0 12px', borderRadius: 4, border: `1px solid ${authErrors.password ? '#ff4d4f' : '#d9d9d9'}`, fontSize: 13, outline: 'none', color: '#262626', background: '#fff', fontFamily: 'inherit', boxSizing: 'border-box', transition: 'border-color 0.15s' }}
-                  onFocus={e => (e.target.style.borderColor = authErrors.password ? '#ff4d4f' : '#00BEBE')}
+                  onFocus={e => (e.target.style.borderColor = authErrors.password ? '#ff4d4f' : '#0fc6c2')}
                   onBlur={e => (e.target.style.borderColor = authErrors.password ? '#ff4d4f' : '#d9d9d9')} />
                 {authErrors.password && <div style={{ fontSize: 12, color: '#ff4d4f', marginTop: 4 }}>{authErrors.password}</div>}
               </div>
-              <div style={{ marginBottom: 16, padding: '8px 12px', background: '#f5f5f5', borderRadius: 4, fontSize: 12, color: '#8c8c8c' }}><div>管理员账号: <strong style={{ color: '#00BEBE' }}>admin</strong> &nbsp;密码: <strong style={{ color: '#00BEBE' }}>123456</strong></div></div>
+              <div style={{ marginBottom: 16, padding: '8px 12px', background: '#f5f5f5', borderRadius: 4, fontSize: 12, color: '#8c8c8c' }}><div>管理员账号: <strong style={{ color: '#0fc6c2' }}>admin</strong> &nbsp;密码: <strong style={{ color: '#0fc6c2' }}>123456</strong></div></div>
               <div style={{ display: 'flex', gap: 8 }}>
                 <button onClick={() => setLoginModalVisible(false)} style={{ flex: 1, height: 36, border: '1px solid #d9d9d9', borderRadius: 4, background: '#fff', cursor: 'pointer', fontSize: 13, color: '#595959', fontFamily: 'inherit', transition: 'all 0.15s' }}
-                  onMouseEnter={e => { const b = e.currentTarget as HTMLButtonElement; b.style.borderColor = '#00BEBE'; b.style.color = '#00BEBE'; }}
+                  onMouseEnter={e => { const b = e.currentTarget as HTMLButtonElement; b.style.borderColor = '#0fc6c2'; b.style.color = '#0fc6c2'; }}
                   onMouseLeave={e => { const b = e.currentTarget as HTMLButtonElement; b.style.borderColor = '#d9d9d9'; b.style.color = '#595959'; }}>取消</button>
-                <button onClick={handleLoginSubmit} disabled={authLoading} style={{ flex: 2, height: 36, border: 'none', borderRadius: 4, background: authLoading ? '#80d8d8' : '#00BEBE', color: '#fff', cursor: authLoading ? 'not-allowed' : 'pointer', fontSize: 13, fontWeight: 600, fontFamily: 'inherit', transition: 'background 0.15s', boxShadow: '0 2px 0 rgba(0,190,190,0.1)' }}
+                <button onClick={handleLoginSubmit} disabled={authLoading} style={{ flex: 2, height: 36, border: 'none', borderRadius: 4, background: authLoading ? '#80d8d8' : '#0fc6c2', color: '#fff', cursor: authLoading ? 'not-allowed' : 'pointer', fontSize: 13, fontWeight: 600, fontFamily: 'inherit', transition: 'background 0.15s', boxShadow: '0 2px 0 rgba(0,190,190,0.1)' }}
                   onMouseEnter={e => { if (!authLoading) (e.currentTarget as HTMLButtonElement).style.background = '#00d4d4'; }}
-                  onMouseLeave={e => { if (!authLoading) (e.currentTarget as HTMLButtonElement).style.background = '#00BEBE'; }}>
+                  onMouseLeave={e => { if (!authLoading) (e.currentTarget as HTMLButtonElement).style.background = '#0fc6c2'; }}>
                   {authLoading ? '登录中...' : '登录'}
                 </button>
               </div>
-              <div style={{ textAlign: 'center', marginTop: 16, fontSize: 13, color: '#8c8c8c' }}>还没有账号？{' '}<span onClick={() => { setLoginModalVisible(false); setRegisterModalVisible(true); }} style={{ color: '#00BEBE', cursor: 'pointer', fontWeight: 500 }}>立即注册</span></div>
+              <div style={{ textAlign: 'center', marginTop: 16, fontSize: 13, color: '#8c8c8c' }}>还没有账号？{' '}<span onClick={() => { setLoginModalVisible(false); setRegisterModalVisible(true); }} style={{ color: '#0fc6c2', cursor: 'pointer', fontWeight: 500 }}>立即注册</span></div>
             </div>
           </div>
         </div>
@@ -579,7 +579,7 @@ export default function FeeManager() {
         <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.45)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000 }}
           onClick={e => { if (e.target === e.currentTarget) setRegisterModalVisible(false); }}>
           <div style={{ background: '#fff', borderRadius: 8, width: 420, boxShadow: '0 8px 24px rgba(0,0,0,0.2)', overflow: 'hidden' }}>
-            <div style={{ padding: '20px 24px 16px', borderBottom: '1px solid #f0f0f0', background: '#00BEBE', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <div style={{ padding: '20px 24px 16px', borderBottom: '1px solid #f0f0f0', background: '#0fc6c2', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
               <div><div style={{ fontSize: 16, fontWeight: 600, color: '#fff' }}>用户注册</div><div style={{ fontSize: 12, color: 'rgba(255,255,255,0.7)', marginTop: 2 }}>创建您的智能多格式批量下单系统账号</div></div>
               <button onClick={() => setRegisterModalVisible(false)} style={{ background: 'none', border: 'none', color: 'rgba(255,255,255,0.8)', fontSize: 18, cursor: 'pointer', padding: 4, lineHeight: 1 }}
                 onMouseEnter={e => (e.currentTarget.style.color = '#fff')} onMouseLeave={e => (e.currentTarget.style.color = 'rgba(255,255,255,0.8)')}><Icon name="close" size={16} /></button>
@@ -597,22 +597,22 @@ export default function FeeManager() {
                     onKeyDown={field === 'confirmPassword' ? (e: React.KeyboardEvent) => { if (e.key === 'Enter') handleRegisterSubmit(); } : undefined}
                     placeholder={placeholder as string} autoFocus={field === 'username'}
                     style={{ width: '100%', height: 34, padding: '0 12px', borderRadius: 4, border: `1px solid ${err ? '#ff4d4f' : '#d9d9d9'}`, fontSize: 13, outline: 'none', color: '#262626', background: '#fff', fontFamily: 'inherit', boxSizing: 'border-box', transition: 'border-color 0.15s' }}
-                    onFocus={e => (e.target.style.borderColor = err ? '#ff4d4f' : '#00BEBE')}
+                    onFocus={e => (e.target.style.borderColor = err ? '#ff4d4f' : '#0fc6c2')}
                     onBlur={e => (e.target.style.borderColor = err ? '#ff4d4f' : '#d9d9d9')} />
                   {err && <div style={{ fontSize: 12, color: '#ff4d4f', marginTop: 4 }}>{err as string}</div>}
                 </div>
               ))}
               <div style={{ display: 'flex', gap: 8 }}>
                 <button onClick={() => setRegisterModalVisible(false)} style={{ flex: 1, height: 36, border: '1px solid #d9d9d9', borderRadius: 4, background: '#fff', cursor: 'pointer', fontSize: 13, color: '#595959', fontFamily: 'inherit', transition: 'all 0.15s' }}
-                  onMouseEnter={e => { const b = e.currentTarget as HTMLButtonElement; b.style.borderColor = '#00BEBE'; b.style.color = '#00BEBE'; }}
+                  onMouseEnter={e => { const b = e.currentTarget as HTMLButtonElement; b.style.borderColor = '#0fc6c2'; b.style.color = '#0fc6c2'; }}
                   onMouseLeave={e => { const b = e.currentTarget as HTMLButtonElement; b.style.borderColor = '#d9d9d9'; b.style.color = '#595959'; }}>取消</button>
-                <button onClick={handleRegisterSubmit} disabled={authLoading} style={{ flex: 2, height: 36, border: 'none', borderRadius: 4, background: authLoading ? '#80d8d8' : '#00BEBE', color: '#fff', cursor: authLoading ? 'not-allowed' : 'pointer', fontSize: 13, fontWeight: 600, fontFamily: 'inherit', transition: 'background 0.15s', boxShadow: '0 2px 0 rgba(0,190,190,0.1)' }}
+                <button onClick={handleRegisterSubmit} disabled={authLoading} style={{ flex: 2, height: 36, border: 'none', borderRadius: 4, background: authLoading ? '#80d8d8' : '#0fc6c2', color: '#fff', cursor: authLoading ? 'not-allowed' : 'pointer', fontSize: 13, fontWeight: 600, fontFamily: 'inherit', transition: 'background 0.15s', boxShadow: '0 2px 0 rgba(0,190,190,0.1)' }}
                   onMouseEnter={e => { if (!authLoading) (e.currentTarget as HTMLButtonElement).style.background = '#00d4d4'; }}
-                  onMouseLeave={e => { if (!authLoading) (e.currentTarget as HTMLButtonElement).style.background = '#00BEBE'; }}>
+                  onMouseLeave={e => { if (!authLoading) (e.currentTarget as HTMLButtonElement).style.background = '#0fc6c2'; }}>
                   {authLoading ? '注册中...' : '注册'}
                 </button>
               </div>
-              <div style={{ textAlign: 'center', marginTop: 16, fontSize: 13, color: '#8c8c8c' }}>已有账号？{' '}<span onClick={() => { setRegisterModalVisible(false); setLoginModalVisible(true); }} style={{ color: '#00BEBE', cursor: 'pointer', fontWeight: 500 }}>立即登录</span></div>
+              <div style={{ textAlign: 'center', marginTop: 16, fontSize: 13, color: '#8c8c8c' }}>已有账号？{' '}<span onClick={() => { setRegisterModalVisible(false); setLoginModalVisible(true); }} style={{ color: '#0fc6c2', cursor: 'pointer', fontWeight: 500 }}>立即登录</span></div>
             </div>
           </div>
         </div>
