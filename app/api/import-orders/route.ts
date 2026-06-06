@@ -1,8 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
-import sql, { initDB } from '@/lib/db';
+import sql, { initDB, getNeonClient } from '@/lib/db';
 
 /**
- * 保存导入运单到数据库
+ * 保存导入运单到数据库（批量插入优化版）
  */
 export async function POST(request: NextRequest) {
   try {
@@ -22,34 +22,95 @@ export async function POST(request: NextRequest) {
     `;
 
     const batchId = (batch as any).id;
+    const client = getNeonClient();
 
-    // 批量插入运单（每100条一批）
-    const batchSize = 100;
-    for (let i = 0; i < orders.length; i += batchSize) {
-      const batchOrders = orders.slice(i, i + batchSize);
-      for (const order of batchOrders) {
-        await sql`
-          INSERT INTO import_orders (
-            batch_id, order_no, sender_name, sender_phone, sender_address,
-            receiver_name, receiver_phone, receiver_address,
-            item_name, item_code, item_category, specification,
-            quantity, unit, source_file, source_sheet, source_row,
-            is_valid, validation_errors, extra_fields
-          ) VALUES (
-            ${batchId}, ${order.orderNo || null}, ${order.senderName || null}, ${order.senderPhone || null}, ${order.senderAddress || null},
-            ${order.receiverName || null}, ${order.receiverPhone || null}, ${order.receiverAddress || null},
-            ${order.itemName || null}, ${order.itemCode || null}, ${order.itemCategory || null}, ${order.specification || null},
-            ${order.quantity ?? null}, ${order.unit || null}, ${order.sourceFile || fileName || null}, ${order.sourceSheet || null}, ${order.sourceRow ?? null},
-            ${order.isValid ?? true}, ${order.validationErrors || []}, ${JSON.stringify(order.extraFields || {})}
-          )
-        `;
+    // 批量插入运单（每 200 条一批，使用多行 VALUES 语法）
+    const BATCH_SIZE = 200;
+    let insertedCount = 0;
+    const errors: string[] = [];
+
+    for (let i = 0; i < orders.length; i += BATCH_SIZE) {
+      const chunk = orders.slice(i, i + BATCH_SIZE);
+
+      // 构建多行 VALUES 占位符
+      const valuePlaceholders: string[] = [];
+      const params: any[] = [];
+      let paramIndex = 1;
+
+      for (const order of chunk) {
+        const rowPlaceholders: string[] = [];
+        // 按字段顺序添加参数
+        const fields = [
+          batchId,
+          order.orderNo || null,
+          order.storeName || null,
+          order.senderName || null,
+          order.senderPhone || null,
+          order.senderAddress || null,
+          order.receiverName || null,
+          order.receiverPhone || null,
+          order.receiverAddress || null,
+          order.itemName || null,
+          order.itemCode || null,
+          order.itemCategory || null,
+          order.specification || null,
+          order.quantity ?? null,
+          order.unit || null,
+          order.remark || null,
+          order.sourceFile || fileName || null,
+          order.sourceSheet || null,
+          order.sourceRow ?? null,
+          order.isValid ?? true,
+          order.validationErrors || [],
+          JSON.stringify(order.extraFields || {}),
+        ];
+
+        for (const val of fields) {
+          rowPlaceholders.push(`$${paramIndex}`);
+          params.push(val);
+          paramIndex++;
+        }
+
+        valuePlaceholders.push(`(${rowPlaceholders.join(', ')})`);
+      }
+
+      const insertSQL = `
+        INSERT INTO import_orders (
+          batch_id, order_no, store_name, sender_name, sender_phone, sender_address,
+          receiver_name, receiver_phone, receiver_address,
+          item_name, item_code, item_category, specification,
+          quantity, unit, remark, source_file, source_sheet, source_row,
+          is_valid, validation_errors, extra_fields
+        ) VALUES ${valuePlaceholders.join(', ')}
+      `;
+
+      try {
+        await (client as any).unsafe(insertSQL, params);
+        insertedCount += chunk.length;
+      } catch (err: any) {
+        console.error(`批量插入失败 (offset ${i}):`, err.message);
+        errors.push(`批次 ${Math.floor(i / BATCH_SIZE) + 1} 失败: ${err.message}`);
       }
     }
 
+    // 更新批次统计
+    if (errors.length > 0) {
+      await sql`
+        UPDATE import_batches
+        SET success_rows = ${insertedCount}, error_rows = ${orders.length - insertedCount}
+        WHERE id = ${batchId}
+      `;
+    }
+
     return NextResponse.json({
-      success: true,
+      success: errors.length === 0,
       batchId,
-      message: `成功保存 ${orders.length} 条运单`,
+      insertedCount,
+      totalCount: orders.length,
+      message: errors.length === 0
+        ? `成功保存 ${orders.length} 条运单`
+        : `部分保存失败：成功 ${insertedCount}/${orders.length} 条`,
+      errors: errors.length > 0 ? errors : undefined,
     });
   } catch (error) {
     console.error('保存运单失败:', error);

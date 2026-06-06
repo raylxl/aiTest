@@ -1,4 +1,5 @@
 import type { ParseRule } from '@/types/rule';
+import { validateParseRule, formatValidationErrors } from '@/lib/parser/validator';
 import https from 'https';
 
 const DEEPSEEK_API_URL = 'https://api.siliconflow.cn/v1/chat/completions';
@@ -191,15 +192,12 @@ ${fileSample}
 }
 
 /**
- * 验证规则格式
+ * 验证规则格式（使用统一校验器）
  */
 function validateRule(rule: any): void {
-  if (!rule.name) throw new Error('规则缺少name字段');
-  if (!rule.parser?.type) throw new Error('规则缺少parser.type字段');
-  
-  const validTypes = ['table', 'matrix', 'card', 'text', 'multi-sheet', 'multi-page'];
-  if (!validTypes.includes(rule.parser.type)) {
-    throw new Error(`无效的解析类型: ${rule.parser.type}`);
+  const result = validateParseRule(rule);
+  if (!result.valid) {
+    throw new Error(formatValidationErrors(result));
   }
 }
 

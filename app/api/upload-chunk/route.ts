@@ -31,7 +31,7 @@ export async function POST(request: NextRequest) {
       try { rule = JSON.parse(ruleJsonStr); } catch { return NextResponse.json({ error: '规则JSON格式错误' }, { status: 400 }); }
 
       const totalChunks = parseInt(totalChunksStr);
-      createSession(uploadId, fileName, fileType || 'excel', rule, totalChunks);
+      await createSession(uploadId, fileName, fileType || 'excel', rule, totalChunks);
 
       return NextResponse.json({
         success: true,
@@ -47,8 +47,8 @@ export async function POST(request: NextRequest) {
       const chunkIndex = parseInt(chunkIndexStr);
       const buffer = Buffer.from(await chunkData.arrayBuffer());
 
-      const result = storeChunk(uploadId, chunkIndex, buffer);
-      const completeInfo = isComplete(uploadId);
+      const result = await storeChunk(uploadId, chunkIndex, buffer);
+      const completeInfo = await isComplete(uploadId);
 
       return NextResponse.json({
         success: true,
@@ -60,7 +60,7 @@ export async function POST(request: NextRequest) {
 
     if (action === 'finish' && uploadId) {
       // 所有分片已上传完成，触发合并和解析
-      const completeInfo = isComplete(uploadId);
+      const completeInfo = await isComplete(uploadId);
       if (!completeInfo.complete) {
         return NextResponse.json({
           success: false,
@@ -69,12 +69,12 @@ export async function POST(request: NextRequest) {
         }, { status: 400 });
       }
 
-      const mergedBuffer = mergeAndGetFile(uploadId);
-      const rule = getSessionRule(uploadId);
-      const sessionInfo = getSessionInfo(uploadId);
+      const mergedBuffer = await mergeAndGetFile(uploadId);
+      const rule = await getSessionRule(uploadId);
+      const sessionInfo = await getSessionInfo(uploadId);
 
       if (!mergedBuffer || !rule || !sessionInfo) {
-        deleteSession(uploadId);
+        await deleteSession(uploadId);
         return NextResponse.json({ error: '合并失败，请重新上传' }, { status: 500 });
       }
 
@@ -91,7 +91,7 @@ export async function POST(request: NextRequest) {
           rule
         );
 
-        deleteSession(uploadId);
+        await deleteSession(uploadId);
 
         return NextResponse.json({
           success: true,
@@ -101,7 +101,7 @@ export async function POST(request: NextRequest) {
           message: `分片合并解析完成，共 ${parseResult.totalRows || 0} 条记录`,
         });
       } catch (parseError: any) {
-        deleteSession(uploadId);
+        await deleteSession(uploadId);
         console.error('分片合并后解析失败:', parseError);
         throw parseError;
       }

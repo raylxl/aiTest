@@ -211,9 +211,13 @@ export interface ParsedOrder {
 
   remark?: string;
 
+  // 元数据字段
   extraFields?: Record<string, any>;
-  sourceRow?: number;
-  sourceSheet?: string;
+  sourceFile?: string;      // 来源文件名
+  sourceRow?: number;       // 来源行号
+  sourceSheet?: string;     // 来源 Sheet 名
+
+  // 校验相关
   isValid?: boolean;
   validationErrors?: string[];
 }

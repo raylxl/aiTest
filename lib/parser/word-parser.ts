@@ -3,29 +3,114 @@ import type { ParseRule, ParsedOrder } from '@/types/rule';
 export interface WordParseResult {
   text: string;
   paragraphs: string[];
+  tables: {
+    headers: string[];
+    rows: string[][];
+  }[];
   metadata: {
     paragraphCount: number;
+    tableCount: number;
   };
 }
 
 /**
  * 解析Word文件（.docx）
- * 使用mammoth.js提取文本
+ * 使用mammoth.js提取文本和表格结构
  */
 export async function parseWordFile(buffer: ArrayBuffer): Promise<WordParseResult> {
   const mammoth = await import('mammoth');
   
-  const result = await mammoth.extractRawText({ arrayBuffer: buffer });
-  const text = result.value;
+  // 同时提取纯文本和HTML（用于表格结构）
+  const [textResult, htmlResult] = await Promise.all([
+    mammoth.extractRawText({ arrayBuffer: buffer }),
+    mammoth.convertToHtml({ arrayBuffer: buffer }),
+  ]);
+  
+  const text = textResult.value;
+  const html = htmlResult.value;
   const paragraphs = text.split('\n').filter(p => p.trim());
+  
+  // 从HTML中提取表格结构
+  const tables = extractTablesFromHtml(html);
   
   return {
     text,
     paragraphs,
+    tables,
     metadata: {
       paragraphCount: paragraphs.length,
+      tableCount: tables.length,
     },
   };
+}
+
+/**
+ * 从HTML中提取表格结构
+ */
+function extractTablesFromHtml(html: string): { headers: string[]; rows: string[][] }[] {
+  const tables: { headers: string[]; rows: string[][] }[] = [];
+  
+  // 匹配所有<table>标签
+  const tableRegex = /<table[^>]*>([\s\S]*?)<\/table>/gi;
+  let tableMatch;
+  
+  while ((tableMatch = tableRegex.exec(html)) !== null) {
+    const tableHtml = tableMatch[1];
+    const headers: string[] = [];
+    const rows: string[][] = [];
+    
+    // 提取表头（<th>）
+    const headerRegex = /<th[^>]*>([\s\S]*?)<\/th>/gi;
+    let headerMatch;
+    while ((headerMatch = headerRegex.exec(tableHtml)) !== null) {
+      headers.push(cleanHtml(headerMatch[1]));
+    }
+    
+    // 提取数据行（<tr>中的<td>）
+    const rowRegex = /<tr[^>]*>([\s\S]*?)<\/tr>/gi;
+    let rowMatch;
+    
+    while ((rowMatch = rowRegex.exec(tableHtml)) !== null) {
+      const rowHtml = rowMatch[1];
+      const cells: string[] = [];
+      
+      // 跳过表头行（包含<th>的行）
+      if (rowHtml.includes('<th')) continue;
+      
+      const cellRegex = /<td[^>]*>([\s\S]*?)<\/td>/gi;
+      let cellMatch;
+      while ((cellMatch = cellRegex.exec(rowHtml)) !== null) {
+        cells.push(cleanHtml(cellMatch[1]));
+      }
+      
+      if (cells.length > 0) {
+        rows.push(cells);
+      }
+    }
+    
+    // 只有当表格有内容时才添加
+    if (headers.length > 0 || rows.length > 0) {
+      tables.push({ headers, rows });
+    }
+  }
+  
+  return tables;
+}
+
+/**
+ * 清理HTML标签，提取纯文本
+ */
+function cleanHtml(html: string): string {
+  return html
+    .replace(/<br\s*\/?>/gi, '\n')
+    .replace(/<[^>]+>/g, '')
+    .replace(/&nbsp;/g, ' ')
+    .replace(/&amp;/g, '&')
+    .replace(/&lt;/g, '<')
+    .replace(/&gt;/g, '>')
+    .replace(/&quot;/g, '"')
+    .replace(/&#39;/g, "'")
+    .trim();
 }
 
 /**

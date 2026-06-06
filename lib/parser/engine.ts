@@ -46,6 +46,12 @@ export class ParseEngine {
           throw new Error(`不支持的文件类型: ${fileType}`);
       }
 
+      // 为每条记录添加来源文件名
+      orders = orders.map(order => ({
+        ...order,
+        sourceFile: order.sourceFile || fileName,
+      }));
+
       // 数据校验
       const validatedOrders = this.validateOrders(orders);
       const errorRows = validatedOrders.filter(o => !o.isValid).length;

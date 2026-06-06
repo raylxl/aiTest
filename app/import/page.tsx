@@ -10,6 +10,7 @@ import { useDebounce } from '../hooks/useDebounce';
 import { useLargeData } from '../hooks/useLargeData';
 import { useParseWorker } from '../hooks/useWebWorker';
 import type { ParsedOrder, ParseRule } from '@/types/rule';
+import { validateParseRule, formatValidationErrors } from '@/lib/parser/validator';
 
 type StepType = 'upload' | 'analyze' | 'confirm' | 'result' | 'history' | 'rules';
 
@@ -221,6 +222,24 @@ interface SamplePreviewData {
   usesFirstRowAsHeader?: boolean;
 }
 
+const JT_PRIMARY = '#1677ff';
+const JT_PRIMARY_HOVER = '#0958d9';
+const JT_PRIMARY_LIGHT = '#e6f4ff';
+const JT_PRIMARY_BORDER = '#91caff';
+const JT_SUCCESS = '#52c41a';
+const JT_WARNING = '#faad14';
+const JT_DANGER = '#ff4d4f';
+const JT_NAVY = '#001529';
+
+const STEP_CONFIG: Array<{ key: StepType; label: string; icon: string; desc: string }> = [
+  { key: 'upload', label: '上传文件', icon: '1', desc: '准备源文件与 AI 配置' },
+  { key: 'analyze', label: 'AI 分析', icon: '2', desc: '抽样识别文件结构' },
+  { key: 'confirm', label: '确认规则', icon: '3', desc: '核对规则与风险项' },
+  { key: 'result', label: '解析结果', icon: '4', desc: '确认数据后提交导入' },
+];
+
+const STEP_ORDER: StepType[] = STEP_CONFIG.map(item => item.key);
+
 function isLikelyHeaderRow(cells: string[]): boolean {
   const normalized = cells.map(cell => cell.trim()).filter(Boolean);
   if (!normalized.length) return false;
@@ -348,6 +367,10 @@ export default function ImportPage() {
   const [apiUrl, setApiUrl] = useState('https://api.siliconflow.cn/v1/chat/completions');
   const [modelName, setModelName] = useState('deepseek-ai/DeepSeek-V4-Pro');
 
+  const currentStepIndex = STEP_ORDER.indexOf(step);
+  const filesReadyForConfirm = analyzedFiles.filter(file => Boolean(file.rule)).length;
+  const canEnterAnalyze = analyzedFiles.length > 0 && Boolean(apiKey);
+
   // 重复检测结果
   const [duplicateNos, setDuplicateNos] = useState<string[]>([]);
   const [dupStats, setDupStats] = useState<{ batchDupCount: number; dbDupCount: number } | null>(null);
@@ -452,8 +475,42 @@ export default function ImportPage() {
   }, [displayedOrders, debouncedSearchQuery]);
 
   const useVirtualScroll = totalCount > 100;
+  const invalidOrdersCount = orders.filter(order => !order.isValid).length;
+  const selectedOrdersCount = selectedIndices.length > 0 ? selectedIndices.length : orders.length;
+  const canEnterConfirm = analyzedFiles.length > 0 && filesReadyForConfirm === analyzedFiles.length;
+  const canEnterResult = orders.length > 0;
 
-  // 前端直接调用AI API
+  const stepSummary = useMemo(() => {
+    if (step === 'upload') return `已选择 ${analyzedFiles.length} 个文件，待确认规则 ${Math.max(analyzedFiles.length - filesReadyForConfirm, 0)} 个`;
+    if (step === 'analyze') return `正在为 ${analyzedFiles.length} 个文件抽样分析结构并生成推荐规则`;
+    if (step === 'confirm') return `已准备 ${filesReadyForConfirm}/${analyzedFiles.length} 个规则，确认后即可开始解析`;
+    if (step === 'result') return `共解析 ${orders.length} 条记录，可提交 ${selectedOrdersCount} 条${invalidOrdersCount > 0 ? `，其中 ${invalidOrdersCount} 条待修正` : ''}`;
+    return '';
+  }, [analyzedFiles.length, filesReadyForConfirm, invalidOrdersCount, orders.length, selectedOrdersCount, step]);
+
+  const stepCanJump = useCallback((target: StepType) => {
+    if (target === 'upload') return true;
+    if (target === 'analyze') return canEnterAnalyze && !parsing;
+    if (target === 'confirm') return canEnterConfirm && !parsing;
+    if (target === 'result') return canEnterResult && !parsing;
+    return false;
+  }, [canEnterAnalyze, canEnterConfirm, canEnterResult, parsing]);
+
+  const handleStepChange = useCallback((target: StepType) => {
+    if (!stepCanJump(target)) {
+      if (target === 'analyze') showToast('warning', '请先上传文件并配置 AI Key');
+      else if (target === 'confirm') showToast('warning', '请先为全部文件完成规则准备');
+      else if (target === 'result') showToast('warning', '请先完成解析后再查看结果');
+      return;
+    }
+    setStep(target);
+  }, [stepCanJump]);
+
+  const stepStatusTone = step === 'result'
+    ? invalidOrdersCount > 0 ? 'warning' : 'success'
+    : step === 'confirm'
+      ? canEnterConfirm ? 'ready' : 'warning'
+      : 'info';
   const callAIFromClient = async (sample: string, fileType: string, fileName: string): Promise<ParseRule> => {
     if (!apiKey) throw new Error('请先配置AI API Key');
     let fullApiUrl = apiUrl;
@@ -637,10 +694,15 @@ export default function ImportPage() {
   // 批量AI分析所有文件
   const handleAnalyzeAll = async () => {
     if (!apiKey) { showToast('error', '请先配置AI API Key'); return; }
+    if (analyzedFiles.length === 0) { showToast('warning', '请先上传至少一个文件'); return; }
     setStep('analyze');
+    setProgress(8);
+    setParseProgressText(`开始分析 ${analyzedFiles.length} 个文件，系统将依次提取样例并生成推荐规则`);
     for (let i = 0; i < analyzedFiles.length; i++) {
       if (!analyzedFiles[i].rule || analyzedFiles[i].ruleOrigin !== 'saved') await handleAnalyzeFile(i);
+      setProgress(Math.round(((i + 1) / analyzedFiles.length) * 100));
     }
+    setParseProgressText(`AI 分析完成，已准备 ${analyzedFiles.filter(file => file.rule || file.ruleOrigin === 'saved').length}/${analyzedFiles.length} 个规则`);
     setStep('confirm');
   };
 
@@ -653,17 +715,63 @@ export default function ImportPage() {
     setEditingRuleTestResult(null);
   };
 
-  // 保存编辑后的规则
+  // 保存编辑后的规则（含校验）
   const handleSaveRule = () => {
     if (editingRuleIndex === null) return;
     try {
       const rule = JSON.parse(editingRuleJson) as ParseRule;
+
+      // 使用统一校验器验证规则
+      const validationResult = validateParseRule(rule);
+      if (!validationResult.valid) {
+        showToast('error', '规则校验失败，请检查错误信息');
+        setEditingRuleTestResult({
+          success: false,
+          error: formatValidationErrors(validationResult),
+          validationErrors: validationResult.errors,
+        });
+        return;
+      }
+
       setAnalyzedFiles(prev => prev.map((f, i) => i === editingRuleIndex ? { ...f, rule, selectedRuleId: null } : f));
       setEditingRuleTestResult(null);
       setEditingRuleIndex(null);
       showToast('success', '规则已更新');
+
+      // 如果有警告，仍然允许保存但提示用户
+      if (validationResult.warnings.length > 0) {
+        showToast('warning', `规则已保存，但有 ${validationResult.warnings.length} 个警告`);
+      }
     } catch {
       showToast('error', 'JSON格式错误');
+    }
+  };
+
+  // 仅校验规则结构
+  const handleValidateRule = () => {
+    if (editingRuleIndex === null) return;
+    try {
+      const rule = JSON.parse(editingRuleJson);
+      const result = validateParseRule(rule);
+      if (result.valid) {
+        showToast('success', '规则结构校验通过');
+        setEditingRuleTestResult({
+          success: true,
+          message: '规则结构校验通过' + (result.warnings.length > 0 ? `（${result.warnings.length} 个警告）` : ''),
+          warnings: result.warnings,
+        });
+      } else {
+        showToast('error', '规则校验失败');
+        setEditingRuleTestResult({
+          success: false,
+          error: formatValidationErrors(result),
+          validationErrors: result.errors,
+          warnings: result.warnings,
+        });
+      }
+    } catch {
+      showToast('error', 'JSON 格式错误');
+      setEditingRuleTestResult({ success: false, error: 'JSON 格式错误' });
     }
   };
 
@@ -878,6 +986,7 @@ export default function ImportPage() {
 
       setStep('result');
       showToast('success', `全部解析完成，共 ${allOrders.length} 条记录`);
+      setParseProgressText(`解析完成，共 ${allOrders.length} 条记录，已进入结果确认阶段`);
     } catch {
       showToast('error', '解析过程中发生错误');
     } finally {
@@ -1110,44 +1219,43 @@ export default function ImportPage() {
         <div className="max-w-7xl mx-auto px-3 sm:px-6 lg:px-8">
           <div className="flex justify-between items-center h-14 sm:h-16">
             <div className="flex items-center gap-2 sm:gap-3">
-              <div className="w-8 h-8 sm:w-10 sm:h-10 bg-[#0fc6c2] rounded-lg flex items-center justify-center shrink-0">
+              <div className="w-8 h-8 sm:w-10 sm:h-10 rounded-lg flex items-center justify-center shrink-0" style={{ backgroundColor: JT_PRIMARY }}>
                 <svg className="w-5 h-5 sm:w-6 sm:h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
                 </svg>
               </div>
               <div className="min-w-0">
-                <h1 className="text-base sm:text-xl font-bold text-gray-900 truncate">万能导入 V2</h1>
-                <p className="hidden sm:block text-xs text-gray-500">智能多格式批量下单系统</p>
+                <div className="flex items-center gap-2 flex-wrap">
+                  <h1 className="text-base sm:text-xl font-bold text-gray-900 truncate">万能导入 V2</h1>
+                  <span className="hidden sm:inline-flex items-center rounded-full px-2 py-0.5 text-[11px] font-medium border" style={{ color: JT_PRIMARY, backgroundColor: JT_PRIMARY_LIGHT, borderColor: JT_PRIMARY_BORDER }}>鲸天风格</span>
+                </div>
+                <p className="hidden sm:block text-xs text-gray-500">智能多格式批量下单系统 · 规则驱动解析</p>
               </div>
             </div>
-            {/* 右侧操作区：移动端折叠显示 */}
             <div className="flex items-center gap-1 sm:gap-3">
               {orders.length > 0 && (
                 <span className="hidden md:inline-block text-sm text-gray-600 shrink-0">
-                  已解析 <span className="font-medium text-[#0fc6c2]">{orders.length}</span> 条运单
-                  {useVirtualScroll && <span className="ml-2 text-xs bg-blue-100 text-blue-800 px-2 py-0.5 rounded">虚拟滚动</span>}
-                  {workerSupported && <span className="ml-2 text-xs bg-green-100 text-green-800 px-2 py-0.5 rounded">Worker</span>}
+                  已解析 <span className="font-medium" style={{ color: JT_PRIMARY }}>{orders.length}</span> 条运单
+                  {useVirtualScroll && <span className="ml-2 text-xs px-2 py-0.5 rounded" style={{ backgroundColor: JT_PRIMARY_LIGHT, color: JT_PRIMARY }}>虚拟滚动</span>}
+                  {workerSupported && <span className="ml-2 text-xs px-2 py-0.5 rounded bg-green-100 text-green-700">Worker</span>}
                 </span>
               )}
-              {/* 移动端显示简化计数 */}
               {orders.length > 0 && (
-                <span className="md:hidden text-xs font-medium text-[#0fc6c2] bg-[#0fc6c2]/10 px-2 py-0.5 rounded-full shrink-0">{orders.length}条</span>
+                <span className="md:hidden text-xs font-medium px-2 py-0.5 rounded-full shrink-0" style={{ color: JT_PRIMARY, backgroundColor: JT_PRIMARY_LIGHT }}>{orders.length}条</span>
               )}
-              <button onClick={() => setStep('rules')} className="text-xs sm:text-sm text-[#0fc6c2] hover:text-[#0aa8a4] whitespace-nowrap shrink-0 hidden xs:inline-block">⚙️ 规则库</button>
-              <button onClick={() => setStep('history')} className="text-xs sm:text-sm text-[#0fc6c2] hover:text-[#0aa8a4] whitespace-nowrap shrink-0 hidden xs:inline-block">📋 历史记录</button>
+              <button onClick={() => handleStepChange('rules')} className="text-xs sm:text-sm whitespace-nowrap shrink-0 hidden xs:inline-block" style={{ color: JT_PRIMARY }}>⚙️ 规则库</button>
+              <button onClick={() => handleStepChange('history')} className="text-xs sm:text-sm whitespace-nowrap shrink-0 hidden xs:inline-block" style={{ color: JT_PRIMARY }}>📋 历史记录</button>
               {step !== 'upload' && step !== 'history' && step !== 'rules' && (
                 <button onClick={handleRestart} className="text-xs sm:text-sm text-gray-500 hover:text-gray-700 whitespace-nowrap shrink-0">重置</button>
               )}
-              {/* 移动端菜单按钮 */}
               <button onClick={() => setShowMobileMenu(!showMobileMenu)} className="xs:hidden p-1.5 text-gray-600 hover:bg-gray-100 rounded-lg shrink-0" aria-label="菜单">
                 <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16"/></svg>
               </button>
             </div>
-            {/* 移动端下拉菜单 */}
             {showMobileMenu && (
               <div className="absolute right-3 top-14 sm:top-16 bg-white shadow-lg border border-gray-200 rounded-lg py-2 z-50 min-w-[140px]">
-                <button onClick={() => { setStep('rules'); setShowMobileMenu(false); }} className="block w-full text-left px-4 py-2 text-sm text-[#0fc6c2] hover:bg-[#0fc6c2]/5">⚙️ 规则库</button>
-                <button onClick={() => { setStep('history'); setShowMobileMenu(false); }} className="block w-full text-left px-4 py-2 text-sm text-[#0fc6c2] hover:bg-[#0fc6c2]/5">📋 历史记录</button>
+                <button onClick={() => { handleStepChange('rules'); setShowMobileMenu(false); }} className="block w-full text-left px-4 py-2 text-sm hover:bg-blue-50" style={{ color: JT_PRIMARY }}>⚙️ 规则库</button>
+                <button onClick={() => { handleStepChange('history'); setShowMobileMenu(false); }} className="block w-full text-left px-4 py-2 text-sm hover:bg-blue-50" style={{ color: JT_PRIMARY }}>📋 历史记录</button>
                 {orders.length > 0 && <div className="border-t my-1"></div>}
                 {orders.length > 0 && <div className="px-4 py-1 text-xs text-gray-400">已解析 {orders.length} 条运单</div>}
               </div>
@@ -1158,25 +1266,53 @@ export default function ImportPage() {
 
       {/* 步骤指示器 - 响应式 */}
       {step !== 'history' && step !== 'rules' && (
-        <div className="max-w-7xl mx-auto px-3 sm:px-6 lg:px-8 pt-4 sm:pt-6">
-          <div className="flex items-center justify-center gap-1 sm:gap-2 mb-4 sm:mb-6 overflow-x-auto pb-1 scrollbar-hide">
-            {[
-              { key: 'upload', label: '上传文件', icon: '📁' },
-              { key: 'analyze', label: 'AI分析', icon: '🤖' },
-              { key: 'confirm', label: '确认规则', icon: '✅' },
-              { key: 'result', label: '解析结果', icon: '📊' },
-            ].map((s, i) => (
-              <div key={s.key} className="flex items-center shrink-0">
-                <div className={`flex items-center gap-0.5 sm:gap-1 px-2 sm:px-3 py-1 sm:py-1.5 rounded-full text-xs sm:text-sm whitespace-nowrap ${
-                  step === s.key ? 'bg-[#0fc6c2] text-white'
-                    : (['upload', 'analyze', 'confirm', 'result'].indexOf(step) > i
-                      ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-500')
-                }`}>
-                  <span className="hidden xs:inline">{s.icon}</span><span>{s.label}</span>
+        <div className="max-w-7xl mx-auto px-3 sm:px-6 lg:px-8 pt-4 sm:pt-6 space-y-4">
+          <div className="rounded-2xl border bg-white shadow-sm overflow-hidden" style={{ borderColor: stepStatusTone === 'warning' ? '#ffe58f' : '#d9d9d9' }}>
+            <div className="px-4 sm:px-5 py-4 border-b border-gray-100 flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+              <div>
+                <div className="flex items-center gap-2 flex-wrap">
+                  <span className="inline-flex items-center rounded-full px-2.5 py-1 text-xs font-medium text-white" style={{ backgroundColor: step === 'result' ? (invalidOrdersCount > 0 ? JT_WARNING : JT_SUCCESS) : JT_PRIMARY }}>
+                    当前阶段 · {STEP_CONFIG[currentStepIndex]?.label || '上传文件'}
+                  </span>
+                  <span className="text-sm font-medium text-gray-900">{STEP_CONFIG[currentStepIndex]?.desc || '准备源文件与 AI 配置'}</span>
                 </div>
-                {i < 3 && <div className="w-8 h-px bg-gray-300 mx-1" />}
+                <p className="mt-2 text-sm text-gray-500">{stepSummary}</p>
               </div>
-            ))}
+              <div className="grid grid-cols-2 gap-2 sm:flex sm:flex-wrap sm:justify-end text-xs">
+                <div className="rounded-xl border border-gray-200 px-3 py-2 bg-gray-50 text-gray-600">文件数 <span className="ml-1 font-semibold text-gray-900">{analyzedFiles.length}</span></div>
+                <div className="rounded-xl border border-gray-200 px-3 py-2 bg-gray-50 text-gray-600">规则就绪 <span className="ml-1 font-semibold text-gray-900">{filesReadyForConfirm}</span></div>
+                <div className="rounded-xl border border-gray-200 px-3 py-2 bg-gray-50 text-gray-600">解析记录 <span className="ml-1 font-semibold text-gray-900">{orders.length}</span></div>
+                <div className="rounded-xl border border-gray-200 px-3 py-2 bg-gray-50 text-gray-600">待修正 <span className="ml-1 font-semibold" style={{ color: invalidOrdersCount > 0 ? JT_DANGER : '#262626' }}>{invalidOrdersCount}</span></div>
+              </div>
+            </div>
+            <div className="px-3 sm:px-5 py-4">
+              <div className="flex items-center justify-center gap-1 sm:gap-2 overflow-x-auto pb-1 scrollbar-hide">
+                {STEP_CONFIG.map((s, i) => {
+                  const isCurrent = step === s.key;
+                  const isDone = currentStepIndex > i;
+                  const canJump = stepCanJump(s.key);
+                  return (
+                    <div key={s.key} className="flex items-center shrink-0">
+                      <button
+                        type="button"
+                        onClick={() => handleStepChange(s.key)}
+                        disabled={!canJump && !isCurrent}
+                        className={`flex items-center gap-2 px-2.5 sm:px-4 py-2 rounded-full text-xs sm:text-sm whitespace-nowrap border transition-colors ${!canJump && !isCurrent ? 'cursor-not-allowed opacity-60' : 'cursor-pointer'}`}
+                        style={{
+                          backgroundColor: isCurrent ? JT_PRIMARY : isDone ? '#f6ffed' : '#fafafa',
+                          borderColor: isCurrent ? JT_PRIMARY : isDone ? '#b7eb8f' : '#d9d9d9',
+                          color: isCurrent ? '#ffffff' : isDone ? '#389e0d' : '#595959',
+                        }}
+                      >
+                        <span className="inline-flex h-5 w-5 items-center justify-center rounded-full text-[11px] font-semibold" style={{ backgroundColor: isCurrent ? 'rgba(255,255,255,0.2)' : '#ffffff', color: isCurrent ? '#ffffff' : isDone ? '#389e0d' : JT_PRIMARY }}>{s.icon}</span>
+                        <span>{s.label}</span>
+                      </button>
+                      {i < STEP_CONFIG.length - 1 && <div className="w-8 sm:w-10 h-px bg-gray-300 mx-1" />}
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
           </div>
         </div>
       )}
@@ -1186,52 +1322,69 @@ export default function ImportPage() {
 
         {/* AI配置区域 */}
         {step === 'upload' && (
-          <div className="bg-white rounded-lg border border-gray-200 p-4 mb-6">
-            <h3 className="text-sm font-medium text-gray-700 mb-3">🤖 AI配置</h3>
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          <div className="rounded-2xl border bg-white shadow-sm overflow-hidden" style={{ borderColor: '#d9d9d9' }}>
+            <div className="px-4 sm:px-5 py-4 border-b border-gray-100 flex flex-col gap-2 lg:flex-row lg:items-center lg:justify-between">
               <div>
-                <label className="block text-xs text-gray-500 mb-1">API地址</label>
-                <input type="text" value={apiUrl} onChange={e => setApiUrl(e.target.value)}
-                  placeholder="https://api.openai.com/v1/chat/completions"
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#0fc6c2]" />
+                <h3 className="text-sm font-semibold text-gray-800">AI 配置</h3>
+                <p className="mt-1 text-xs text-gray-500">先固定分析模型，再进入文件上传与规则生成。配置保存在当前浏览器。</p>
               </div>
-              <div>
-                <label className="block text-xs text-gray-500 mb-1">模型名称</label>
-                <input type="text" value={modelName} onChange={e => setModelName(e.target.value)}
-                  placeholder="例如：deepseek-ai/DeepSeek-V4-Pro、deepseek-ai/DeepSeek-V3"
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#0fc6c2]" />
-              </div>
-              <div>
-                <label className="block text-xs text-gray-500 mb-1">API Key</label>
-                <div className="flex gap-2">
-                  <input type="password" value={apiKey} onChange={e => setApiKey(e.target.value)} placeholder="sk-..."
-                    className="flex-1 px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#0fc6c2]" />
-                  <button onClick={saveConfig} className="px-4 py-2 bg-[#0fc6c2] text-white rounded-lg text-sm hover:bg-[#0aa8a4]">保存</button>
-                  <button onClick={resetConfig} className="px-4 py-2 bg-gray-100 text-gray-600 rounded-lg text-sm hover:bg-gray-200">重置</button>
-                </div>
+              <div className="inline-flex items-center gap-2 rounded-full px-3 py-1 text-xs" style={{ backgroundColor: JT_PRIMARY_LIGHT, color: JT_PRIMARY }}>
+                当前阶段必填
               </div>
             </div>
-            <p className="text-xs text-gray-500 mt-2">配置会保存在浏览器本地，下次无需重复输入</p>
-            <div className="mt-3 p-3 bg-gray-50 rounded-lg border border-gray-200">
-              <div className="flex items-center gap-1.5 mb-2">
-                <span className="text-xs font-medium text-gray-600">📋 参考配置</span>
-                <button
-                  onClick={() => { setApiUrl('https://api.siliconflow.cn/v1/chat/completions'); setModelName('deepseek-ai/DeepSeek-V4-Pro'); }}
-                  className="text-xs text-[#0fc6c2] hover:text-[#0aa8a4] hover:underline cursor-pointer"
-                >一键填入地址和模型</button>
+            <div className="p-4 sm:p-5 space-y-4">
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <div>
+                  <label className="block text-xs text-gray-500 mb-1">API地址</label>
+                  <input type="text" value={apiUrl} onChange={e => setApiUrl(e.target.value)}
+                    placeholder="https://api.openai.com/v1/chat/completions"
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2"
+                    style={{ boxShadow: `0 0 0 2px ${JT_PRIMARY}33` }} />
+                </div>
+                <div>
+                  <label className="block text-xs text-gray-500 mb-1">模型名称</label>
+                  <input type="text" value={modelName} onChange={e => setModelName(e.target.value)}
+                    placeholder="例如：deepseek-ai/DeepSeek-V4-Pro、deepseek-ai/DeepSeek-V3"
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2"
+                    style={{ boxShadow: `0 0 0 2px ${JT_PRIMARY}33` }} />
+                </div>
+                <div>
+                  <label className="block text-xs text-gray-500 mb-1">API Key</label>
+                  <div className="flex gap-2">
+                    <input type="password" value={apiKey} onChange={e => setApiKey(e.target.value)} placeholder="sk-..."
+                      className="flex-1 px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2"
+                      style={{ boxShadow: `0 0 0 2px ${JT_PRIMARY}33` }} />
+                    <button onClick={saveConfig} className="px-4 py-2 text-white rounded-lg text-sm" style={{ backgroundColor: JT_PRIMARY }}>保存</button>
+                    <button onClick={resetConfig} className="px-4 py-2 bg-gray-100 text-gray-600 rounded-lg text-sm hover:bg-gray-200">重置</button>
+                  </div>
+                </div>
               </div>
-              <div className="space-y-1.5 text-xs font-mono">
-                <div className="flex items-center gap-2">
-                  <span className="text-gray-500 w-16 shrink-0">API地址：</span>
-                  <code className="bg-white px-2 py-0.5 rounded border border-gray-200 text-gray-700 break-all">https://api.siliconflow.cn/v1/chat/completions</code>
+              <div className="grid grid-cols-1 xl:grid-cols-[minmax(0,1.1fr),minmax(0,0.9fr)] gap-4">
+                <div className="rounded-xl border p-4" style={{ borderColor: JT_PRIMARY_BORDER, backgroundColor: JT_PRIMARY_LIGHT }}>
+                  <div className="flex items-center justify-between gap-2 flex-wrap">
+                    <div>
+                      <h4 className="text-sm font-medium" style={{ color: JT_PRIMARY }}>推荐配置</h4>
+                      <p className="mt-1 text-xs text-gray-600">用于当前 DeepSeek 规则生成链路，可一键回填。</p>
+                    </div>
+                    <button
+                      onClick={() => { setApiUrl('https://api.siliconflow.cn/v1/chat/completions'); setModelName('deepseek-ai/DeepSeek-V4-Pro'); }}
+                      className="text-xs font-medium hover:underline"
+                      style={{ color: JT_PRIMARY }}
+                    >一键填入</button>
+                  </div>
+                  <div className="mt-3 space-y-2 text-xs font-mono text-gray-700">
+                    <div className="rounded-lg border border-white/70 bg-white px-3 py-2 break-all">API地址：https://api.siliconflow.cn/v1/chat/completions</div>
+                    <div className="rounded-lg border border-white/70 bg-white px-3 py-2 break-all">模型名：deepseek-ai/DeepSeek-V4-Pro</div>
+                    <div className="rounded-lg border border-white/70 bg-white px-3 py-2 break-all">API Key：请自行申请并填写</div>
+                  </div>
                 </div>
-                <div className="flex items-center gap-2">
-                  <span className="text-gray-500 w-16 shrink-0">模型名：</span>
-                  <code className="bg-white px-2 py-0.5 rounded border border-gray-200 text-gray-700 break-all">deepseek-ai/DeepSeek-V4-Pro</code>
-                </div>
-                <div className="flex items-center gap-2">
-                  <span className="text-gray-500 w-16 shrink-0">API Key：</span>
-                  <code className="bg-white px-2 py-0.5 rounded border border-gray-200 text-gray-700 break-all">（请自行申请并填入上方输入框）</code>
+                <div className="rounded-xl border border-gray-200 bg-gray-50 p-4">
+                  <h4 className="text-sm font-medium text-gray-800">阶段提醒</h4>
+                  <ul className="mt-3 space-y-2 text-xs text-gray-600 leading-5">
+                    <li>1. 上传前先保存配置，避免批量分析中断。</li>
+                    <li>2. AI 只负责理解结构，不直接决定最终导入结果。</li>
+                    <li>3. 后续仍需在“确认规则”和“解析结果”阶段人工复核风险项。</li>
+                  </ul>
                 </div>
               </div>
             </div>
@@ -1241,20 +1394,22 @@ export default function ImportPage() {
         {/* 步骤1：上传文件 */}
         {step === 'upload' && (
           <div className="space-y-6">
-            <FileUploader onFilesSelected={handleFilesSelected} onFileRemoved={handleFileRemoved} />
-            {analyzedFiles.length > 0 && (
-              <div className="bg-white rounded-lg border border-gray-200 p-4 space-y-4">
-                <div className="flex items-center justify-between gap-3 flex-wrap">
-                  <div>
-                    <h4 className="font-medium text-gray-900">规则选择与样例预览</h4>
-                    <p className="text-sm text-gray-500">每个文件由用户手动选择规则；也可先做 AI 分析生成推荐规则，再微调保存。</p>
-                  </div>
-                  <div className="text-xs text-gray-500">
-                    规则库 {rulesLoading ? '加载中...' : `${savedRules.length} 条`}
-                  </div>
-                </div>
-                <div className="space-y-3">
-                  {analyzedFiles.map((item, index) => {
+            <div className="grid grid-cols-1 xl:grid-cols-[minmax(0,1fr),320px] gap-6 items-start">
+              <div className="space-y-6">
+                <FileUploader onFilesSelected={handleFilesSelected} onFileRemoved={handleFileRemoved} />
+                {analyzedFiles.length > 0 && (
+                  <div className="bg-white rounded-2xl border border-gray-200 p-4 sm:p-5 space-y-4 shadow-sm">
+                    <div className="flex items-center justify-between gap-3 flex-wrap">
+                      <div>
+                        <h4 className="font-semibold text-gray-900">规则选择与样例预览</h4>
+                        <p className="text-sm text-gray-500 mt-1">每个文件必须明确选择规则；也可以先做 AI 分析生成推荐规则，再微调后落库。</p>
+                      </div>
+                      <div className="text-xs text-gray-500 rounded-full bg-gray-50 px-3 py-1 border border-gray-200">
+                        规则库 {rulesLoading ? '加载中...' : `${savedRules.length} 条`}
+                      </div>
+                    </div>
+                    <div className="space-y-3">
+                      {analyzedFiles.map((item, index) => {
                     const matchedRules = savedRules.filter(rule => {
                       if (!item.fileInfo.type) return true;
                       return (rule.fileTypes || []).includes(item.fileInfo.type as any);
@@ -1291,7 +1446,8 @@ export default function ImportPage() {
                             <button
                               onClick={() => handleAnalyzeFile(index)}
                               disabled={item.analyzing || !apiKey}
-                              className="inline-flex items-center gap-1 px-3.5 py-2 text-xs font-medium bg-[#0fc6c2] text-white rounded-lg hover:bg-[#0aa8a4] disabled:opacity-50 disabled:cursor-not-allowed shadow-sm"
+                              className="inline-flex items-center gap-1 px-3.5 py-2 text-xs font-medium text-white rounded-lg disabled:opacity-50 disabled:cursor-not-allowed shadow-sm"
+                              style={{ backgroundColor: JT_PRIMARY }}
                             >
                               <span>{item.analyzing ? '分析中...' : 'AI生成推荐规则'}</span>
                             </button>
@@ -1304,7 +1460,8 @@ export default function ImportPage() {
                             {item.rule && (
                               <button
                                 onClick={() => handleEditRule(index)}
-                                className="inline-flex items-center gap-1 px-3.5 py-2 text-xs font-medium bg-white border border-blue-200 text-blue-600 rounded-lg hover:bg-blue-50"
+                                className="inline-flex items-center gap-1 px-3.5 py-2 text-xs font-medium bg-white rounded-lg"
+                                style={{ border: `1px solid ${JT_PRIMARY_BORDER}`, color: JT_PRIMARY }}
                               >
                                 编辑 / 测试 / 保存
                               </button>
@@ -1324,7 +1481,8 @@ export default function ImportPage() {
                                 if (!value) return;
                                 handleApplySavedRule(index, Number(value));
                               }}
-                              className="w-full px-3 py-2.5 border border-gray-300 rounded-lg text-sm bg-gray-50 focus:bg-white focus:outline-none focus:ring-2 focus:ring-[#0fc6c2]"
+                              className="w-full px-3 py-2.5 border border-gray-300 rounded-lg text-sm bg-gray-50 focus:bg-white focus:outline-none focus:ring-2"
+                              style={{ boxShadow: `0 0 0 2px ${JT_PRIMARY}33` }}
                             >
                               <option value="">请选择规则（不自动匹配）</option>
                               {matchedRules.map(rule => (
@@ -1346,7 +1504,7 @@ export default function ImportPage() {
                                   </span>
                                 )}
                                 {samplePreview.mode === 'table' && (
-                                  <span className="text-[11px] text-[#0fc6c2] bg-[#0fc6c2]/10 px-2 py-1 rounded-full">表格视图</span>
+                                  <span className="text-[11px] px-2 py-1 rounded-full" style={{ color: JT_PRIMARY, backgroundColor: JT_PRIMARY_LIGHT }}>表格视图</span>
                                 )}
                               </div>
                             </div>
@@ -1406,37 +1564,82 @@ export default function ImportPage() {
                 </div>
               </div>
             )}
-            <div className="bg-blue-50 rounded-lg p-4">
-              <h4 className="font-medium text-blue-900 mb-2">💡 核心设计理念</h4>
-              <p className="text-sm text-blue-800">
-                不是写 N 个 if-else 适配 N 种文件，而是设计一套<strong>通用规则描述语言</strong>。
-                每种新格式只需"AI分析生成一条规则"即可适配。新增第 5、第 10 种格式时，<strong>系统代码零改动</strong>。
-              </p>
             </div>
-            <button onClick={handleAnalyzeAll} disabled={analyzedFiles.length === 0 || !apiKey}
-              className="w-full px-6 py-3 bg-[#0fc6c2] text-white rounded-lg font-medium hover:bg-[#0aa8a4] disabled:opacity-50 disabled:cursor-not-allowed transition-colors">
-              🤖 批量AI分析未生成规则的文件 ({analyzedFiles.length} 个文件)
-            </button>
-            {!apiKey && <p className="text-sm text-red-500 text-center">请先配置AI API Key</p>}
+            <aside className="space-y-4 xl:sticky xl:top-28">
+              <div className="rounded-2xl border bg-white p-4 shadow-sm border-gray-200">
+                <h4 className="text-sm font-semibold text-gray-900">上传阶段检查清单</h4>
+                <div className="mt-3 space-y-3 text-xs text-gray-600">
+                  <div className="flex items-start justify-between gap-3 rounded-xl border border-gray-100 bg-gray-50 px-3 py-2">
+                    <span>AI 配置</span>
+                    <span className={`font-medium ${apiKey ? 'text-green-600' : 'text-red-500'}`}>{apiKey ? '已完成' : '未配置'}</span>
+                  </div>
+                  <div className="flex items-start justify-between gap-3 rounded-xl border border-gray-100 bg-gray-50 px-3 py-2">
+                    <span>已上传文件</span>
+                    <span className="font-medium text-gray-900">{analyzedFiles.length} 个</span>
+                  </div>
+                  <div className="flex items-start justify-between gap-3 rounded-xl border border-gray-100 bg-gray-50 px-3 py-2">
+                    <span>规则已就绪</span>
+                    <span className="font-medium text-gray-900">{filesReadyForConfirm}/{analyzedFiles.length || 0}</span>
+                  </div>
+                </div>
+              </div>
+              <div className="rounded-2xl border p-4 shadow-sm" style={{ borderColor: JT_PRIMARY_BORDER, backgroundColor: JT_PRIMARY_LIGHT }}>
+                <h4 className="text-sm font-semibold" style={{ color: JT_PRIMARY }}>设计原则</h4>
+                <p className="mt-2 text-sm leading-6 text-gray-700">
+                  不是为 N 种文件写 N 套 if-else，而是把格式理解交给大模型，把稳定执行交给规则 DSL 和解析引擎。
+                </p>
+                <ul className="mt-3 space-y-2 text-xs text-gray-600 leading-5">
+                  <li>• 新格式优先生成新规则，而不是改系统逻辑。</li>
+                  <li>• 规则确认阶段必须显式暴露不确定字段。</li>
+                  <li>• 结果确认阶段必须把风险项高亮给用户。</li>
+                </ul>
+              </div>
+              <button onClick={handleAnalyzeAll} disabled={!canEnterAnalyze}
+                className="w-full px-6 py-3 text-white rounded-xl font-medium disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                style={{ backgroundColor: canEnterAnalyze ? JT_PRIMARY : '#bfbfbf' }}>
+                批量生成推荐规则（{analyzedFiles.length} 个文件）
+              </button>
+              {!apiKey && <p className="text-sm text-red-500 text-center">请先配置 AI API Key</p>}
+            </aside>
+          </div>
           </div>
         )}
 
         {/* 步骤2：AI分析中 */}
         {step === 'analyze' && (
           <div className="space-y-4">
-            <div className="bg-white rounded-lg border border-gray-200 p-6">
-              <h3 className="text-lg font-medium text-gray-900 mb-4">🤖 AI正在分析文件结构...</h3>
+            <div className="bg-white rounded-2xl border border-gray-200 p-6 shadow-sm">
+              <div className="flex items-start justify-between gap-3 flex-wrap mb-4">
+                <div>
+                  <h3 className="text-lg font-semibold text-gray-900">AI 正在分析文件结构</h3>
+                  <p className="mt-1 text-sm text-gray-500">系统会先提取样例，再逐个生成推荐规则。当前阶段不直接导入数据。</p>
+                </div>
+                <span className="inline-flex items-center rounded-full px-3 py-1 text-xs font-medium text-white" style={{ backgroundColor: JT_PRIMARY }}>阶段 2 / 4</span>
+              </div>
               <ProgressBar progress={progress} />
               {parseProgressText && <p className="mt-3 text-sm text-gray-600">{parseProgressText}</p>}
-              <div className="mt-4 space-y-3">
-                {analyzedFiles.map((item, index) => (
-                  <div key={index} className="flex items-center gap-3 p-3 bg-gray-50 rounded-lg">
-                    {item.analyzing ? <Loading size="sm" /> : item.rule ? <span className="text-green-500">✅</span> : item.error ? <span className="text-red-500">❌</span> : <span className="text-gray-400">⏳</span>}
-                    <span className="text-sm text-gray-700">{item.file.name}</span>
-                    {item.rule && <span className="text-xs text-[#0fc6c2]">→ {item.rule.parser.type}</span>}
-                    {item.error && <span className="text-xs text-red-500">{item.error}</span>}
-                  </div>
-                ))}
+              <div className="mt-4 grid grid-cols-1 lg:grid-cols-[minmax(0,1fr),280px] gap-4">
+                <div className="space-y-3">
+                  {analyzedFiles.map((item, index) => (
+                    <div key={index} className="flex items-center gap-3 p-3 bg-gray-50 rounded-xl border border-gray-100">
+                      {item.analyzing ? <Loading size="sm" /> : item.rule ? <span className="text-green-500">✅</span> : item.error ? <span className="text-red-500">❌</span> : <span className="text-gray-400">⏳</span>}
+                      <div className="min-w-0 flex-1">
+                        <div className="text-sm text-gray-700 truncate">{item.file.name}</div>
+                        {item.rule && <span className="text-xs" style={{ color: JT_PRIMARY }}>→ {item.rule.parser.type}</span>}
+                        {item.error && <span className="text-xs text-red-500 block">{item.error}</span>}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+                <div className="rounded-2xl border p-4" style={{ borderColor: JT_PRIMARY_BORDER, backgroundColor: JT_PRIMARY_LIGHT }}>
+                  <h4 className="text-sm font-semibold" style={{ color: JT_PRIMARY }}>当前执行内容</h4>
+                  <ul className="mt-3 space-y-2 text-xs text-gray-600 leading-5">
+                    <li>• 提取文件前 20 行样例</li>
+                    <li>• 调用 LLM 生成推荐规则 JSON</li>
+                    <li>• 为失败文件回退到通用规则骨架</li>
+                    <li>• 分析完成后进入规则确认阶段</li>
+                  </ul>
+                </div>
               </div>
             </div>
           </div>
@@ -1445,9 +1648,19 @@ export default function ImportPage() {
         {/* 步骤3：确认规则 */}
         {step === 'confirm' && (
           <div className="space-y-4">
-            <div className="bg-white rounded-lg border border-gray-200 p-6">
-              <h3 className="text-lg font-medium text-gray-900 mb-2">✅ 确认解析规则</h3>
-              <p className="text-sm text-gray-600 mb-4">AI已分析每个文件并生成规则。可编辑调整后保存到规则库供复用。<span className="text-xs text-gray-500 ml-1">（●高置信度 ▲中置信度 ▼低置信度）</span></p>
+            <div className="bg-white rounded-2xl border border-gray-200 p-6 shadow-sm">
+              <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between mb-4">
+                <div>
+                  <h3 className="text-lg font-semibold text-gray-900">确认解析规则</h3>
+                  <p className="text-sm text-gray-600 mt-1">AI 已给出推荐规则。此阶段必须确认关键字段、低置信度映射和缺失项，再进入解析。</p>
+                </div>
+                <div className="grid grid-cols-2 gap-2 text-xs min-w-[240px]">
+                  <div className="rounded-xl border border-gray-200 bg-gray-50 px-3 py-2 text-gray-600">文件总数 <span className="ml-1 font-semibold text-gray-900">{analyzedFiles.length}</span></div>
+                  <div className="rounded-xl border border-gray-200 bg-gray-50 px-3 py-2 text-gray-600">规则就绪 <span className="ml-1 font-semibold text-gray-900">{filesReadyForConfirm}</span></div>
+                  <div className="rounded-xl border border-gray-200 bg-gray-50 px-3 py-2 text-gray-600">可直接解析 <span className="ml-1 font-semibold" style={{ color: canEnterConfirm ? JT_SUCCESS : JT_WARNING }}>{canEnterConfirm ? '是' : '否'}</span></div>
+                  <div className="rounded-xl border border-gray-200 bg-gray-50 px-3 py-2 text-gray-600">重点检查 <span className="ml-1 font-semibold text-gray-900">低置信度/缺字段</span></div>
+                </div>
+              </div>
               <div className="space-y-4">
                 {analyzedFiles.map((item, index) => (
                   <div key={index} className="border border-gray-200 rounded-lg p-4">
@@ -1455,11 +1668,11 @@ export default function ImportPage() {
                       <div className="flex items-center gap-2">
                         <span className="font-medium text-gray-900">{item.file.name}</span>
                         {item.rule && (
-                          <span className="text-xs bg-[#0fc6c2]/10 text-[#0fc6c2] px-2 py-0.5 rounded">{item.rule.parser.type}</span>
+                          <span className="text-xs px-2 py-0.5 rounded" style={{ backgroundColor: JT_PRIMARY_LIGHT, color: JT_PRIMARY }}>{item.rule.parser.type}</span>
                         )}
                       </div>
                       <div className="flex gap-2">
-                        <button onClick={() => handleAnalyzeFile(index)} disabled={item.analyzing} className="text-xs text-[#0fc6c2] hover:text-[#0aa8a4]">重新分析</button>
+                        <button onClick={() => handleAnalyzeFile(index)} disabled={item.analyzing} className="text-xs hover:underline" style={{ color: JT_PRIMARY }}>重新分析</button>
                         {item.rule && (
                           <>
                             <button onClick={() => handleEditRule(index)} className="text-xs text-blue-500 hover:text-blue-700">编辑规则</button>
@@ -1571,63 +1784,96 @@ export default function ImportPage() {
                   <h3 className="text-lg font-medium mb-2">编辑解析规则</h3>
                   <p className="text-xs text-gray-500 mb-4">可直接基于当前样例文件试解析，确认结果正确后再保存到本文件或规则库。</p>
                   <textarea value={editingRuleJson} onChange={e => setEditingRuleJson(e.target.value)}
-                    className="w-full h-96 font-mono text-sm border border-gray-300 rounded-lg p-3 focus:outline-none focus:ring-2 focus:ring-[#0fc6c2]" />
+                    className="w-full h-96 font-mono text-sm border border-gray-300 rounded-lg p-3 focus:outline-none focus:ring-2"
+                    style={{ boxShadow: `0 0 0 2px ${JT_PRIMARY}33` }} />
                   {editingRuleTestResult && (
                     <div className={`mt-4 rounded-lg border p-3 text-sm ${editingRuleTestResult.success ? 'bg-green-50 border-green-200' : 'bg-red-50 border-red-200'}`}>
                       {editingRuleTestResult.success ? (
                         <>
-                          <div className="font-medium text-green-700">测试成功，共解析 {editingRuleTestResult.totalRows} 条</div>
-                          <div className="mt-2 overflow-x-auto max-h-48">
-                            <table className="w-full text-xs">
-                              <thead className="bg-green-100">
-                                <tr>
-                                  <th className="px-2 py-1 text-left">门店/收件人</th>
-                                  <th className="px-2 py-1 text-left">商品</th>
-                                  <th className="px-2 py-1 text-left">数量</th>
-                                  <th className="px-2 py-1 text-left">编码</th>
-                                </tr>
-                              </thead>
-                              <tbody>
-                                {editingRuleTestResult.orders?.slice(0, 5).map((o: any, i: number) => (
-                                  <tr key={i} className="border-t border-green-100">
-                                    <td className="px-2 py-1">{o.storeName || o.receiverName || '-'}</td>
-                                    <td className="px-2 py-1">{o.itemName || '-'}</td>
-                                    <td className="px-2 py-1">{o.quantity ?? '-'}</td>
-                                    <td className="px-2 py-1">{o.itemCode || '-'}</td>
-                                  </tr>
-                                ))}
-                              </tbody>
-                            </table>
+                          <div className="font-medium text-green-700">
+                            {editingRuleTestResult.message || `测试成功，共解析 ${editingRuleTestResult.totalRows} 条`}
                           </div>
+                          {editingRuleTestResult.orders && (
+                            <div className="mt-2 overflow-x-auto max-h-48">
+                              <table className="w-full text-xs">
+                                <thead className="bg-green-100">
+                                  <tr>
+                                    <th className="px-2 py-1 text-left">门店/收件人</th>
+                                    <th className="px-2 py-1 text-left">商品</th>
+                                    <th className="px-2 py-1 text-left">数量</th>
+                                    <th className="px-2 py-1 text-left">编码</th>
+                                  </tr>
+                                </thead>
+                                <tbody>
+                                  {editingRuleTestResult.orders?.slice(0, 5).map((o: any, i: number) => (
+                                    <tr key={i} className="border-t border-green-100">
+                                      <td className="px-2 py-1">{o.storeName || o.receiverName || '-'}</td>
+                                      <td className="px-2 py-1">{o.itemName || '-'}</td>
+                                      <td className="px-2 py-1">{o.quantity ?? '-'}</td>
+                                      <td className="px-2 py-1">{o.itemCode || '-'}</td>
+                                    </tr>
+                                  ))}
+                                </tbody>
+                              </table>
+                            </div>
+                          )}
                         </>
                       ) : (
-                        <div className="text-red-700">测试失败：{editingRuleTestResult.error || '未知错误'}</div>
+                        <div>
+                          <div className="font-medium text-red-700">校验失败</div>
+                          <pre className="mt-2 text-xs text-red-600 whitespace-pre-wrap">{editingRuleTestResult.error || '未知错误'}</pre>
+                        </div>
+                      )}
+                      {/* 警告信息 */}
+                      {editingRuleTestResult.warnings && editingRuleTestResult.warnings.length > 0 && (
+                        <div className="mt-2 p-2 bg-yellow-50 border border-yellow-200 rounded text-xs text-yellow-800">
+                          <div className="font-medium">⚠️ 警告：</div>
+                          {editingRuleTestResult.warnings.map((w: any, i: number) => (
+                            <div key={i} className="ml-2">• [{w.field}] {w.message}</div>
+                          ))}
+                        </div>
                       )}
                     </div>
                   )}
                   <div className="flex gap-3 mt-4 justify-end flex-wrap">
                     <button onClick={() => setEditingRuleIndex(null)} className="px-4 py-2 text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200">取消</button>
-                    <button onClick={testRuleJsonOnCurrentFile} disabled={testingEditedRule}
-                      className="px-4 py-2 text-[#0fc6c2] bg-[#0fc6c2]/10 rounded-lg hover:bg-[#0fc6c2]/20 disabled:opacity-50">
-                      {testingEditedRule ? '测试中...' : '先测试当前规则'}
+                    <button onClick={handleValidateRule}
+                      className="px-4 py-2 text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200">
+                      校验结构
                     </button>
-                    <button onClick={handleSaveRule} className="px-4 py-2 text-white bg-[#0fc6c2] rounded-lg hover:bg-[#0aa8a4]">保存</button>
+                    <button onClick={testRuleJsonOnCurrentFile} disabled={testingEditedRule}
+                      className="px-4 py-2 rounded-lg disabled:opacity-50"
+                      style={{ color: JT_PRIMARY, backgroundColor: JT_PRIMARY_LIGHT }}>
+                      {testingEditedRule ? '测试中...' : '测试解析'}
+                    </button>
+                    <button onClick={handleSaveRule} className="px-4 py-2 text-white rounded-lg" style={{ backgroundColor: JT_PRIMARY }}>保存</button>
                   </div>
                 </div>
               </div>
             )}
 
-            <div className="flex gap-4">
-              <button onClick={handleBackToUpload} className="px-6 py-3 bg-gray-100 text-gray-700 rounded-lg font-medium hover:bg-gray-200 transition-colors">← 返回修改</button>
-              <button onClick={handleParseAll} disabled={parsing || analyzedFiles.every(f => !f.rule)}
-                className="flex-1 px-6 py-3 bg-[#0fc6c2] text-white rounded-lg font-medium hover:bg-[#0aa8a4] disabled:opacity-50 disabled:cursor-not-allowed transition-colors">
-                {parsing ? (
-                  <div className="flex items-center justify-center gap-2">
-                    <Loading size="sm" />
-                    <span>{parseProgressText || `解析中${workerSupported ? '(Worker)' : ''}... ${Math.round(progress)}%`}</span>
-                  </div>
-                ) : '确认并开始解析'}
-              </button>
+            <div className="grid grid-cols-1 lg:grid-cols-[220px,minmax(0,1fr)] gap-4">
+              <div className="rounded-2xl border border-gray-200 bg-gray-50 p-4">
+                <h4 className="text-sm font-semibold text-gray-900">进入解析前确认</h4>
+                <ul className="mt-3 space-y-2 text-xs text-gray-600 leading-5">
+                  <li>• 关键字段映射完整（门店/收件人、SKU、数量）</li>
+                  <li>• 中低置信度字段已人工确认</li>
+                  <li>• 当前规则已可测试通过或可接受回退策略</li>
+                </ul>
+              </div>
+              <div className="flex gap-4">
+                <button onClick={handleBackToUpload} className="px-6 py-3 bg-gray-100 text-gray-700 rounded-xl font-medium hover:bg-gray-200 transition-colors">← 返回修改</button>
+                <button onClick={handleParseAll} disabled={parsing || analyzedFiles.every(f => !f.rule)}
+                  className="flex-1 px-6 py-3 text-white rounded-xl font-medium disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                  style={{ backgroundColor: parsing || analyzedFiles.every(f => !f.rule) ? '#bfbfbf' : JT_PRIMARY }}>
+                  {parsing ? (
+                    <div className="flex items-center justify-center gap-2">
+                      <Loading size="sm" />
+                      <span>{parseProgressText || `解析中${workerSupported ? '(Worker)' : ''}... ${Math.round(progress)}%`}</span>
+                    </div>
+                  ) : '确认并开始解析'}
+                </button>
+              </div>
             </div>
           </div>
         )}
@@ -1635,6 +1881,30 @@ export default function ImportPage() {
         {/* 步骤4：解析结果 */}
         {step === 'result' && (
           <div className="space-y-4">
+            {/* 结果概览 */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
+              <div className="rounded-2xl border border-gray-200 bg-white p-4 shadow-sm">
+                <div className="text-xs text-gray-500">解析总数</div>
+                <div className="mt-2 text-2xl font-semibold text-gray-900">{orders.length}</div>
+                <div className="mt-1 text-xs text-gray-400">当前结果池中的全部记录</div>
+              </div>
+              <div className="rounded-2xl border border-gray-200 bg-white p-4 shadow-sm">
+                <div className="text-xs text-gray-500">有效记录</div>
+                <div className="mt-2 text-2xl font-semibold" style={{ color: JT_SUCCESS }}>{orders.length - invalidOrdersCount}</div>
+                <div className="mt-1 text-xs text-gray-400">满足校验，可直接提交</div>
+              </div>
+              <div className="rounded-2xl border border-gray-200 bg-white p-4 shadow-sm">
+                <div className="text-xs text-gray-500">待修正</div>
+                <div className="mt-2 text-2xl font-semibold" style={{ color: invalidOrdersCount > 0 ? JT_DANGER : '#262626' }}>{invalidOrdersCount}</div>
+                <div className="mt-1 text-xs text-gray-400">缺字段、格式错误或业务校验未通过</div>
+              </div>
+              <div className="rounded-2xl border border-gray-200 bg-white p-4 shadow-sm">
+                <div className="text-xs text-gray-500">重复单号</div>
+                <div className="mt-2 text-2xl font-semibold" style={{ color: duplicateNos.length > 0 ? JT_WARNING : '#262626' }}>{duplicateNos.length}</div>
+                <div className="mt-1 text-xs text-gray-400">含批次内重复和库内重复</div>
+              </div>
+            </div>
+
             {/* 重复检测告警 */}
             {duplicateNos.length > 0 && (
               <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4">
@@ -1655,85 +1925,163 @@ export default function ImportPage() {
             )}
 
             {/* 操作栏 - 粘性：滚动时关键按钮始终可见 */}
-            <div className="bg-white rounded-lg border border-gray-200 p-3 sm:p-4 sticky top-14 sm:top-16 z-30 shadow-sm">
-              <div className="flex flex-col gap-3 sm:gap-4">
-                {/* 第一行：核心操作按钮（移动端紧凑排列） */}
-                <div className="flex flex-wrap items-center gap-2">
-                  {/* 主要操作 - 始终显示 */}
-                  <button onClick={handleExport} disabled={orders.length === 0}
-                    className="px-3 sm:px-4 py-1.5 sm:py-2 bg-[#0fc6c2] text-white rounded-lg text-xs sm:text-sm font-medium hover:bg-[#0aa8a4] disabled:opacity-50 transition-colors shrink-0">
-                    📥 导出
-                  </button>
-                  <button onClick={handleSubmitOrders}
-                    disabled={orders.length === 0 || submitting}
-                    className="px-3 sm:px-4 py-1.5 sm:py-2 bg-green-500 text-white rounded-lg text-xs sm:text-sm font-medium hover:bg-green-600 disabled:opacity-50 transition-colors shrink-0 min-w-[80px]">
-                    {submitting ? `提交中 ${submitProgress}%` : '🚀 提交'}
-                  </button>
-                  {/* 提交进度条 */}
-                  {submitting && submitProgress > 0 && (
-                    <div className="w-full sm:w-72">
-                      <div className="h-2 bg-gray-200 rounded-full overflow-hidden">
-                        <div className="h-full bg-green-500 transition-all duration-300"
-                          style={{ width: `${submitProgress}%` }} />
-                      </div>
-                      {submitProgressText && <p className="mt-1 text-xs text-gray-600">{submitProgressText}</p>}
+            <div className="sticky top-14 sm:top-16 z-30 space-y-3">
+              <div
+                className="rounded-2xl border p-4 shadow-sm"
+                style={{
+                  borderColor: invalidOrdersCount > 0 || duplicateNos.length > 0 ? '#ffe58f' : '#b7eb8f',
+                  backgroundColor: invalidOrdersCount > 0 || duplicateNos.length > 0 ? '#fffbe6' : '#f6ffed',
+                }}
+              >
+                <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+                  <div>
+                    <div
+                      className="text-sm font-semibold"
+                      style={{ color: invalidOrdersCount > 0 || duplicateNos.length > 0 ? '#ad6800' : '#237804' }}
+                    >
+                      {invalidOrdersCount > 0 || duplicateNos.length > 0 ? '提交前仍有风险项待确认' : '结果已通过主要校验，可进入提交流程'}
                     </div>
-                  )}
-                  {/* 次要操作 - 小屏隐藏文字只留图标，或折叠 */}
-                  <button onClick={handleDeleteSelected} disabled={selectedIndices.length === 0}
-                    className="hidden xs:inline-flex px-3 sm:px-4 py-1.5 sm:py-2 bg-red-500 text-white rounded-lg text-xs sm:text-sm font-medium hover:bg-red-600 disabled:opacity-50 transition-colors items-center gap-1 shrink-0">
-                    🗑️ <span className="hidden sm:inline">删除</span>({selectedIndices.length})
-                  </button>
-                  <button onClick={handleSaveToDB} disabled={orders.length === 0 || saving}
-                    className="hidden sm:inline-flex px-3 sm:px-4 py-1.5 sm:py-2 bg-purple-500 text-white rounded-lg text-xs sm:text-sm font-medium hover:bg-purple-600 disabled:opacity-50 transition-colors shrink-0">
-                    {saving ? '保存中...' : '💾 保存'}
-                  </button>
-                  <button onClick={handleRestart}
-                    className="hidden md:inline-flex px-3 sm:px-4 py-1.5 sm:py-2 bg-gray-100 text-gray-700 rounded-lg text-xs sm:text-sm font-medium hover:bg-gray-200 transition-colors shrink-0">
-                    📁 继续导入
-                  </button>
-                  {/* 移动端更多操作按钮 */}
-                  <div className="xs:hidden flex items-center gap-1 ml-auto">
-                    <button onClick={() => setShowMoreActions(!showMoreActions)} className="p-1.5 text-gray-500 hover:bg-gray-100 rounded-lg" aria-label="更多操作">
-                      <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 5v.01M12 12v.01M12 19v.01"/></svg>
-                    </button>
+                    <p className="mt-1 text-xs sm:text-sm text-gray-600">
+                      {invalidOrdersCount > 0
+                        ? `当前有 ${invalidOrdersCount} 条异常记录，建议优先修正；也可仅提交 ${orders.filter(o => o.isValid).length} 条有效数据。`
+                        : duplicateNos.length > 0
+                          ? `当前无校验错误，但存在 ${duplicateNos.length} 个重复单号，请确认是否允许继续提交。`
+                          : '建议先导出留档，再提交到批量下单流程。'}
+                    </p>
+                  </div>
+                  <div className="grid grid-cols-2 gap-2 text-xs sm:flex sm:flex-wrap">
+                    <div className="rounded-xl border border-white/80 bg-white px-3 py-2 text-gray-600">有效 <span className="ml-1 font-semibold" style={{ color: JT_SUCCESS }}>{orders.length - invalidOrdersCount}</span></div>
+                    <div className="rounded-xl border border-white/80 bg-white px-3 py-2 text-gray-600">异常 <span className="ml-1 font-semibold" style={{ color: invalidOrdersCount > 0 ? JT_DANGER : '#262626' }}>{invalidOrdersCount}</span></div>
+                    <div className="rounded-xl border border-white/80 bg-white px-3 py-2 text-gray-600">重复 <span className="ml-1 font-semibold" style={{ color: duplicateNos.length > 0 ? JT_WARNING : '#262626' }}>{duplicateNos.length}</span></div>
+                    <div className="rounded-xl border border-white/80 bg-white px-3 py-2 text-gray-600">已选 <span className="ml-1 font-semibold text-gray-900">{selectedOrdersCount}</span></div>
                   </div>
                 </div>
-                {/* 移动端展开的更多操作 */}
-                {showMoreActions && (
-                  <div className="xs:flex hidden flex-wrap gap-2 pt-2 border-t border-gray-100">
-                    {selectedIndices.length > 0 && (
-                      <button onClick={handleDeleteSelected}
-                        className="px-3 py-1.5 bg-red-500 text-white rounded-lg text-xs font-medium hover:bg-red-600">🗑️ 删除({selectedIndices.length})</button>
+              </div>
+
+              <div className="bg-white rounded-2xl border border-gray-200 p-3 sm:p-4 shadow-sm">
+                <div className="flex flex-col gap-3 sm:gap-4">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <button
+                      onClick={handleExport}
+                      disabled={orders.length === 0}
+                      className="px-3 sm:px-4 py-1.5 sm:py-2 rounded-lg text-xs sm:text-sm font-medium disabled:opacity-50 transition-colors shrink-0"
+                      style={{ color: JT_PRIMARY, backgroundColor: JT_PRIMARY_LIGHT }}
+                    >
+                      导出结果
+                    </button>
+                    <button
+                      onClick={handleSubmitOrders}
+                      disabled={orders.length === 0 || submitting}
+                      className="px-3 sm:px-4 py-1.5 sm:py-2 text-white rounded-lg text-xs sm:text-sm font-medium disabled:opacity-50 transition-colors shrink-0 min-w-[92px]"
+                      style={{ backgroundColor: JT_PRIMARY }}
+                    >
+                      {submitting ? `提交中 ${submitProgress}%` : '提交全部'}
+                    </button>
+                    {invalidOrdersCount > 0 && (
+                      <button
+                        onClick={() => {
+                          const validOrders = orders.filter(o => o.isValid);
+                          if (validOrders.length === 0) {
+                            showToast('error', '没有可提交的有效数据');
+                            return;
+                          }
+                          if (!confirm(`仅提交 ${validOrders.length} 条有效数据（跳过 ${invalidOrdersCount} 条异常），确定继续吗？`)) return;
+                          submitValidOrdersOnly(validOrders);
+                        }}
+                        disabled={submitting}
+                        className="px-3 sm:px-4 py-1.5 sm:py-2 rounded-lg text-xs sm:text-sm font-medium disabled:opacity-50 transition-colors shrink-0"
+                        style={{ color: '#ad6800', backgroundColor: '#fff7e6' }}
+                      >
+                        仅提交有效数据
+                      </button>
                     )}
-                    <button onClick={handleSaveToDB} disabled={orders.length === 0 || saving}
-                      className="px-3 py-1.5 bg-purple-500 text-white rounded-lg text-xs font-medium hover:bg-purple-600 disabled:opacity-50">{saving ? '...' : '💾 保存'}</button>
-                    <button onClick={handleRestart} className="px-3 py-1.5 bg-gray-100 text-gray-700 rounded-lg text-xs font-medium hover:bg-gray-200">📁 继续导入</button>
-                  </div>
-                )}
-                {/* 第二行：搜索 + 统计信息（全宽自适应） */}
-                <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 sm:gap-4">
-                  <div className="relative flex-1 min-w-0">
-                    <input type="text" value={searchQuery} onChange={e => setSearchQuery(e.target.value)}
-                      placeholder="搜索运单号、收货人、电话..."
-                      className="w-full sm:w-64 lg:w-80 pl-10 pr-4 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#0fc6c2] focus:border-transparent" />
-                    <svg className="absolute left-3 top-2.5 w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
-                    </svg>
-                  </div>
-                  <div className="text-sm text-gray-600">
-                    {orders.length > 0 && (
-                      <>
-                        共 <span className="font-medium text-[#0fc6c2]">{totalCount}</span> 条
-                        {debouncedSearchQuery && <span className="ml-1">(筛选 {filteredOrders.length} 条)</span>}
-                        {orders.filter(o => !o.isValid).length > 0 && (
-                          <button onClick={() => setShowErrorModal(true)} className="ml-2 text-red-500 hover:text-red-700 underline cursor-pointer">({orders.filter(o => !o.isValid).length} 条有误)</button>
-                        )}
-                        {duplicateNos.length > 0 && (
-                          <span className="ml-2 text-yellow-600">({duplicateNos.length} 重复)</span>
-                        )}
-                      </>
+                    {submitting && submitProgress > 0 && (
+                      <div className="w-full lg:w-80">
+                        <div className="h-2 bg-gray-200 rounded-full overflow-hidden">
+                          <div className="h-full transition-all duration-300" style={{ width: `${submitProgress}%`, backgroundColor: JT_PRIMARY }} />
+                        </div>
+                        {submitProgressText && <p className="mt-1 text-xs text-gray-600">{submitProgressText}</p>}
+                      </div>
                     )}
+                    <button
+                      onClick={handleDeleteSelected}
+                      disabled={selectedIndices.length === 0}
+                      className="hidden xs:inline-flex px-3 sm:px-4 py-1.5 sm:py-2 bg-red-500 text-white rounded-lg text-xs sm:text-sm font-medium hover:bg-red-600 disabled:opacity-50 transition-colors items-center gap-1 shrink-0"
+                    >
+                      🗑️ <span className="hidden sm:inline">删除</span>({selectedIndices.length})
+                    </button>
+                    <button
+                      onClick={handleSaveToDB}
+                      disabled={orders.length === 0 || saving}
+                      className="hidden sm:inline-flex px-3 sm:px-4 py-1.5 sm:py-2 text-white rounded-lg text-xs sm:text-sm font-medium disabled:opacity-50 transition-colors shrink-0"
+                      style={{ backgroundColor: JT_NAVY }}
+                    >
+                      {saving ? '保存中...' : '保存批次'}
+                    </button>
+                    <button
+                      onClick={handleRestart}
+                      className="hidden md:inline-flex px-3 sm:px-4 py-1.5 sm:py-2 bg-gray-100 text-gray-700 rounded-lg text-xs sm:text-sm font-medium hover:bg-gray-200 transition-colors shrink-0"
+                    >
+                      继续导入
+                    </button>
+                    <div className="xs:hidden flex items-center gap-1 ml-auto">
+                      <button onClick={() => setShowMoreActions(!showMoreActions)} className="p-1.5 text-gray-500 hover:bg-gray-100 rounded-lg" aria-label="更多操作">
+                        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 5v.01M12 12v.01M12 19v.01"/></svg>
+                      </button>
+                    </div>
+                  </div>
+
+                  {showMoreActions && (
+                    <div className="xs:flex hidden flex-wrap gap-2 pt-2 border-t border-gray-100">
+                      {selectedIndices.length > 0 && (
+                        <button onClick={handleDeleteSelected} className="px-3 py-1.5 bg-red-500 text-white rounded-lg text-xs font-medium hover:bg-red-600">🗑️ 删除({selectedIndices.length})</button>
+                      )}
+                      {invalidOrdersCount > 0 && (
+                        <button
+                          onClick={() => {
+                            const validOrders = orders.filter(o => o.isValid);
+                            if (validOrders.length === 0) {
+                              showToast('error', '没有可提交的有效数据');
+                              return;
+                            }
+                            if (!confirm(`仅提交 ${validOrders.length} 条有效数据（跳过 ${invalidOrdersCount} 条异常），确定继续吗？`)) return;
+                            submitValidOrdersOnly(validOrders);
+                          }}
+                          className="px-3 py-1.5 rounded-lg text-xs font-medium"
+                          style={{ color: '#ad6800', backgroundColor: '#fff7e6' }}
+                        >
+                          仅提交有效
+                        </button>
+                      )}
+                      <button onClick={handleSaveToDB} disabled={orders.length === 0 || saving} className="px-3 py-1.5 text-white rounded-lg text-xs font-medium disabled:opacity-50" style={{ backgroundColor: JT_NAVY }}>{saving ? '...' : '保存批次'}</button>
+                      <button onClick={handleRestart} className="px-3 py-1.5 bg-gray-100 text-gray-700 rounded-lg text-xs font-medium hover:bg-gray-200">继续导入</button>
+                    </div>
+                  )}
+
+                  <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 sm:gap-4">
+                    <div className="relative flex-1 min-w-0">
+                      <input type="text" value={searchQuery} onChange={e => setSearchQuery(e.target.value)}
+                        placeholder="搜索运单号、收货人、电话..."
+                        className="w-full sm:w-64 lg:w-80 pl-10 pr-4 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:border-transparent"
+                        style={{ boxShadow: `0 0 0 2px ${JT_PRIMARY}33` }} />
+                      <svg className="absolute left-3 top-2.5 w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                      </svg>
+                    </div>
+                    <div className="text-sm text-gray-600">
+                      {orders.length > 0 && (
+                        <>
+                          共 <span className="font-medium" style={{ color: JT_PRIMARY }}>{totalCount}</span> 条
+                          {debouncedSearchQuery && <span className="ml-1">(筛选 {filteredOrders.length} 条)</span>}
+                          {orders.filter(o => !o.isValid).length > 0 && (
+                            <button onClick={() => setShowErrorModal(true)} className="ml-2 text-red-500 hover:text-red-700 underline cursor-pointer">({orders.filter(o => !o.isValid).length} 条有误)</button>
+                          )}
+                          {duplicateNos.length > 0 && (
+                            <span className="ml-2 text-yellow-600">({duplicateNos.length} 重复)</span>
+                          )}
+                        </>
+                      )}
+                    </div>
                   </div>
                 </div>
               </div>
@@ -1782,7 +2130,8 @@ export default function ImportPage() {
                         const page = i + 1;
                         return (
                           <button key={page} onClick={() => goToPage(page)}
-                            className={`w-8 h-8 rounded text-sm ${currentPage === page ? 'bg-[#0fc6c2] text-white' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'}`}>
+                            className={`w-8 h-8 rounded text-sm ${currentPage === page ? 'text-white' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'}`}
+                            style={currentPage === page ? { backgroundColor: JT_PRIMARY } : undefined}>
                             {page}
                           </button>
                         );
@@ -1854,7 +2203,8 @@ export default function ImportPage() {
                           setShowErrorModal(false);
                           submitValidOrdersOnly(validOrders);
                         }}
-                        className="px-5 py-2 bg-[#0fc6c2] text-white rounded-lg text-sm hover:bg-[#0dbab6] transition-colors"
+                        className="px-5 py-2 text-white rounded-lg text-sm transition-colors"
+                        style={{ backgroundColor: JT_PRIMARY }}
                       >
                         跳过错误行，提交有效数据 ({orders.filter(o => o.isValid).length} 条)
                       </button>
@@ -1867,19 +2217,19 @@ export default function ImportPage() {
         )}
 
         {/* 历史记录 */}
-        {step === 'history' && <HistoryView onBack={() => setStep('upload')} />}
+        {step === 'history' && <HistoryView onBack={() => handleStepChange('upload')} />}
 
         {/* 规则管理库 */}
-        {step === 'rules' && <RulesManager onBack={() => setStep('upload')} onRulesChanged={loadSavedRules} onSelectRule={(rule) => {
+        {step === 'rules' && <RulesManager onBack={() => handleStepChange('upload')} onRulesChanged={loadSavedRules} onSelectRule={(rule) => {
           // 应用规则到第一个未分析的文件
           const firstUnanalyzed = analyzedFiles.findIndex(f => !f.rule);
           if (firstUnanalyzed >= 0) {
             setAnalyzedFiles(prev => prev.map((f, i) => i === firstUnanalyzed ? { ...f, rule, ruleOrigin: 'saved', selectedRuleId: null } : f));
             showToast('success', `规则"${rule.name}"已应用到文件`);
-            setStep('confirm');
+            handleStepChange('confirm');
           } else {
             showToast('info', '规则已选择，请先上传文件再应用');
-            setStep('upload');
+            handleStepChange('upload');
           }
         }} />}
       </main>
@@ -1999,141 +2349,178 @@ function RulesManager({ onBack, onSelectRule, onRulesChanged }: { onBack: () => 
 
   return (
     <div className="space-y-4">
-      {/* 标题栏 - 响应式 */}
-      <div className="bg-white rounded-lg border border-gray-200 p-3 sm:p-4 flex flex-col sm:flex-row items-start sm:items-center gap-3">
-        <div className="flex items-center gap-2 sm:gap-3 w-full sm:w-auto">
-          <button onClick={onBack} className="text-sm text-[#0fc6c2] hover:text-[#0aa8a4] shrink-0">← 返回</button>
-          <h3 className="text-base sm:text-lg font-medium text-gray-900 truncate">⚙️ 规则库</h3>
-          <span className="text-xs sm:text-sm text-gray-500">({rules.length})</span>
+      <div className="rounded-2xl border border-gray-200 bg-white shadow-sm overflow-hidden">
+        <div className="px-4 sm:px-5 py-4 border-b border-gray-100 flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+          <div className="flex items-center gap-3 min-w-0">
+            <button onClick={onBack} className="text-sm shrink-0" style={{ color: JT_PRIMARY }}>← 返回导入</button>
+            <div className="min-w-0">
+              <div className="flex items-center gap-2 flex-wrap">
+                <h3 className="text-lg font-semibold text-gray-900 truncate">规则库</h3>
+                <span className="inline-flex items-center rounded-full px-2.5 py-1 text-xs font-medium" style={{ color: JT_PRIMARY, backgroundColor: JT_PRIMARY_LIGHT }}>
+                  {rules.length} 条规则
+                </span>
+              </div>
+              <p className="mt-1 text-sm text-gray-500">集中管理 AI 生成规则与人工维护规则，支持搜索、复制、测试和直接应用。</p>
+            </div>
+          </div>
+          <div className="flex flex-col sm:flex-row gap-2 w-full lg:w-auto">
+            <input type="text" value={searchText} onChange={e => setSearchText(e.target.value)}
+              placeholder="搜索规则名称或描述..."
+              className="w-full sm:w-64 px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2"
+              style={{ boxShadow: `0 0 0 2px ${JT_PRIMARY}33` }} />
+            <button onClick={() => {
+              setIsCreating(true);
+              setEditingRule(null);
+              setEditName('');
+              setEditDesc('');
+              setEditJson(JSON.stringify({
+                name: '新规则',
+                description: '请输入描述',
+                fileTypes: ['excel'],
+                identifier: {},
+                parser: {
+                  type: 'table',
+                  table: { headerRow: 'auto', dataStartRow: 'auto', columns: [] }
+                },
+                recipient: {
+                  source: 'header',
+                  fields: {}
+                }
+              }, null, 2));
+            }} className="w-full sm:w-auto px-4 py-2 text-white rounded-lg text-sm whitespace-nowrap"
+              style={{ backgroundColor: JT_PRIMARY }}>
+              新建规则
+            </button>
+          </div>
         </div>
-        <input type="text" value={searchText} onChange={e => setSearchText(e.target.value)}
-          placeholder="搜索规则..." className="w-full sm:w-56 px-3 py-1.5 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#0fc6c2]" />
-        <button onClick={() => {
-          setIsCreating(true);
-          setEditingRule(null);
-          setEditName('');
-          setEditDesc('');
-          setEditJson(JSON.stringify({
-            name: '新规则',
-            description: '请输入描述',
-            fileTypes: ['excel'],
-            identifier: {},
-            parser: {
-              type: 'table',
-              table: { headerRow: 'auto', dataStartRow: 'auto', columns: [] }
-            },
-            recipient: {
-              source: 'header',
-              fields: {}
-            }
-          }, null, 2));
-        }} className="w-full sm:w-auto px-4 py-1.5 bg-[#0fc6c2] text-white rounded-lg hover:bg-[#0aa8a4] text-sm whitespace-nowrap">
-          ➕ 新建规则
-        </button>
+        <div className="px-4 sm:px-5 py-4 grid grid-cols-1 md:grid-cols-3 gap-3 text-xs text-gray-600 bg-gray-50">
+          <div className="rounded-xl border border-gray-200 bg-white px-3 py-2">规则总数 <span className="ml-1 font-semibold text-gray-900">{rules.length}</span></div>
+          <div className="rounded-xl border border-gray-200 bg-white px-3 py-2">当前筛选 <span className="ml-1 font-semibold text-gray-900">{filtered.length}</span></div>
+          <div className="rounded-xl border border-gray-200 bg-white px-3 py-2">推荐动作 <span className="ml-1 font-semibold" style={{ color: JT_PRIMARY }}>测试后再应用</span></div>
+        </div>
       </div>
 
       {loading ? (
-        <div className="bg-white rounded-lg border border-gray-200 p-8 text-center"><Loading size="md" /><p className="mt-4 text-gray-500">加载规则库...</p></div>
+        <div className="bg-white rounded-2xl border border-gray-200 p-10 text-center shadow-sm">
+          <Loading size="md" />
+          <p className="mt-4 text-gray-500">正在加载规则库...</p>
+        </div>
       ) : filtered.length === 0 ? (
-        <div className="bg-white rounded-lg border border-gray-200 p-8 text-center text-gray-500">
-          <p className="text-4xl mb-3">📭</p>
-          <p>暂无保存的规则</p>
-          <p className="text-sm mt-1">在"确认规则"步骤中点击"保存到规则库"来保存AI生成的规则</p>
+        <div className="bg-white rounded-2xl border border-gray-200 p-10 text-center shadow-sm">
+          <div className="text-4xl mb-3">📭</div>
+          <p className="text-base font-medium text-gray-700">当前没有匹配的规则</p>
+          <p className="text-sm text-gray-500 mt-2">可以在“确认规则”阶段保存 AI 生成规则，或在这里直接新建一条通用规则。</p>
         </div>
       ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
           {filtered.map(rule => (
-            <div key={rule.id} className="bg-white rounded-lg border border-gray-200 p-4">
-              <div className="flex items-start justify-between mb-2">
-                <div className="flex-1">
-                  <div className="flex items-center gap-2">
-                    <span className="font-medium text-gray-900">{rule.name}</span>
-                    {rule.isAiGenerated && <span className="text-xs bg-blue-100 text-blue-600 px-1.5 py-0.5 rounded">AI生成</span>}
+            <div key={rule.id} className="bg-white rounded-2xl border border-gray-200 p-5 shadow-sm hover:shadow-md transition-shadow">
+              <div className="flex items-start justify-between gap-3">
+                <div className="min-w-0 flex-1">
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <h4 className="text-base font-semibold text-gray-900 truncate">{rule.name}</h4>
+                    {rule.isAiGenerated && <span className="text-xs px-2 py-0.5 rounded-full" style={{ color: JT_PRIMARY, backgroundColor: JT_PRIMARY_LIGHT }}>AI生成</span>}
                   </div>
-                  <p className="text-xs text-gray-500 mt-0.5">{rule.description || '无描述'}</p>
+                  <p className="text-sm text-gray-500 mt-1 line-clamp-2">{rule.description || '暂无描述'}</p>
                 </div>
-                <div className="flex gap-1 ml-2">
-                  <button onClick={() => {
-                    // 复制规则
-                    setIsCreating(true);
-                    setEditingRule(null);
-                    setEditName(rule.name + '（副本）');
-                    setEditDesc(rule.description || '');
-                    setEditJson(JSON.stringify(rule.ruleJson, null, 2));
-                  }} className="text-xs text-gray-500 hover:text-gray-700 px-2 py-1 rounded hover:bg-gray-100">复制</button>
-                  <button onClick={() => handleEditOpen(rule)} className="text-xs text-blue-500 hover:text-blue-700 px-2 py-1 rounded hover:bg-blue-50">编辑</button>
-                  <button onClick={() => { setTestingRule(rule); setTestFile(null); setTestResult(null); }} className="text-xs text-green-500 hover:text-green-700 px-2 py-1 rounded hover:bg-green-50">测试</button>
-                  <button onClick={() => onSelectRule(rule.ruleJson)} className="text-xs text-[#0fc6c2] hover:text-[#0aa8a4] px-2 py-1 rounded hover:bg-[#0fc6c2]/10">应用</button>
-                  <button onClick={() => handleDelete(rule.id)} className="text-xs text-red-400 hover:text-red-600 px-2 py-1 rounded hover:bg-red-50">删除</button>
+                <div className="text-right shrink-0 text-xs text-gray-400">
+                  <div>使用 {rule.usageCount} 次</div>
+                  <div className="mt-1">{new Date(rule.updatedAt).toLocaleDateString('zh-CN')}</div>
                 </div>
               </div>
-              <div className="flex items-center gap-3 text-xs text-gray-400 mt-2">
-                <span className="bg-gray-100 px-2 py-0.5 rounded">{Array.isArray(rule.ruleJson?.parser?.type) ? rule.ruleJson.parser.type : (rule.ruleJson?.parser?.type || '未知')}</span>
-                <span>{(rule.fileTypes || []).join('/')}</span>
-                <span>使用 {rule.usageCount} 次</span>
-                <span>{new Date(rule.updatedAt).toLocaleDateString('zh-CN')}</span>
+
+              <div className="mt-4 flex flex-wrap gap-2 text-xs text-gray-500">
+                <span className="px-2.5 py-1 rounded-full bg-gray-100 text-gray-700">{Array.isArray(rule.ruleJson?.parser?.type) ? rule.ruleJson.parser.type.join('/') : (rule.ruleJson?.parser?.type || '未知')}</span>
+                <span className="px-2.5 py-1 rounded-full bg-gray-100 text-gray-700">{(rule.fileTypes || []).join(' / ')}</span>
+                <span className="px-2.5 py-1 rounded-full bg-gray-100 text-gray-700">规则可复用</span>
+              </div>
+
+              <div className="mt-4 grid grid-cols-2 sm:flex sm:flex-wrap gap-2">
+                <button onClick={() => {
+                  setIsCreating(true);
+                  setEditingRule(null);
+                  setEditName(rule.name + '（副本）');
+                  setEditDesc(rule.description || '');
+                  setEditJson(JSON.stringify(rule.ruleJson, null, 2));
+                }} className="px-3 py-2 text-xs rounded-lg bg-gray-100 text-gray-700 hover:bg-gray-200">复制</button>
+                <button onClick={() => handleEditOpen(rule)} className="px-3 py-2 text-xs rounded-lg" style={{ color: JT_PRIMARY, backgroundColor: JT_PRIMARY_LIGHT }}>编辑</button>
+                <button onClick={() => { setTestingRule(rule); setTestFile(null); setTestResult(null); }} className="px-3 py-2 text-xs rounded-lg bg-green-50 text-green-700 hover:bg-green-100">测试</button>
+                <button onClick={() => onSelectRule(rule.ruleJson)} className="px-3 py-2 text-xs rounded-lg text-white" style={{ backgroundColor: JT_PRIMARY }}>应用到当前文件</button>
+                <button onClick={() => handleDelete(rule.id)} className="px-3 py-2 text-xs rounded-lg bg-red-50 text-red-600 hover:bg-red-100">删除</button>
               </div>
             </div>
           ))}
         </div>
       )}
 
-      {/* 规则编辑弹窗 - 响应式 */}
       {(editingRule || isCreating) && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-lg p-4 sm:p-6 w-full max-w-2xl max-h-[90vh] overflow-auto">
-            <h3 className="text-lg font-medium mb-4">{isCreating ? '新建规则' : '编辑规则'}</h3>
-            <div className="space-y-3 mb-4">
+          <div className="bg-white rounded-2xl p-4 sm:p-6 w-full max-w-3xl max-h-[90vh] overflow-auto shadow-2xl">
+            <div className="flex items-center justify-between gap-3 mb-4">
+              <div>
+                <h3 className="text-lg font-semibold text-gray-900">{isCreating ? '新建规则' : '编辑规则'}</h3>
+                <p className="text-sm text-gray-500 mt-1">建议先补齐说明，再保存规则 JSON，最后用真实文件测试。</p>
+              </div>
+              <button onClick={() => { setIsCreating(false); setEditingRule(null); }} className="text-gray-400 hover:text-gray-600">✕</button>
+            </div>
+            <div className="space-y-4 mb-5">
               <div>
                 <label className="block text-xs text-gray-500 mb-1">规则名称</label>
                 <input type="text" value={editName} onChange={e => setEditName(e.target.value)}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#0fc6c2]" />
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2"
+                  style={{ boxShadow: `0 0 0 2px ${JT_PRIMARY}33` }} />
               </div>
               <div>
                 <label className="block text-xs text-gray-500 mb-1">描述</label>
                 <input type="text" value={editDesc} onChange={e => setEditDesc(e.target.value)}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#0fc6c2]" />
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2"
+                  style={{ boxShadow: `0 0 0 2px ${JT_PRIMARY}33` }} />
               </div>
               <div>
                 <label className="block text-xs text-gray-500 mb-1">规则JSON</label>
                 <textarea value={editJson} onChange={e => setEditJson(e.target.value)}
-                  className="w-full h-72 font-mono text-sm border border-gray-300 rounded-lg p-3 focus:outline-none focus:ring-2 focus:ring-[#0fc6c2]" />
+                  className="w-full h-80 font-mono text-sm border border-gray-300 rounded-lg p-3 focus:outline-none focus:ring-2"
+                  style={{ boxShadow: `0 0 0 2px ${JT_PRIMARY}33` }} />
               </div>
             </div>
-            <div className="flex gap-3 justify-end">
+            <div className="flex gap-3 justify-end flex-wrap">
               <button onClick={() => { setIsCreating(false); setEditingRule(null); }} className="px-4 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200">取消</button>
-              <button onClick={handleEditSave} className="px-4 py-2 bg-[#0fc6c2] text-white rounded-lg hover:bg-[#0aa8a4]">{isCreating ? '创建' : '保存'}</button>
+              <button onClick={handleEditSave} className="px-4 py-2 text-white rounded-lg" style={{ backgroundColor: JT_PRIMARY }}>{isCreating ? '创建规则' : '保存变更'}</button>
             </div>
           </div>
         </div>
       )}
 
-      {/* 规则测试弹窗 */}
       {testingRule && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-lg p-4 sm:p-6 w-full max-w-2xl max-h-[90vh] overflow-auto">
+          <div className="bg-white rounded-2xl p-4 sm:p-6 w-full max-w-2xl max-h-[90vh] overflow-auto shadow-2xl">
             <div className="flex items-center justify-between mb-4">
-              <h3 className="text-lg font-medium">🧪 规则测试 - {testingRule.name}</h3>
+              <div>
+                <h3 className="text-lg font-semibold text-gray-900">规则测试 · {testingRule.name}</h3>
+                <p className="text-sm text-gray-500 mt-1">上传一份样例文件，验证当前规则的解析效果。</p>
+              </div>
               <button onClick={() => setTestingRule(null)} className="text-gray-400 hover:text-gray-600">✕</button>
             </div>
-            <div className="mb-4">
+            <div className="mb-4 rounded-xl border border-gray-200 bg-gray-50 p-4">
               <label className="block text-sm font-medium text-gray-700 mb-2">选择测试文件</label>
               <input type="file" accept=".xlsx,.xls,.csv,.pdf,.docx,.doc"
                 onChange={e => { setTestFile(e.target.files?.[0] || null); setTestResult(null); }}
-                className="block w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-sm file:font-medium file:bg-[#0fc6c2]/10 file:text-[#0fc6c2] hover:file:bg-[#0fc6c2]/20" />
-              {testFile && <p className="text-xs text-gray-500 mt-1">已选择: {testFile.name} ({(testFile.size / 1024).toFixed(1)} KB)</p>}
+                className="block w-full text-sm file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-sm file:font-medium"
+                style={{ color: '#6b7280' }} />
+              {testFile && <p className="text-xs text-gray-500 mt-2">已选择: {testFile.name} ({(testFile.size / 1024).toFixed(1)} KB)</p>}
             </div>
             <button onClick={handleTestRule} disabled={!testFile || testing}
-              className="w-full py-2 bg-[#0fc6c2] text-white rounded-lg hover:bg-[#0aa8a4] disabled:opacity-50 mb-4">
-              {testing ? <span className="flex items-center justify-center gap-2"><Loading size="sm" /> 测试中...</span> : '🚀 开始测试'}
+              className="w-full py-2.5 text-white rounded-lg disabled:opacity-50 mb-4"
+              style={{ backgroundColor: JT_PRIMARY }}>
+              {testing ? <span className="flex items-center justify-center gap-2"><Loading size="sm" /> 测试中...</span> : '开始测试'}
             </button>
 
             {testResult && (
-              <div className={`rounded-lg p-4 ${testResult.success ? 'bg-green-50 border border-green-200' : 'bg-red-50 border border-red-200'}`}>
+              <div className={`rounded-2xl p-4 ${testResult.success ? 'bg-green-50 border border-green-200' : 'bg-red-50 border border-red-200'}`}>
                 {testResult.success ? (
                   <>
-                    <p className="font-medium text-green-800 mb-2">✅ 测试成功，解析 {testResult.totalRows} 条数据</p>
-                    <div className="overflow-x-auto max-h-48">
+                    <p className="font-medium text-green-800 mb-2">测试成功，解析 {testResult.totalRows} 条数据</p>
+                    <div className="overflow-x-auto max-h-56">
                       <table className="w-full text-xs">
                         <thead className="bg-green-100">
                           <tr>
@@ -2156,11 +2543,11 @@ function RulesManager({ onBack, onSelectRule, onRulesChanged }: { onBack: () => 
                           ))}
                         </tbody>
                       </table>
-                      {testResult.totalRows > 5 && <p className="text-xs text-green-600 mt-1 text-center">仅显示前5条，共 {testResult.totalRows} 条</p>}
+                      {testResult.totalRows > 5 && <p className="text-xs text-green-600 mt-2 text-center">仅显示前5条，共 {testResult.totalRows} 条</p>}
                     </div>
                   </>
                 ) : (
-                  <p className="text-red-700">❌ 测试失败: {testResult.error}</p>
+                  <p className="text-red-700">测试失败: {testResult.error}</p>
                 )}
               </div>
             )}
@@ -2253,164 +2640,203 @@ function HistoryView({ onBack }: { onBack: () => void }) {
 
   if (loading) {
     return (
-      <div className="bg-white rounded-lg border border-gray-200 p-8 text-center">
-        <Loading size="md" /><p className="mt-4 text-gray-500">加载历史记录...</p>
+      <div className="bg-white rounded-2xl border border-gray-200 p-10 text-center shadow-sm">
+        <Loading size="md" />
+        <p className="mt-4 text-gray-500">正在加载历史记录...</p>
       </div>
     );
   }
 
   return (
     <div className="space-y-4">
-      <div className="bg-white rounded-lg border border-gray-200 p-4">
-        <div className="flex items-center justify-between mb-4">
-          <h3 className="text-lg font-medium text-gray-900">📋 历史导入记录</h3>
-          <div className="flex gap-2">
-            {/* 搜索框 */}
-            <input
-              type="text"
-              placeholder="搜索（编码/收件人/文件名/提交时间）..."
-              value={searchText}
-              onChange={e => { setSearchText(e.target.value); setOrderPage(1); }}
-              className="px-3 py-1.5 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#0fc6c2] w-48 sm:w-64"
-            />
-            <select
-              value={filterField}
-              onChange={e => { setFilterField(e.target.value as any); setOrderPage(1); }}
-              className="px-2 py-1.5 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-1 focus:ring-[#0fc6c2]"
-            >
-              <option value="all">全部字段</option>
-              <option value="orderNo">外部编码</option>
-              <option value="receiver">收件人/门店</option>
-              <option value="submitTime">提交时间</option>
-            </select>
-            <input
-              type="date"
-              value={dateFrom}
-              onChange={e => { setDateFrom(e.target.value); setOrderPage(1); }}
-              className="px-2 py-1.5 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-1 focus:ring-[#0fc6c2]"
-              title="开始日期"
-            />
-            <input
-              type="date"
-              value={dateTo}
-              onChange={e => { setDateTo(e.target.value); setOrderPage(1); }}
-              className="px-2 py-1.5 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-1 focus:ring-[#0fc6c2]"
-              title="结束日期"
-            />
+      <div className="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden">
+        <div className="px-4 sm:px-5 py-4 border-b border-gray-100 flex flex-col gap-3 xl:flex-row xl:items-center xl:justify-between">
+          <div>
+            <div className="flex items-center gap-2 flex-wrap">
+              <h3 className="text-lg font-semibold text-gray-900">历史导入记录</h3>
+              <span className="inline-flex items-center rounded-full px-2.5 py-1 text-xs font-medium" style={{ color: JT_PRIMARY, backgroundColor: JT_PRIMARY_LIGHT }}>
+                {filteredBatches.length} 个批次
+              </span>
+            </div>
+            <p className="mt-1 text-sm text-gray-500">支持按文件名、收件人、提交时间和日期范围快速回查导入结果。</p>
+          </div>
+          <div className="flex gap-2 flex-wrap">
             <button
               onClick={() => { setSearchText(''); setFilterField('all'); setDateFrom(''); setDateTo(''); setOrderPage(1); }}
-              className="px-2 py-1.5 text-sm text-gray-600 border border-gray-300 rounded-lg hover:bg-gray-50 whitespace-nowrap"
+              className="px-3 py-2 text-sm text-gray-600 border border-gray-300 rounded-lg hover:bg-gray-50 whitespace-nowrap"
             >
               清空筛选
             </button>
-            <button onClick={onBack} className="text-sm text-[#0fc6c2] hover:text-[#0aa8a4] whitespace-nowrap">← 返回</button>
+            <button onClick={onBack} className="px-3 py-2 text-sm whitespace-nowrap rounded-lg" style={{ color: JT_PRIMARY, backgroundColor: JT_PRIMARY_LIGHT }}>← 返回导入</button>
           </div>
         </div>
-        {batches.length === 0 ? (
-          <p className="text-gray-500 text-center py-8">暂无导入记录</p>
-        ) : (
-          <div className="space-y-3">
+
+        <div className="px-4 sm:px-5 py-4 grid grid-cols-1 md:grid-cols-2 xl:grid-cols-5 gap-3 border-b border-gray-100 bg-gray-50">
+          <input
+            type="text"
+            placeholder="搜索（编码/收件人/文件名/提交时间）..."
+            value={searchText}
+            onChange={e => { setSearchText(e.target.value); setOrderPage(1); }}
+            className="xl:col-span-2 px-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2"
+            style={{ boxShadow: `0 0 0 2px ${JT_PRIMARY}33` }}
+          />
+          <select
+            value={filterField}
+            onChange={e => { setFilterField(e.target.value as any); setOrderPage(1); }}
+            className="px-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-1"
+            style={{ boxShadow: `0 0 0 2px ${JT_PRIMARY}33` }}
+          >
+            <option value="all">全部字段</option>
+            <option value="orderNo">外部编码</option>
+            <option value="receiver">收件人/门店</option>
+            <option value="submitTime">提交时间</option>
+          </select>
+          <input
+            type="date"
+            value={dateFrom}
+            onChange={e => { setDateFrom(e.target.value); setOrderPage(1); }}
+            className="px-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-1"
+            style={{ boxShadow: `0 0 0 2px ${JT_PRIMARY}33` }}
+            title="开始日期"
+          />
+          <input
+            type="date"
+            value={dateTo}
+            onChange={e => { setDateTo(e.target.value); setOrderPage(1); }}
+            className="px-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-1"
+            style={{ boxShadow: `0 0 0 2px ${JT_PRIMARY}33` }}
+            title="结束日期"
+          />
+        </div>
+
+        <div className="px-4 sm:px-5 py-4 grid grid-cols-2 md:grid-cols-4 gap-3 text-xs text-gray-600">
+          <div className="rounded-xl border border-gray-200 bg-white px-3 py-2">历史批次 <span className="ml-1 font-semibold text-gray-900">{batches.length}</span></div>
+          <div className="rounded-xl border border-gray-200 bg-white px-3 py-2">筛选结果 <span className="ml-1 font-semibold text-gray-900">{filteredBatches.length}</span></div>
+          <div className="rounded-xl border border-gray-200 bg-white px-3 py-2">已选批次 <span className="ml-1 font-semibold text-gray-900">{selectedBatch || '-'}</span></div>
+          <div className="rounded-xl border border-gray-200 bg-white px-3 py-2">当前明细 <span className="ml-1 font-semibold text-gray-900">{filteredOrders.length}</span></div>
+        </div>
+      </div>
+
+      {batches.length === 0 ? (
+        <div className="bg-white rounded-2xl border border-gray-200 p-10 text-center shadow-sm">
+          <div className="text-4xl mb-3">🗂️</div>
+          <p className="text-base font-medium text-gray-700">暂无导入记录</p>
+          <p className="text-sm text-gray-500 mt-2">后续完成批量导入后，这里会沉淀每个批次的文件、规则和提交明细。</p>
+        </div>
+      ) : (
+        <div className="grid grid-cols-1 xl:grid-cols-[360px,minmax(0,1fr)] gap-4 items-start">
+          <div className="space-y-3 xl:sticky xl:top-24">
             {filteredBatches.map((batch: any) => (
               <div key={batch.id}
-                className={`border rounded-lg p-4 cursor-pointer transition-all ${selectedBatch === batch.id ? 'border-[#0fc6c2] bg-[#0fc6c2]/5' : 'border-gray-200 hover:border-gray-300'}`}
+                className={`rounded-2xl border p-4 cursor-pointer transition-all shadow-sm ${selectedBatch === batch.id ? 'border-blue-300 bg-blue-50' : 'border-gray-200 bg-white hover:border-gray-300 hover:shadow-md'}`}
                 onClick={() => loadBatchOrders(batch.id)}>
-                <div className="flex items-center justify-between">
-                  <div>
-                    <span className="font-medium text-gray-900">{batch.file_name}</span>
-                    <span className="ml-2 text-xs bg-gray-100 text-gray-600 px-2 py-0.5 rounded">{batch.file_type}</span>
+                <div className="flex items-start justify-between gap-3">
+                  <div className="min-w-0 flex-1">
+                    <div className="font-medium text-gray-900 truncate">{batch.file_name}</div>
+                    <div className="mt-2 flex flex-wrap gap-2 text-xs text-gray-500">
+                      <span className="px-2 py-0.5 rounded-full bg-gray-100 text-gray-700">{batch.file_type}</span>
+                      {batch.rule_name && <span className="px-2 py-0.5 rounded-full" style={{ color: JT_PRIMARY, backgroundColor: JT_PRIMARY_LIGHT }}>{batch.rule_name}</span>}
+                    </div>
                   </div>
-                  <span className="text-xs text-gray-500">{new Date(batch.created_at).toLocaleString('zh-CN')}</span>
+                  <span className="text-xs text-gray-500 shrink-0">#{batch.id}</span>
                 </div>
-                <div className="mt-2 flex gap-4 text-sm text-gray-600">
-                  <span>共 {batch.total_rows} 条</span>
-                  <span className="text-green-600">✓ {batch.success_rows} 条</span>
-                  {batch.error_rows > 0 && <span className="text-red-600">✗ {batch.error_rows} 条</span>}
-                  <span className="text-gray-500">提交时间：{new Date(batch.created_at).toLocaleString('zh-CN')}</span>
+                <div className="mt-3 grid grid-cols-3 gap-2 text-xs">
+                  <div className="rounded-xl bg-white/90 border border-gray-200 px-3 py-2 text-gray-600">总数 <span className="ml-1 font-semibold text-gray-900">{batch.total_rows}</span></div>
+                  <div className="rounded-xl bg-white/90 border border-gray-200 px-3 py-2 text-gray-600">成功 <span className="ml-1 font-semibold text-green-600">{batch.success_rows}</span></div>
+                  <div className="rounded-xl bg-white/90 border border-gray-200 px-3 py-2 text-gray-600">异常 <span className="ml-1 font-semibold text-red-600">{batch.error_rows}</span></div>
                 </div>
-                {batch.rule_name && <div className="mt-1 text-xs text-gray-500">规则: {batch.rule_name}</div>}
+                <div className="mt-3 text-xs text-gray-500">提交时间：{new Date(batch.created_at).toLocaleString('zh-CN')}</div>
               </div>
             ))}
           </div>
-        )}
-      </div>
-      {selectedBatch && batchOrders.length > 0 && (
-        <div className="bg-white rounded-lg border border-gray-200 p-4">
-          <h4 className="font-medium text-gray-900 mb-3">
-            批次 #{selectedBatch} 运单详情
-            {searchText && <span className="text-sm text-gray-500 ml-2">(筛选: {filteredOrders.length}/{batchOrders.length})</span>}
-          </h4>
-          {/* 分页控件 */}
-          <div className="flex items-center justify-between mb-3">
-            <div className="text-sm text-gray-500">
-              共 {filteredOrders.length} 条{filteredOrders.length !== batchOrders.length && ` (已筛选)`}
-            </div>
-            <div className="flex items-center gap-2">
-              <select
-                value={orderPageSize}
-                onChange={e => { setOrderPageSize(Number(e.target.value)); setOrderPage(1); }}
-                className="px-2 py-1 text-sm border border-gray-300 rounded"
-              >
-                <option value={10}>10条/页</option>
-                <option value={20}>20条/页</option>
-                <option value={50}>50条/页</option>
-                <option value={100}>100条/页</option>
-              </select>
-            </div>
+
+          <div className="bg-white rounded-2xl border border-gray-200 p-4 sm:p-5 shadow-sm min-h-[240px]">
+            {selectedBatch && batchOrders.length > 0 ? (
+              <>
+                <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between mb-4">
+                  <div>
+                    <h4 className="text-base font-semibold text-gray-900">批次 #{selectedBatch} 运单详情</h4>
+                    <p className="text-sm text-gray-500 mt-1">
+                      共 {filteredOrders.length} 条记录{filteredOrders.length !== batchOrders.length && `（原始 ${batchOrders.length} 条）`}
+                      {searchText && <span className="ml-2">当前已按筛选条件过滤</span>}
+                    </p>
+                  </div>
+                  <div className="flex items-center gap-2 text-sm text-gray-600">
+                    <span>每页</span>
+                    <select
+                      value={orderPageSize}
+                      onChange={e => { setOrderPageSize(Number(e.target.value)); setOrderPage(1); }}
+                      className="px-2 py-1 text-sm border border-gray-300 rounded-lg"
+                    >
+                      <option value={10}>10条</option>
+                      <option value={20}>20条</option>
+                      <option value={50}>50条</option>
+                      <option value={100}>100条</option>
+                    </select>
+                  </div>
+                </div>
+                <div className="overflow-x-auto rounded-xl border border-gray-200">
+                  <table className="w-full text-sm">
+                    <thead className="bg-gray-50">
+                      <tr>
+                        <th className="px-3 py-3 text-left text-xs font-medium text-gray-500">外部编码</th>
+                        <th className="px-3 py-3 text-left text-xs font-medium text-gray-500">收货门店</th>
+                        <th className="px-3 py-3 text-left text-xs font-medium text-gray-500">收件人</th>
+                        <th className="px-3 py-3 text-left text-xs font-medium text-gray-500">电话</th>
+                        <th className="px-3 py-3 text-left text-xs font-medium text-gray-500">SKU编码</th>
+                        <th className="px-3 py-3 text-left text-xs font-medium text-gray-500">SKU名称</th>
+                        <th className="px-3 py-3 text-left text-xs font-medium text-gray-500">数量</th>
+                        <th className="px-3 py-3 text-left text-xs font-medium text-gray-500">提交时间</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-gray-200 bg-white">
+                      {filteredOrders
+                        .slice((orderPage - 1) * orderPageSize, orderPage * orderPageSize)
+                        .map((order: any) => (
+                        <tr key={order.id} className="hover:bg-gray-50">
+                          <td className="px-3 py-2.5 font-mono text-xs">{order.order_no || '-'}</td>
+                          <td className="px-3 py-2.5">{order.store_name || '-'}</td>
+                          <td className="px-3 py-2.5">{order.receiver_name || '-'}</td>
+                          <td className="px-3 py-2.5">{order.receiver_phone || '-'}</td>
+                          <td className="px-3 py-2.5 font-mono text-xs">{order.item_code || '-'}</td>
+                          <td className="px-3 py-2.5">{order.item_name || '-'}</td>
+                          <td className="px-3 py-2.5">{order.quantity ?? '-'}</td>
+                          <td className="px-3 py-2.5 text-xs text-gray-500">{order.created_at ? new Date(order.created_at).toLocaleString('zh-CN') : '-'}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+                {Math.ceil(filteredOrders.length / orderPageSize) > 1 && (
+                  <div className="flex items-center justify-center gap-2 mt-4">
+                    <button
+                      onClick={() => setOrderPage(p => Math.max(1, p - 1))}
+                      disabled={orderPage === 1}
+                      className="px-3 py-1.5 text-sm border border-gray-300 rounded-lg hover:bg-gray-50 disabled:opacity-50"
+                    >
+                      ← 上一页
+                    </button>
+                    <span className="text-sm text-gray-600">
+                      第 {orderPage} / {Math.ceil(filteredOrders.length / orderPageSize)} 页
+                    </span>
+                    <button
+                      onClick={() => setOrderPage(p => Math.min(Math.ceil(filteredOrders.length / orderPageSize), p + 1))}
+                      disabled={orderPage >= Math.ceil(filteredOrders.length / orderPageSize)}
+                      className="px-3 py-1.5 text-sm border border-gray-300 rounded-lg hover:bg-gray-50 disabled:opacity-50"
+                    >
+                      下一页 →
+                    </button>
+                  </div>
+                )}
+              </>
+            ) : (
+              <div className="h-full min-h-[220px] flex flex-col items-center justify-center text-center text-gray-500">
+                <div className="text-4xl mb-3">🧾</div>
+                <p className="text-base font-medium text-gray-700">请选择左侧批次查看详情</p>
+                <p className="text-sm text-gray-500 mt-2">这里会展示对应批次的运单明细、SKU 和提交时间，便于回查。</p>
+              </div>
+            )}
           </div>
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead className="bg-gray-50">
-                <tr>
-                  <th className="px-3 py-2 text-left text-xs font-medium text-gray-500">外部编码</th>
-                  <th className="px-3 py-2 text-left text-xs font-medium text-gray-500">收货门店</th>
-                  <th className="px-3 py-2 text-left text-xs font-medium text-gray-500">收件人</th>
-                  <th className="px-3 py-2 text-left text-xs font-medium text-gray-500">电话</th>
-                  <th className="px-3 py-2 text-left text-xs font-medium text-gray-500">SKU编码</th>
-                  <th className="px-3 py-2 text-left text-xs font-medium text-gray-500">SKU名称</th>
-                  <th className="px-3 py-2 text-left text-xs font-medium text-gray-500">数量</th>
-                  <th className="px-3 py-2 text-left text-xs font-medium text-gray-500">提交时间</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-gray-200">
-                {filteredOrders
-                  .slice((orderPage - 1) * orderPageSize, orderPage * orderPageSize)
-                  .map((order: any) => (
-                  <tr key={order.id} className="hover:bg-gray-50">
-                    <td className="px-3 py-2 font-mono text-xs">{order.order_no || '-'}</td>
-                    <td className="px-3 py-2">{order.store_name || '-'}</td>
-                    <td className="px-3 py-2">{order.receiver_name || '-'}</td>
-                    <td className="px-3 py-2">{order.receiver_phone || '-'}</td>
-                    <td className="px-3 py-2 font-mono text-xs">{order.item_code || '-'}</td>
-                    <td className="px-3 py-2">{order.item_name || '-'}</td>
-                    <td className="px-3 py-2">{order.quantity ?? '-'}</td>
-                    <td className="px-3 py-2 text-xs text-gray-500">{order.created_at ? new Date(order.created_at).toLocaleString('zh-CN') : '-'}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-          {/* 分页导航 */}
-          {Math.ceil(filteredOrders.length / orderPageSize) > 1 && (
-            <div className="flex items-center justify-center gap-2 mt-4">
-              <button
-                onClick={() => setOrderPage(p => Math.max(1, p - 1))}
-                disabled={orderPage === 1}
-                className="px-3 py-1 text-sm border border-gray-300 rounded hover:bg-gray-50 disabled:opacity-50"
-              >
-                ← 上一页
-              </button>
-              <span className="text-sm text-gray-600">
-                第 {orderPage} / {Math.ceil(filteredOrders.length / orderPageSize)} 页
-              </span>
-              <button
-                onClick={() => setOrderPage(p => Math.min(Math.ceil(filteredOrders.length / orderPageSize), p + 1))}
-                disabled={orderPage >= Math.ceil(filteredOrders.length / orderPageSize)}
-                className="px-3 py-1 text-sm border border-gray-300 rounded hover:bg-gray-50 disabled:opacity-50"
-              >
-                下一页 →
-              </button>
-            </div>
-          )}
         </div>
       )}
     </div>

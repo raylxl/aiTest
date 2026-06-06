@@ -152,8 +152,38 @@ export async function initDB() {
       is_active       BOOLEAN DEFAULT TRUE,
       is_ai_generated BOOLEAN DEFAULT FALSE,
       usage_count     INTEGER DEFAULT 0,
+      hit_success_count INTEGER DEFAULT 0,  -- 解析成功次数
+      hit_fail_count    INTEGER DEFAULT 0,  -- 解析失败次数
+      last_used_at    TIMESTAMPTZ,          -- 最后使用时间
+      source_sample_hash VARCHAR(64),       -- 来源样本hash（用于匹配）
       created_at      TIMESTAMPTZ DEFAULT NOW(),
       updated_at      TIMESTAMPTZ DEFAULT NOW()
+    )
+  `;
+
+  // 万能导入V2 - 分片上传会话表（持久化存储，支持Vercel Serverless多实例）
+  await sql`
+    CREATE TABLE IF NOT EXISTS upload_sessions (
+      upload_id    VARCHAR(64) PRIMARY KEY,
+      file_name    VARCHAR(200) NOT NULL,
+      file_type    VARCHAR(20) NOT NULL DEFAULT 'excel',
+      rule_json    JSONB,
+      total_chunks INTEGER NOT NULL DEFAULT 0,
+      status       VARCHAR(20) DEFAULT 'uploading',  -- uploading | completed | expired
+      created_at   TIMESTAMPTZ DEFAULT NOW(),
+      updated_at   TIMESTAMPTZ DEFAULT NOW()
+    )
+  `;
+
+  // 万能导入V2 - 分片数据表（存储每个分片的二进制数据）
+  await sql`
+    CREATE TABLE IF NOT EXISTS upload_chunks (
+      id           SERIAL PRIMARY KEY,
+      upload_id    VARCHAR(64) NOT NULL REFERENCES upload_sessions(upload_id) ON DELETE CASCADE,
+      chunk_index  INTEGER NOT NULL,
+      chunk_data   BYTEA NOT NULL,
+      received_at  TIMESTAMPTZ DEFAULT NOW(),
+      UNIQUE(upload_id, chunk_index)
     )
   `;
 
@@ -255,6 +285,33 @@ export async function initDB() {
       await sql`INSERT INTO schema_migrations (version) VALUES ('004')`;
     } catch (e: any) {
       console.warn('[migration-004] parse_rules schema upgrade failed:', e?.message || e);
+    }
+  }
+
+  // Migration 005: 创建分片上传相关表（upload_sessions + upload_chunks）
+  const [m005] = await sql`SELECT id FROM schema_migrations WHERE version = '005' LIMIT 1`;
+  if (!m005) {
+    try {
+      // 表已通过 CREATE TABLE IF NOT EXISTS 创建，这里只记录迁移
+      await sql`INSERT INTO schema_migrations (version) VALUES ('005')`;
+      console.log('[migration-005] upload_sessions and upload_chunks tables ready');
+    } catch (e: any) {
+      console.warn('[migration-005] upload tables migration failed:', e?.message || e);
+    }
+  }
+
+  // Migration 006: parse_rules 表新增反馈统计字段
+  const [m006] = await sql`SELECT id FROM schema_migrations WHERE version = '006' LIMIT 1`;
+  if (!m006) {
+    try {
+      await sql`ALTER TABLE parse_rules ADD COLUMN IF NOT EXISTS hit_success_count INTEGER DEFAULT 0`;
+      await sql`ALTER TABLE parse_rules ADD COLUMN IF NOT EXISTS hit_fail_count INTEGER DEFAULT 0`;
+      await sql`ALTER TABLE parse_rules ADD COLUMN IF NOT EXISTS last_used_at TIMESTAMPTZ`;
+      await sql`ALTER TABLE parse_rules ADD COLUMN IF NOT EXISTS source_sample_hash VARCHAR(64)`;
+      await sql`INSERT INTO schema_migrations (version) VALUES ('006')`;
+      console.log('[migration-006] parse_rules feedback fields added');
+    } catch (e: any) {
+      console.warn('[migration-006] parse_rules feedback fields migration failed:', e?.message || e);
     }
   }
 }

@@ -1,0 +1,82 @@
+{
+  "version": "1.0",
+  "description": "回归测试样本集 - 用于验证解析规则兼容性",
+  "lastUpdated": "2026-06-06",
+  "samples": [
+    {
+      "id": "sample-01",
+      "name": "海口龙湖天街配送发货单",
+      "file": "public/12.25海口龙湖天街-配送发货单PS2512220005001(1).xlsx",
+      "fileType": "excel",
+      "expectedParserType": "table",
+      "assertions": {
+        "minOrders": 1,
+        "requiredFields": ["storeName", "itemName", "quantity"],
+        "shouldHaveOrderNo": true
+      }
+    },
+    {
+      "id": "sample-02",
+      "name": "多门店分Sheet出库单",
+      "file": "public/多门店分Sheet出库单.xlsx",
+      "fileType": "excel",
+      "expectedParserType": "multi-sheet",
+      "assertions": {
+        "minOrders": 1,
+        "requiredFields": ["storeName", "itemName"],
+        "shouldHaveMultipleSheets": true
+      }
+    },
+    {
+      "id": "sample-03",
+      "name": "欢乐牧场模板",
+      "file": "public/欢乐牧场模板0430.xlsx",
+      "fileType": "excel",
+      "expectedParserType": "table",
+      "assertions": {
+        "minOrders": 1,
+        "requiredFields": ["itemName", "quantity"]
+      }
+    },
+    {
+      "id": "sample-04",
+      "name": "湖南仓出库单",
+      "file": "public/湖南仓.xlsx",
+      "fileType": "excel",
+      "expectedParserType": "table",
+      "assertions": {
+        "minOrders": 1,
+        "requiredFields": ["storeName", "itemName", "quantity"]
+      }
+    },
+    {
+      "id": "sample-05",
+      "name": "门店调拨单-卡片式",
+      "file": "public/门店调拨单-卡片式.xlsx",
+      "fileType": "excel",
+      "expectedParserType": "card",
+      "assertions": {
+        "minOrders": 1,
+        "requiredFields": ["itemName", "quantity"]
+      }
+    },
+    {
+      "id": "sample-06",
+      "name": "黔寨寨贵州烙锅PDF",
+      "file": "public/黔寨寨贵州烙锅（鞍山店）常温.pdf",
+      "fileType": "pdf",
+      "expectedParserType": "table",
+      "assertions": {
+        "minOrders": 1,
+        "requiredFields": ["itemName"]
+      }
+    }
+  ],
+  "assertionTypes": {
+    "minOrders": "最少解析出的运单数量",
+    "requiredFields": "必须存在的字段列表",
+    "shouldHaveOrderNo": "是否应该有运单号",
+    "shouldHaveMultipleSheets": "是否应该解析多个Sheet",
+    "maxErrorRate": "最大错误率 (0-1)"
+  }
+}

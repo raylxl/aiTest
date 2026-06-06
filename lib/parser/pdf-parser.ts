@@ -1,14 +1,24 @@
 import type { ParseRule, ParsedOrder } from '@/types/rule';
+import { mapFieldName } from './field-mapper';
 
 export interface PDFParseResult {
   pages: {
     pageNumber: number;
     text: string;
     tables: any[][];
+    textBlocks: {
+      text: string;
+      x: number;
+      y: number;
+      width: number;
+      height: number;
+    }[];
   }[];
   fullText: string;
   metadata: {
     pageCount: number;
+    totalTextBlocks: number;
+    totalTables: number;
   };
 }
 
@@ -38,32 +48,54 @@ export async function parsePDFFile(buffer: ArrayBuffer): Promise<PDFParseResult>
       try {
         const pages: PDFParseResult['pages'] = [];
         let fullText = '';
+        let totalTextBlocks = 0;
+        let totalTables = 0;
         
         if (data.Pages) {
           for (let i = 0; i < data.Pages.length; i++) {
             const page = data.Pages[i];
             let pageText = '';
+            const textBlocks: PDFParseResult['pages'][0]['textBlocks'] = [];
             
-            // 提取文本
+            // 提取文本块及其位置信息
             if (page.Texts) {
               for (const text of page.Texts) {
+                let blockText = '';
                 if (text.R) {
                   for (const r of text.R) {
                     if (r.T) {
-                      pageText += decodeURIComponent(r.T) + ' ';
+                      blockText += decodeURIComponent(r.T) + ' ';
                     }
                   }
                 }
-                pageText += '\n';
+                
+                // 保存文本块及其位置信息
+                if (blockText.trim()) {
+                  textBlocks.push({
+                    text: blockText.trim(),
+                    x: text.x || 0,
+                    y: text.y || 0,
+                    width: text.w || 0,
+                    height: text.h || 0,
+                  });
+                  totalTextBlocks++;
+                }
+                
+                pageText += blockText + '\n';
               }
             }
+            
+            // 提取表格
+            const tables = extractTablesFromText(pageText);
+            totalTables += tables.length;
             
             fullText += pageText + '\n\n';
             
             pages.push({
               pageNumber: i + 1,
               text: pageText.trim(),
-              tables: extractTablesFromText(pageText),
+              tables,
+              textBlocks,
             });
           }
         }
@@ -73,6 +105,8 @@ export async function parsePDFFile(buffer: ArrayBuffer): Promise<PDFParseResult>
           fullText,
           metadata: {
             pageCount: pages.length,
+            totalTextBlocks,
+            totalTables,
           },
         });
       } catch (error) {
@@ -537,48 +571,4 @@ function parseNumber(value: any): number | undefined {
   return isNaN(num) ? undefined : num;
 }
 
-function mapFieldName(sourceName: string): string | null {
-  // 已知的英文目标字段直接透传
-  const knownTargetFields = new Set([
-    'orderNo', 'storeName', 'receiverName', 'receiverPhone', 'receiverAddress',
-    'senderName', 'senderPhone', 'senderAddress',
-    'itemCode', 'itemName', 'itemCategory', 'specification', 'quantity', 'unit',
-    'remark', 'extraFields',
-  ]);
-  if (knownTargetFields.has(sourceName)) return sourceName;
-  
-  const mapping: Record<string, string> = {
-    '运单号': 'orderNo',
-    '单据号': 'orderNo',
-    '配送单号': 'orderNo',
-    '发货人': 'senderName',
-    '收货门店': 'storeName',
-    '收货机构': 'storeName',
-    '门店名称': 'storeName',
-    '门店': 'storeName',
-    '收货人': 'receiverName',
-    '收货人姓名': 'receiverName',
-    '电话': 'receiverPhone',
-    '手机': 'receiverPhone',
-    '联系电话': 'receiverPhone',
-    '收货人电话': 'receiverPhone',
-    '地址': 'receiverAddress',
-    '收货地址': 'receiverAddress',
-    '详细地址': 'receiverAddress',
-    '物品名称': 'itemName',
-    '商品名称': 'itemName',
-    'SKU名称': 'itemName',
-    '货品名称': 'itemName',
-    '物品编码': 'itemCode',
-    '商品编码': 'itemCode',
-    '物品分类': 'itemCategory',
-    '规格型号': 'specification',
-    '规格': 'specification',
-    '单位': 'unit',
-    '数量': 'quantity',
-    '发货数量': 'quantity',
-    '出库数量': 'quantity',
-    '订货数量': 'quantity',
-  };
-  return mapping[sourceName] || null;
-}
+// mapFieldName 已移至 ./field-mapper.ts 公共模块

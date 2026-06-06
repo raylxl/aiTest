@@ -1,0 +1,30 @@
+{
+  "timestamp": "2026-06-06T01:51:21.072Z",
+  "results": [
+    {
+      "name": "10条-湖南仓",
+      "success": true,
+      "totalRows": 10,
+      "errorRows": 0,
+      "parseTimeMs": 25,
+      "wallTimeMs": 28,
+      "rowsPerSecond": 353
+    },
+    {
+      "name": "1000条-湖南仓",
+      "success": true,
+      "totalRows": 1000,
+      "errorRows": 0,
+      "parseTimeMs": 165,
+      "wallTimeMs": 168,
+      "rowsPerSecond": 5966
+    }
+  ],
+  "summary": {
+    "totalTests": 2,
+    "passed": 2,
+    "failed": 0,
+    "avgParseTime": 95,
+    "avgWallTime": 98
+  }
+}
