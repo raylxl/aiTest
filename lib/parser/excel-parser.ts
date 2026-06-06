@@ -146,22 +146,28 @@ export function parseMatrix(
   const orders: ParsedOrder[] = [];
   const headerRow = config.headerRow;
 
+  // 自动检测 storeColumns：如果为空，从 headerRow 中排除已知列后自动识别
+  let storeColumns = config.storeColumns;
+  if (!storeColumns || storeColumns.length === 0) {
+    storeColumns = autoDetectStoreColumns(sheetData, config);
+  }
+
   for (let i = headerRow + 1; i < sheetData.length; i++) {
     const row = sheetData[i];
     if (!row || row.length === 0) continue;
 
     const skuName = String(row[config.skuColumn] || '').trim();
     const skuCode = config.skuCodeColumn !== undefined ? String(row[config.skuCodeColumn] || '').trim() : '';
-    
+
     if (!skuName) continue;
 
     // 遍历每个门店列
-    for (const store of config.storeColumns) {
+    for (const store of storeColumns) {
       const quantity = parseNumber(row[store.index]);
-      
+
       if (quantity && quantity > 0) {
         orders.push({
-          storeName: store.storeName,  // ← 修复：写入storeName（A组），非receiverName
+          storeName: store.storeName,
           itemName: skuName,
           itemCode: skuCode || undefined,
           quantity,
@@ -174,6 +180,38 @@ export function parseMatrix(
   }
 
   return orders;
+}
+
+/**
+ * 自动检测门店列
+ * 从 headerRow 中排除 SKU列、已知聚合列（如"合计""总和""结余"等），剩余列视为门店列
+ */
+function autoDetectStoreColumns(
+  sheetData: any[][],
+  config: MatrixParserConfig
+): { index: number; storeName: string }[] {
+  const headerRow = sheetData[config.headerRow] || [];
+  const knownNonStorePatterns = /^(仓库|货主|SKU|编码|条码|名称|状态|单位|规格|数量|合计|总和|结余|可用|待移入|分配|冻结|在库)/;
+  const summaryPatterns = /(合计|总和|结余|小计|汇总)$/;
+
+  const result: { index: number; storeName: string }[] = [];
+
+  for (let col = 0; col < headerRow.length; col++) {
+    // 跳过 SKU 列
+    if (col === config.skuColumn || col === config.skuCodeColumn) continue;
+
+    const header = String(headerRow[col] || '').trim();
+    if (!header) continue;
+
+    // 跳过已知非门店列
+    if (knownNonStorePatterns.test(header)) continue;
+    // 跳过汇总列
+    if (summaryPatterns.test(header)) continue;
+
+    result.push({ index: col, storeName: header });
+  }
+
+  return result;
 }
 
 /**

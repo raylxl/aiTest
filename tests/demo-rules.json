@@ -1,0 +1,514 @@
+[
+  {
+    "name": "海口龙湖天街规则",
+    "description": "42列表格，干扰头部，尾部收货人信息",
+    "file": "12.25海口龙湖天街-配送发货单PS2512220005001(1).xlsx",
+    "parserType": "table",
+    "ruleJson": {
+      "name": "海口龙湖天街规则",
+      "description": "42列表格，干扰头部，尾部收货人信息",
+      "fileTypes": [
+        "excel"
+      ],
+      "identifier": {},
+      "parser": {
+        "type": "table",
+        "table": {
+          "headerRow": 3,
+          "dataStartRow": 4,
+          "dataEndRow": "auto",
+          "columns": [
+            {
+              "sourceIndex": 1,
+              "targetField": "itemCode",
+              "dataType": "string"
+            },
+            {
+              "sourceIndex": 2,
+              "targetField": "itemName",
+              "dataType": "string"
+            },
+            {
+              "sourceIndex": 4,
+              "targetField": "specification",
+              "dataType": "string"
+            },
+            {
+              "sourceIndex": 5,
+              "targetField": "quantity",
+              "dataType": "number"
+            }
+          ]
+        }
+      },
+      "recipient": {
+        "source": "footer",
+        "fields": {
+          "storeName": {
+            "pattern": "门店[：:]\\s*(.+)",
+            "group": 1
+          },
+          "receiverName": {
+            "pattern": "收货人[：:]\\s*(.+)",
+            "group": 1
+          },
+          "receiverPhone": {
+            "pattern": "(?:电话|手机)[：:]\\s*(\\d+)",
+            "group": 1
+          },
+          "receiverAddress": {
+            "pattern": "地址[：:]\\s*(.+)",
+            "group": 1
+          }
+        }
+      }
+    }
+  },
+  {
+    "name": "湖南仓规则",
+    "description": "32列，按配送单号分组跨行聚合",
+    "file": "湖南仓.xlsx",
+    "parserType": "table",
+    "ruleJson": {
+      "name": "湖南仓规则",
+      "description": "32列，按配送单号分组跨行聚合",
+      "fileTypes": [
+        "excel"
+      ],
+      "identifier": {},
+      "parser": {
+        "type": "table",
+        "table": {
+          "headerRow": 1,
+          "dataStartRow": 2,
+          "dataEndRow": "auto",
+          "columns": [
+            {
+              "sourceIndex": 0,
+              "targetField": "orderNo",
+              "dataType": "string"
+            },
+            {
+              "sourceIndex": 2,
+              "targetField": "itemCode",
+              "dataType": "string"
+            },
+            {
+              "sourceIndex": 3,
+              "targetField": "itemName",
+              "dataType": "string"
+            },
+            {
+              "sourceIndex": 5,
+              "targetField": "quantity",
+              "dataType": "number"
+            },
+            {
+              "sourceIndex": 7,
+              "targetField": "receiverName",
+              "dataType": "string"
+            },
+            {
+              "sourceIndex": 8,
+              "targetField": "receiverPhone",
+              "dataType": "string"
+            },
+            {
+              "sourceIndex": 9,
+              "targetField": "receiverAddress",
+              "dataType": "string"
+            }
+          ],
+          "rowAggregate": {
+            "enabled": true,
+            "groupBy": [
+              0
+            ],
+            "continueWhenColumnsEmpty": [
+              2,
+              3,
+              5
+            ]
+          }
+        }
+      }
+    }
+  },
+  {
+    "name": "欢乐牧场规则",
+    "description": "SKU×门店矩阵，门店列横向排列",
+    "file": "欢乐牧场模板0430.xlsx",
+    "parserType": "matrix",
+    "ruleJson": {
+      "name": "欢乐牧场规则",
+      "description": "SKU×门店矩阵，门店列横向排列",
+      "fileTypes": [
+        "excel"
+      ],
+      "identifier": {},
+      "parser": {
+        "type": "matrix",
+        "matrix": {
+          "headerRow": 1,
+          "skuColumn": 1,
+          "skuCodeColumn": 0,
+          "storeColumns": []
+        }
+      }
+    }
+  },
+  {
+    "name": "黔寨寨PDF规则",
+    "description": "PDF表格+底部收货人签字区",
+    "file": "黔寨寨贵州烙锅（鞍山店）常温.pdf",
+    "parserType": "table",
+    "ruleJson": {
+      "name": "黔寨寨PDF规则",
+      "description": "PDF表格+底部收货人签字区",
+      "fileTypes": [
+        "pdf"
+      ],
+      "identifier": {},
+      "parser": {
+        "type": "table",
+        "table": {
+          "headerRow": 0,
+          "dataStartRow": 1,
+          "columns": [
+            {
+              "sourceIndex": 1,
+              "targetField": "itemCode",
+              "dataType": "string"
+            },
+            {
+              "sourceIndex": 2,
+              "targetField": "itemName",
+              "dataType": "string"
+            },
+            {
+              "sourceIndex": 4,
+              "targetField": "quantity",
+              "dataType": "number"
+            }
+          ]
+        }
+      },
+      "recipient": {
+        "source": "footer",
+        "fields": {
+          "storeName": {
+            "pattern": "门店[：:]\\s*(.+)",
+            "group": 1
+          },
+          "receiverName": {
+            "pattern": "收货人[：:]\\s*(.+)",
+            "group": 1
+          },
+          "receiverPhone": {
+            "pattern": "(?:电话|手机)[：:]\\s*(\\d+)",
+            "group": 1
+          },
+          "receiverAddress": {
+            "pattern": "地址[：:]\\s*(.+)",
+            "group": 1
+          }
+        }
+      }
+    }
+  },
+  {
+    "name": "多门店分Sheet规则",
+    "description": "3个Sheet，每个Sheet独立门店出库单",
+    "file": "多门店分Sheet出库单.xlsx",
+    "parserType": "multi-sheet",
+    "ruleJson": {
+      "name": "多门店分Sheet规则",
+      "description": "3个Sheet，每个Sheet独立门店出库单",
+      "fileTypes": [
+        "excel"
+      ],
+      "identifier": {},
+      "parser": {
+        "type": "multi-sheet",
+        "multiSource": {
+          "sourceType": "sheet",
+          "mergeStrategy": "append",
+          "subRule": {
+            "parser": {
+              "type": "table",
+              "table": {
+                "headerRow": 0,
+                "dataStartRow": 1,
+                "columns": [
+                  {
+                    "sourceIndex": 0,
+                    "targetField": "itemCode",
+                    "dataType": "string"
+                  },
+                  {
+                    "sourceIndex": 1,
+                    "targetField": "itemName",
+                    "dataType": "string"
+                  },
+                  {
+                    "sourceIndex": 2,
+                    "targetField": "quantity",
+                    "dataType": "number"
+                  }
+                ]
+              }
+            },
+            "recipient": {
+              "source": "footer",
+              "fields": {
+                "storeName": {
+                  "pattern": "门店[：:]\\s*(.+)",
+                  "group": 1
+                },
+                "receiverName": {
+                  "pattern": "收货人[：:]\\s*(.+)",
+                  "group": 1
+                },
+                "receiverPhone": {
+                  "pattern": "(?:电话|手机)[：:]\\s*(\\d+)",
+                  "group": 1
+                },
+                "receiverAddress": {
+                  "pattern": "地址[：:]\\s*(.+)",
+                  "group": 1
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  {
+    "name": "门店调拨单卡片规则",
+    "description": "卡片式堆叠，每条记录是一个独立区域",
+    "file": "门店调拨单-卡片式.xlsx",
+    "parserType": "card",
+    "ruleJson": {
+      "name": "门店调拨单卡片规则",
+      "description": "卡片式堆叠，每条记录是一个独立区域",
+      "fileTypes": [
+        "excel"
+      ],
+      "identifier": {},
+      "parser": {
+        "type": "card",
+        "card": {
+          "cardStartPattern": "▶\\s*调拨记录",
+          "cardFields": [
+            {
+              "field": "storeName",
+              "pattern": "门店[：:]\\s*(.+)",
+              "group": 1
+            },
+            {
+              "field": "receiverName",
+              "pattern": "联系人[：:]\\s*(.+)",
+              "group": 1
+            },
+            {
+              "field": "receiverPhone",
+              "pattern": "电话[：:]\\s*(\\d+)",
+              "group": 1
+            }
+          ],
+          "itemTable": {
+            "headerRowOffset": 1,
+            "columns": [
+              {
+                "sourceIndex": 0,
+                "targetField": "itemCode",
+                "dataType": "string"
+              },
+              {
+                "sourceIndex": 1,
+                "targetField": "itemName",
+                "dataType": "string"
+              },
+              {
+                "sourceIndex": 2,
+                "targetField": "quantity",
+                "dataType": "number"
+              }
+            ]
+          }
+        }
+      }
+    }
+  },
+  {
+    "name": "门店配送确认单规则",
+    "description": "纯文本段落，━━━分隔线划分记录",
+    "file": "门店配送确认单.docx",
+    "parserType": "text",
+    "ruleJson": {
+      "name": "门店配送确认单规则",
+      "description": "纯文本段落，━━━分隔线划分记录",
+      "fileTypes": [
+        "word"
+      ],
+      "identifier": {},
+      "parser": {
+        "type": "text",
+        "text": {
+          "patterns": [
+            {
+              "field": "orderNo",
+              "regex": "编号[：:]\\s*(\\S+)",
+              "group": 1
+            },
+            {
+              "field": "storeName",
+              "regex": "门店[：:]\\s*(.+)",
+              "group": 1
+            },
+            {
+              "field": "receiverAddress",
+              "regex": "地址[：:]\\s*(.+)",
+              "group": 1
+            },
+            {
+              "field": "receiverName",
+              "regex": "联系人[：:]\\s*(\\S+)",
+              "group": 1
+            },
+            {
+              "field": "receiverPhone",
+              "regex": "电话[：:]\\s*(\\d+)",
+              "group": 1
+            }
+          ],
+          "itemPatterns": [
+            {
+              "field": "itemCode",
+              "regex": "编码:\\s*(\\S+)",
+              "group": 1
+            },
+            {
+              "field": "itemName",
+              "regex": "名称:\\s*(.+?)\\s*\\|",
+              "group": 1
+            },
+            {
+              "field": "specification",
+              "regex": "规格:\\s*(.+?)\\s*\\|",
+              "group": 1
+            },
+            {
+              "field": "quantity",
+              "regex": "数量:\\s*(\\d+)",
+              "group": 1
+            }
+          ],
+          "orderSeparator": "━{10,}"
+        }
+      }
+    }
+  },
+  {
+    "name": "周配送计划规则",
+    "description": "门店×日期矩阵，单元格内物品x数量",
+    "file": "周配送计划.xlsx",
+    "parserType": "double-matrix",
+    "ruleJson": {
+      "name": "周配送计划规则",
+      "description": "门店×日期矩阵，单元格内物品x数量",
+      "fileTypes": [
+        "excel"
+      ],
+      "identifier": {},
+      "parser": {
+        "type": "double-matrix",
+        "matrix": {
+          "headerRow": 0,
+          "firstColumnIsStore": true,
+          "storeColumnIndex": 0,
+          "dataStartColumn": 1,
+          "itemPattern": "(.+?)\\s*[xX×]\\s*(\\d+)"
+        }
+      }
+    }
+  },
+  {
+    "name": "配送签收单单规则",
+    "description": "一个PDF内含3个独立签收单",
+    "file": "配送签收单-多单.pdf",
+    "parserType": "multi-page",
+    "ruleJson": {
+      "name": "配送签收单单规则",
+      "description": "一个PDF内含3个独立签收单",
+      "fileTypes": [
+        "pdf"
+      ],
+      "identifier": {},
+      "parser": {
+        "type": "multi-page",
+        "multiSource": {
+          "sourceType": "page",
+          "mergeStrategy": "append",
+          "subRule": {
+            "parser": {
+              "type": "text",
+              "text": {
+                "patterns": [
+                  {
+                    "field": "orderNo",
+                    "regex": "配送单号[：:]\\s*(\\S+)",
+                    "group": 1
+                  },
+                  {
+                    "field": "storeName",
+                    "regex": "收货门店[：:]\\s*(.+)",
+                    "group": 1
+                  },
+                  {
+                    "field": "receiverAddress",
+                    "regex": "收货地址[：:]\\s*(.+)",
+                    "group": 1
+                  },
+                  {
+                    "field": "receiverName",
+                    "regex": "联系人[：:]\\s*(\\S+)",
+                    "group": 1
+                  },
+                  {
+                    "field": "receiverPhone",
+                    "regex": "电话[：:]\\s*(\\d+)",
+                    "group": 1
+                  }
+                ],
+                "itemPatterns": [
+                  {
+                    "field": "itemCode",
+                    "regex": "(SKU-[A-Z0-9]+)",
+                    "group": 1
+                  },
+                  {
+                    "field": "itemName",
+                    "regex": "SKU-[A-Z0-9]+\\s+(\\S+)",
+                    "group": 1
+                  },
+                  {
+                    "field": "specification",
+                    "regex": "\\d+[gGmMlL/]+\\S+",
+                    "group": 0
+                  },
+                  {
+                    "field": "quantity",
+                    "regex": "(\\d+)$",
+                    "group": 1
+                  }
+                ]
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+]

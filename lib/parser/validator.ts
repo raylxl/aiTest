@@ -186,11 +186,9 @@ function validateMatrixConfig(
   }
 
   if (type === 'matrix') {
-    // matrix 模式需要 storeColumns
+    // matrix 模式需要 storeColumns（允许为空数组表示自动检测所有列）
     if (!matrix.storeColumns || !Array.isArray(matrix.storeColumns)) {
       errors.push({ field: 'parser.matrix.storeColumns', message: 'matrix 缺少 storeColumns 配置', severity: 'error' });
-    } else if (matrix.storeColumns.length === 0) {
-      errors.push({ field: 'parser.matrix.storeColumns', message: 'storeColumns 不能为空', severity: 'error' });
     }
   }
 

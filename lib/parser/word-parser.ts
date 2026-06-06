@@ -20,10 +20,13 @@ export interface WordParseResult {
 export async function parseWordFile(buffer: ArrayBuffer): Promise<WordParseResult> {
   const mammoth = await import('mammoth');
   
+  // mammoth.js 需要 Node Buffer，不是 ArrayBuffer
+  const nodeBuffer = Buffer.from(buffer);
+  
   // 同时提取纯文本和HTML（用于表格结构）
   const [textResult, htmlResult] = await Promise.all([
-    mammoth.extractRawText({ arrayBuffer: buffer }),
-    mammoth.convertToHtml({ arrayBuffer: buffer }),
+    mammoth.extractRawText({ buffer: nodeBuffer }),
+    mammoth.convertToHtml({ buffer: nodeBuffer }),
   ]);
   
   const text = textResult.value;

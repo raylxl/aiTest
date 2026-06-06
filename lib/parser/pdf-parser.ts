@@ -385,9 +385,11 @@ function extractItemsFromText(text: string, patterns: any[]): ParsedOrder[] {
   const items: ParsedOrder[] = [];
   const lines = text.split('\n');
   
-  for (const line of lines) {
-    const trimmed = line.trim();
+  for (const rawLine of lines) {
+    const trimmed = rawLine.trim();
     if (!trimmed) continue;
+    // 去除 \r 并统一使用 trimmed 做正则匹配
+    const line = trimmed;
     
     // 预过滤：跳过明显不是物品行的内容
     if (/^\d{4}[\/\-]\d{1,2}[\/\-]\d{1,2}/.test(trimmed)) continue;
@@ -411,7 +413,8 @@ function extractItemsFromText(text: string, patterns: any[]): ParsedOrder[] {
     }
     
     // 至少需要itemCode匹配到类似SKU编码的值才认为是有效物品行
-    if (matched && item.itemCode && /^[A-Z0-9]{4,}$/i.test(item.itemCode)) {
+    // 允许字母、数字、连字符，至少4个字符
+    if (matched && item.itemCode && /^[A-Z0-9][A-Z0-9\-]{2,}[A-Z0-9]$/i.test(item.itemCode)) {
       items.push(item);
     }
   }
