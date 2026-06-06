@@ -517,7 +517,11 @@ export default function ImportPage() {
         ...f, rule, sample: extractData.sample, fileInfo: extractData.fileInfo, analyzing: false,
         selectedRuleId: null, ruleOrigin: 'ai',
       } : f));
-      showToast('success', `${item.file.name} 分析完成`);
+      // AI 生成后自动打开编辑器，让用户确认/微调/保存
+      setEditingRuleIndex(index);
+      setEditingRuleJson(JSON.stringify(rule, null, 2));
+      setEditingRuleTestResult(null);
+      showToast('success', `${item.file.name} 分析完成，请确认规则后保存`);
     } catch (error) {
       const errorMsg = error instanceof Error ? error.message : '分析失败';
       setAnalyzedFiles(prev => prev.map((f, i) => i === index ? { ...f, analyzing: false, error: errorMsg } : f));
@@ -1292,13 +1296,22 @@ export default function ImportPage() {
                               新建规则
                             </button>
                             {item.rule && (
-                              <button
-                                onClick={() => handleEditRule(index)}
-                                className="inline-flex items-center gap-1 px-3.5 py-2 text-xs font-medium bg-white rounded-lg"
-                                style={{ border: `1px solid ${JT_PRIMARY_BORDER}`, color: JT_PRIMARY }}
-                              >
-                                编辑 / 测试 / 保存
-                              </button>
+                              <>
+                                <button
+                                  onClick={() => handleEditRule(index)}
+                                  className="inline-flex items-center gap-1 px-3.5 py-2 text-xs font-medium bg-white rounded-lg hover:bg-gray-50"
+                                  style={{ border: `1px solid ${JT_PRIMARY_BORDER}`, color: JT_PRIMARY }}
+                                >
+                                  编辑规则
+                                </button>
+                                <button
+                                  onClick={() => handleSaveRuleToDB(index)}
+                                  className="inline-flex items-center gap-1 px-3.5 py-2 text-xs font-medium text-white rounded-lg shadow-sm"
+                                  style={{ backgroundColor: JT_PRIMARY }}
+                                >
+                                  保存到规则库
+                                </button>
+                              </>
                             )}
                           </div>
                         </div>
@@ -1615,8 +1628,8 @@ export default function ImportPage() {
             {editingRuleIndex !== null && (
               <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
                 <div className="bg-white rounded-lg p-4 sm:p-6 w-full max-w-2xl max-h-[85vh] overflow-auto">
-                  <h3 className="text-lg font-medium mb-2">编辑解析规则</h3>
-                  <p className="text-xs text-gray-500 mb-4">可直接基于当前样例文件试解析，确认结果正确后再保存到本文件或规则库。</p>
+                  <h3 className="text-lg font-medium mb-2">规则编辑器</h3>
+                  <p className="text-xs text-gray-500 mb-4">在此编辑规则 JSON → 点击「测试解析」验证效果 → 确认正确后点击「保存到规则库」持久化。</p>
                   <textarea value={editingRuleJson} onChange={e => setEditingRuleJson(e.target.value)}
                     className="w-full h-96 font-mono text-sm border border-gray-300 rounded-lg p-3 focus:outline-none focus:ring-2"
                     style={{ boxShadow: `0 0 0 2px ${JT_PRIMARY}33` }} />
@@ -1680,7 +1693,14 @@ export default function ImportPage() {
                       style={{ color: JT_PRIMARY, backgroundColor: JT_PRIMARY_LIGHT }}>
                       {testingEditedRule ? '测试中...' : '测试解析'}
                     </button>
-                    <button onClick={handleSaveRule} className="px-4 py-2 text-white rounded-lg" style={{ backgroundColor: JT_PRIMARY }}>保存</button>
+                    <button onClick={handleSaveRule} className="px-4 py-2 text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200">保存到当前文件</button>
+                    <button onClick={async () => {
+                      // 先保存到当前文件，再保存到规则库
+                      handleSaveRule();
+                      if (editingRuleIndex !== null) {
+                        await handleSaveRuleToDB(editingRuleIndex);
+                      }
+                    }} className="px-4 py-2 text-white rounded-lg" style={{ backgroundColor: JT_PRIMARY }}>保存到规则库</button>
                   </div>
                 </div>
               </div>
