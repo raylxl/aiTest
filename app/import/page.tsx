@@ -556,8 +556,8 @@ export default function ImportPage() {
   };
 
   // 保存编辑后的规则（含校验）
-  const handleSaveRule = () => {
-    if (editingRuleIndex === null) return;
+  const handleSaveRule = (): boolean => {
+    if (editingRuleIndex === null) return false;
     try {
       const rule = JSON.parse(editingRuleJson) as ParseRule;
 
@@ -570,7 +570,7 @@ export default function ImportPage() {
           error: formatValidationErrors(validationResult),
           validationErrors: validationResult.errors,
         });
-        return;
+        return false;
       }
 
       setAnalyzedFiles(prev => prev.map((f, i) => i === editingRuleIndex ? { ...f, rule, selectedRuleId: null } : f));
@@ -582,8 +582,10 @@ export default function ImportPage() {
       if (validationResult.warnings.length > 0) {
         showToast('warning', `规则已保存，但有 ${validationResult.warnings.length} 个警告`);
       }
+      return true;
     } catch {
       showToast('error', 'JSON格式错误');
+      return false;
     }
   };
 
@@ -1962,7 +1964,7 @@ export default function ImportPage() {
             {showErrorModal && (() => {
               const allErrors = collectAllErrors();
               return (
-                <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50" onClick={() => setShowErrorModal(false)}>
+                <div className="fixed inset-0 z-[65] flex items-center justify-center bg-black/50" onClick={() => setShowErrorModal(false)}>
                   <div className="bg-white rounded-xl shadow-2xl w-[90vw] max-w-3xl max-h-[80vh] flex flex-col" onClick={e => e.stopPropagation()}>
                     {/* 弹窗标题 */}
                     <div className="flex items-center justify-between px-6 py-4 border-b border-gray-200">
@@ -2051,8 +2053,8 @@ export default function ImportPage() {
 
         {/* 规则编辑弹窗 - 全局渲染，任意步骤均可打开 */}
         {editingRuleIndex !== null && (
-          <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-            <div className="bg-white rounded-lg p-4 sm:p-6 w-full max-w-2xl max-h-[85vh] overflow-auto">
+          <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[60] p-4" onClick={() => setEditingRuleIndex(null)}>
+            <div className="bg-white rounded-lg p-4 sm:p-6 w-full max-w-2xl max-h-[85vh] overflow-auto" onClick={e => e.stopPropagation()}>
               <h3 className="text-lg font-medium mb-2">规则编辑器</h3>
               <p className="text-xs text-gray-500 mb-4">在此编辑规则 JSON → 点击「测试解析」验证效果 → 确认正确后点击「保存到规则库」持久化。</p>
               <textarea value={editingRuleJson} onChange={e => setEditingRuleJson(e.target.value)}
@@ -2126,8 +2128,8 @@ export default function ImportPage() {
                 </button>
                 <button onClick={handleSaveRule} className="px-4 py-2 text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200">保存到当前文件</button>
                 <button onClick={async () => {
-                  handleSaveRule();
-                  if (editingRuleIndex !== null) {
+                  const success = handleSaveRule();
+                  if (success && editingRuleIndex !== null) {
                     await handleSaveRuleToDB(editingRuleIndex);
                   }
                 }} className="px-4 py-2 text-white rounded-lg" style={{ backgroundColor: JT_PRIMARY }}>保存到规则库</button>
@@ -2368,8 +2370,8 @@ function RulesManager({ onBack, onSelectRule, onRulesChanged }: { onBack: () => 
       )}
 
       {(editingRule || isCreating) && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-2xl p-4 sm:p-6 w-full max-w-3xl max-h-[90vh] overflow-auto shadow-2xl">
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[60] p-4" onClick={() => { setIsCreating(false); setEditingRule(null); }}>
+          <div className="bg-white rounded-2xl p-4 sm:p-6 w-full max-w-3xl max-h-[90vh] overflow-auto shadow-2xl" onClick={e => e.stopPropagation()}>
             <div className="flex items-center justify-between gap-3 mb-4">
               <div>
                 <h3 className="text-lg font-semibold text-gray-900">{isCreating ? '新建规则' : '编辑规则'}</h3>
@@ -2406,8 +2408,8 @@ function RulesManager({ onBack, onSelectRule, onRulesChanged }: { onBack: () => 
       )}
 
       {testingRule && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-2xl p-4 sm:p-6 w-full max-w-2xl max-h-[90vh] overflow-auto shadow-2xl">
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[60] p-4" onClick={() => setTestingRule(null)}>
+          <div className="bg-white rounded-2xl p-4 sm:p-6 w-full max-w-2xl max-h-[90vh] overflow-auto shadow-2xl" onClick={e => e.stopPropagation()}>
             <div className="flex items-center justify-between mb-4">
               <div>
                 <h3 className="text-lg font-semibold text-gray-900">规则测试 · {testingRule.name}</h3>
