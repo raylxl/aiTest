@@ -649,6 +649,20 @@ export default function ImportPage() {
   const handleSaveRuleToDB = async (index: number) => {
     const item = analyzedFiles[index];
     if (!item?.rule) return;
+    // 标准化 fileTypes：确保使用 detectFileType 返回的标准值（excel/pdf/word/csv）
+    const normalizedFileTypes = (() => {
+      const ft = item.rule.fileTypes || [];
+      const result: string[] = [];
+      for (const t of ft) {
+        const lower = String(t).toLowerCase();
+        if (['xlsx', 'xls', 'xlsm', 'excel'].includes(lower)) result.push('excel');
+        else if (['pdf'].includes(lower)) result.push('pdf');
+        else if (['docx', 'doc', 'word'].includes(lower)) result.push('word');
+        else if (['csv'].includes(lower)) result.push('csv');
+        else result.push(lower);
+      }
+      return result.length > 0 ? [...new Set(result)] : [item.fileInfo.type || 'excel'];
+    })();
     try {
       const response = await fetch('/api/rules', {
         method: 'POST',
@@ -656,9 +670,9 @@ export default function ImportPage() {
         body: JSON.stringify({
           name: item.rule.name,
           description: item.rule.description || '',
-          fileTypes: item.rule.fileTypes || ['excel'],
+          fileTypes: normalizedFileTypes,
           ruleJson: item.rule,
-          isAiGenerated: true,
+          isAiGenerated: item.ruleOrigin === 'ai',
         }),
       });
       const data = await response.json();
