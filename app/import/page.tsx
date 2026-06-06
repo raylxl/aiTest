@@ -678,6 +678,24 @@ export default function ImportPage() {
       const data = await response.json();
       if (data.success) {
         showToast('success', `规则"${item.rule.name}"已保存到规则库`);
+        // 立即将新规则加入本地状态，确保下拉框即时可见
+        const newRule: SavedRule = {
+          id: data.rule.id,
+          name: data.rule.name,
+          description: data.rule.description || '',
+          fileTypes: data.rule.fileTypes || normalizedFileTypes,
+          ruleJson: data.rule.ruleJson || item.rule,
+          isAiGenerated: data.rule.isAiGenerated ?? (item.ruleOrigin === 'ai'),
+          usageCount: 0,
+          createdAt: data.rule.createdAt || new Date().toISOString(),
+          updatedAt: data.rule.updatedAt || new Date().toISOString(),
+        };
+        setSavedRules(prev => {
+          // 防止重复添加
+          if (prev.some(r => r.id === newRule.id)) return prev;
+          return [newRule, ...prev];
+        });
+        // 后台同步刷新完整列表
         loadSavedRules();
       } else {
         showToast('error', data.error || '保存规则失败');
