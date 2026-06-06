@@ -1284,7 +1284,17 @@ export default function ImportPage() {
                       {analyzedFiles.map((item, index) => {
                     const matchedRules = savedRules.filter(rule => {
                       if (!item.fileInfo.type) return true;
-                      return (rule.fileTypes || []).includes(item.fileInfo.type as any);
+                      // 标准化比较：xlsx/xls/xlsm/excel → excel, docx/doc/word → word 等
+                      const normalize = (t: string) => {
+                        const l = String(t).toLowerCase();
+                        if (['xlsx','xls','xlsm','excel'].includes(l)) return 'excel';
+                        if (['pdf'].includes(l)) return 'pdf';
+                        if (['docx','doc','word'].includes(l)) return 'word';
+                        if (['csv'].includes(l)) return 'csv';
+                        return l;
+                      };
+                      const fileType = normalize(item.fileInfo.type);
+                      return (rule.fileTypes || []).some(t => normalize(t) === fileType);
                     });
                     const samplePreview = buildSamplePreview(item.sample, item.fileInfo.type);
                     return (
@@ -1657,88 +1667,6 @@ export default function ImportPage() {
                 ))}
               </div>
             </div>
-
-            {/* 规则编辑弹窗 - 响应式 */}
-            {editingRuleIndex !== null && (
-              <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-                <div className="bg-white rounded-lg p-4 sm:p-6 w-full max-w-2xl max-h-[85vh] overflow-auto">
-                  <h3 className="text-lg font-medium mb-2">规则编辑器</h3>
-                  <p className="text-xs text-gray-500 mb-4">在此编辑规则 JSON → 点击「测试解析」验证效果 → 确认正确后点击「保存到规则库」持久化。</p>
-                  <textarea value={editingRuleJson} onChange={e => setEditingRuleJson(e.target.value)}
-                    className="w-full h-96 font-mono text-sm border border-gray-300 rounded-lg p-3 focus:outline-none focus:ring-2"
-                    style={{ boxShadow: `0 0 0 2px ${JT_PRIMARY}33` }} />
-                  {editingRuleTestResult && (
-                    <div className={`mt-4 rounded-lg border p-3 text-sm ${editingRuleTestResult.success ? 'bg-green-50 border-green-200' : 'bg-red-50 border-red-200'}`}>
-                      {editingRuleTestResult.success ? (
-                        <>
-                          <div className="font-medium text-green-700">
-                            {editingRuleTestResult.message || `测试成功，共解析 ${editingRuleTestResult.totalRows} 条`}
-                          </div>
-                          {editingRuleTestResult.orders && (
-                            <div className="mt-2 overflow-x-auto max-h-48">
-                              <table className="w-full text-xs">
-                                <thead className="bg-green-100">
-                                  <tr>
-                                    <th className="px-2 py-1 text-left">门店/收件人</th>
-                                    <th className="px-2 py-1 text-left">商品</th>
-                                    <th className="px-2 py-1 text-left">数量</th>
-                                    <th className="px-2 py-1 text-left">编码</th>
-                                  </tr>
-                                </thead>
-                                <tbody>
-                                  {editingRuleTestResult.orders?.slice(0, 5).map((o: any, i: number) => (
-                                    <tr key={i} className="border-t border-green-100">
-                                      <td className="px-2 py-1">{o.storeName || o.receiverName || '-'}</td>
-                                      <td className="px-2 py-1">{o.itemName || '-'}</td>
-                                      <td className="px-2 py-1">{o.quantity ?? '-'}</td>
-                                      <td className="px-2 py-1">{o.itemCode || '-'}</td>
-                                    </tr>
-                                  ))}
-                                </tbody>
-                              </table>
-                            </div>
-                          )}
-                        </>
-                      ) : (
-                        <div>
-                          <div className="font-medium text-red-700">校验失败</div>
-                          <pre className="mt-2 text-xs text-red-600 whitespace-pre-wrap">{editingRuleTestResult.error || '未知错误'}</pre>
-                        </div>
-                      )}
-                      {/* 警告信息 */}
-                      {editingRuleTestResult.warnings && editingRuleTestResult.warnings.length > 0 && (
-                        <div className="mt-2 p-2 bg-yellow-50 border border-yellow-200 rounded text-xs text-yellow-800">
-                          <div className="font-medium">⚠️ 警告：</div>
-                          {editingRuleTestResult.warnings.map((w: any, i: number) => (
-                            <div key={i} className="ml-2">• [{w.field}] {w.message}</div>
-                          ))}
-                        </div>
-                      )}
-                    </div>
-                  )}
-                  <div className="flex gap-3 mt-4 justify-end flex-wrap">
-                    <button onClick={() => setEditingRuleIndex(null)} className="px-4 py-2 text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200">取消</button>
-                    <button onClick={handleValidateRule}
-                      className="px-4 py-2 text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200">
-                      校验结构
-                    </button>
-                    <button onClick={testRuleJsonOnCurrentFile} disabled={testingEditedRule}
-                      className="px-4 py-2 rounded-lg disabled:opacity-50"
-                      style={{ color: JT_PRIMARY, backgroundColor: JT_PRIMARY_LIGHT }}>
-                      {testingEditedRule ? '测试中...' : '测试解析'}
-                    </button>
-                    <button onClick={handleSaveRule} className="px-4 py-2 text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200">保存到当前文件</button>
-                    <button onClick={async () => {
-                      // 先保存到当前文件，再保存到规则库
-                      handleSaveRule();
-                      if (editingRuleIndex !== null) {
-                        await handleSaveRuleToDB(editingRuleIndex);
-                      }
-                    }} className="px-4 py-2 text-white rounded-lg" style={{ backgroundColor: JT_PRIMARY }}>保存到规则库</button>
-                  </div>
-                </div>
-              </div>
-            )}
 
             <div className="grid grid-cols-1 lg:grid-cols-[220px,minmax(0,1fr)] gap-4">
               <div className="rounded-2xl border border-gray-200 bg-gray-50 p-4">
@@ -2120,6 +2048,87 @@ export default function ImportPage() {
             handleStepChange('upload');
           }
         }} />}
+
+        {/* 规则编辑弹窗 - 全局渲染，任意步骤均可打开 */}
+        {editingRuleIndex !== null && (
+          <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+            <div className="bg-white rounded-lg p-4 sm:p-6 w-full max-w-2xl max-h-[85vh] overflow-auto">
+              <h3 className="text-lg font-medium mb-2">规则编辑器</h3>
+              <p className="text-xs text-gray-500 mb-4">在此编辑规则 JSON → 点击「测试解析」验证效果 → 确认正确后点击「保存到规则库」持久化。</p>
+              <textarea value={editingRuleJson} onChange={e => setEditingRuleJson(e.target.value)}
+                className="w-full h-96 font-mono text-sm border border-gray-300 rounded-lg p-3 focus:outline-none focus:ring-2"
+                style={{ boxShadow: `0 0 0 2px ${JT_PRIMARY}33` }} />
+              {editingRuleTestResult && (
+                <div className={`mt-4 rounded-lg border p-3 text-sm ${editingRuleTestResult.success ? 'bg-green-50 border-green-200' : 'bg-red-50 border-red-200'}`}>
+                  {editingRuleTestResult.success ? (
+                    <>
+                      <div className="font-medium text-green-700">
+                        {editingRuleTestResult.message || `测试成功，共解析 ${editingRuleTestResult.totalRows} 条`}
+                      </div>
+                      {editingRuleTestResult.orders && (
+                        <div className="mt-2 overflow-x-auto max-h-48">
+                          <table className="w-full text-xs">
+                            <thead className="bg-green-100">
+                              <tr>
+                                <th className="px-2 py-1 text-left">门店/收件人</th>
+                                <th className="px-2 py-1 text-left">商品</th>
+                                <th className="px-2 py-1 text-left">数量</th>
+                                <th className="px-2 py-1 text-left">编码</th>
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {editingRuleTestResult.orders?.slice(0, 5).map((o: any, i: number) => (
+                                <tr key={i} className="border-t border-green-100">
+                                  <td className="px-2 py-1">{o.storeName || o.receiverName || '-'}</td>
+                                  <td className="px-2 py-1">{o.itemName || '-'}</td>
+                                  <td className="px-2 py-1">{o.quantity ?? '-'}</td>
+                                  <td className="px-2 py-1">{o.itemCode || '-'}</td>
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                        </div>
+                      )}
+                    </>
+                  ) : (
+                    <div>
+                      <div className="font-medium text-red-700">校验失败</div>
+                      <pre className="mt-2 text-xs text-red-600 whitespace-pre-wrap">{editingRuleTestResult.error || '未知错误'}</pre>
+                    </div>
+                  )}
+                  {editingRuleTestResult.warnings && editingRuleTestResult.warnings.length > 0 && (
+                    <div className="mt-2 p-2 bg-yellow-50 border border-yellow-200 rounded text-xs text-yellow-800">
+                      <div className="font-medium">⚠️ 警告：</div>
+                      {editingRuleTestResult.warnings.map((w: any, i: number) => (
+                        <div key={i} className="ml-2">• [{w.field}] {w.message}</div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
+              <div className="flex gap-3 mt-4 justify-end flex-wrap">
+                <button onClick={() => setEditingRuleIndex(null)} className="px-4 py-2 text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200">取消</button>
+                <button onClick={handleValidateRule}
+                  className="px-4 py-2 text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200">
+                  校验结构
+                </button>
+                <button onClick={testRuleJsonOnCurrentFile} disabled={testingEditedRule}
+                  className="px-4 py-2 rounded-lg disabled:opacity-50"
+                  style={{ color: JT_PRIMARY, backgroundColor: JT_PRIMARY_LIGHT }}>
+                  {testingEditedRule ? '测试中...' : '测试解析'}
+                </button>
+                <button onClick={handleSaveRule} className="px-4 py-2 text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200">保存到当前文件</button>
+                <button onClick={async () => {
+                  handleSaveRule();
+                  if (editingRuleIndex !== null) {
+                    await handleSaveRuleToDB(editingRuleIndex);
+                  }
+                }} className="px-4 py-2 text-white rounded-lg" style={{ backgroundColor: JT_PRIMARY }}>保存到规则库</button>
+              </div>
+            </div>
+          </div>
+        )}
+
       </main>
     </div>
   );
@@ -2188,10 +2197,20 @@ function RulesManager({ onBack, onSelectRule, onRulesChanged }: { onBack: () => 
       const isNew = isCreating || !editingRule;
       const url = '/api/rules';
       const method = isNew ? 'POST' : 'PUT';
+      // 标准化 fileTypes
+      const rawFileTypes = ruleJson.fileTypes || ['excel', 'pdf', 'word'];
+      const normalizedFileTypes = rawFileTypes.map((t: string) => {
+        const l = String(t).toLowerCase();
+        if (['xlsx','xls','xlsm','excel'].includes(l)) return 'excel';
+        if (['pdf'].includes(l)) return 'pdf';
+        if (['docx','doc','word'].includes(l)) return 'word';
+        if (['csv'].includes(l)) return 'csv';
+        return l;
+      });
       const body: any = {
         name: editName || ruleJson.name || '新规则',
         description: editDesc || ruleJson.description || '',
-        fileTypes: ruleJson.fileTypes || ['excel', 'pdf', 'word'],
+        fileTypes: [...new Set(normalizedFileTypes)],
         ruleJson,
         isAiGenerated: false,
       };
