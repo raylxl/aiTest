@@ -332,6 +332,12 @@ export class ParseEngine {
       if (normalizedOrder.receiverPhone && !/^1\d{10}$/.test(normalizedOrder.receiverPhone)) {
         validationErrors.push('receiverPhone: 电话格式不正确，应为 11 位手机号');
       }
+      if (normalizedOrder.weight !== undefined && normalizedOrder.weight !== null && Number(normalizedOrder.weight) <= 0) {
+        validationErrors.push('weight: 重量必须大于 0');
+      }
+      if (normalizedOrder.tempLayer && !['常温', '冷藏', '冷冻'].includes(normalizedOrder.tempLayer)) {
+        validationErrors.push('tempLayer: 温层值不在有效范围内（可选：常温、冷藏、冷冻）');
+      }
 
       return {
         ...normalizedOrder,

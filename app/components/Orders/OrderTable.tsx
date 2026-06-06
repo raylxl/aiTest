@@ -28,6 +28,8 @@ const EDITABLE_FIELDS = [
   { key: 'itemName' as const, label: 'SKU物品名称', type: 'text', required: true },
   { key: 'quantity' as const, label: 'SKU发货数量', type: 'number', required: true },
   { key: 'specification' as const, label: 'SKU规格型号', type: 'text' },
+  { key: 'weight' as const, label: '重量(kg)', type: 'number' },
+  { key: 'tempLayer' as const, label: '温层', type: 'text' },
   { key: 'remark' as const, label: '备注', type: 'text' },
 ] as const;
 
@@ -54,6 +56,10 @@ function getFieldError(order: ParsedOrder, fieldKey: EditableKey): string | null
         return errors.some(e => e.includes('SKU') && (e.includes('名称') || e.includes('物品名称'))) ? errors[0] : null;
       case 'quantity':
         return errors.some(e => e.includes('数量') || e.includes('正数')) ? errors[0] : null;
+      case 'weight':
+        return errors.some(e => e.includes('weight') || e.includes('重量')) ? errors[0] : null;
+      case 'tempLayer':
+        return errors.some(e => e.includes('tempLayer') || e.includes('温层')) ? errors[0] : null;
       default:
         return null;
     }
@@ -159,6 +165,8 @@ export default function OrderTable({
     { key: 'itemName', label: 'SKU物品名称', width: 'w-32' },
     { key: 'quantity', label: 'SKU发货数量', width: 'w-22' },
     { key: 'specification', label: 'SKU规格型号', width: 'w-26' },
+    { key: 'weight', label: '重量(kg)', width: 'w-20' },
+    { key: 'tempLayer', label: '温层', width: 'w-20' },
     { key: 'remark', label: '备注', width: 'w-28' },
     { key: 'actions', label: '操作', width: 'w-20' },
   ];
@@ -250,6 +258,10 @@ export default function OrderTable({
         {renderEditableCell(order, index, 'quantity', order.quantity ?? '', 'w-22 font-medium')}
         {/* 规格型号 */}
         {renderEditableCell(order, index, 'specification', order.specification, 'w-26')}
+        {/* 重量 */}
+        {renderEditableCell(order, index, 'weight', order.weight ?? '', 'w-20')}
+        {/* 温层 */}
+        {renderEditableCell(order, index, 'tempLayer', order.tempLayer ?? '', 'w-20')}
         {/* 备注 */}
         {renderEditableCell(order, index, 'remark', order.remark, 'w-28')}
 
@@ -429,7 +441,7 @@ export default function OrderTable({
 
       <div className="overflow-x-auto">
         <table className="w-full min-w-[800px]">
-          <thead className="bg-gray-50">
+          <thead className="bg-gray-50 sticky top-0 z-10">
             <tr>
               {selectable && (
                 <th className="px-4 py-3 w-10">

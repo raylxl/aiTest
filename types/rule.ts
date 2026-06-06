@@ -208,6 +208,8 @@ export interface ParsedOrder {
   specification?: string;
   quantity?: number;
   unit?: string;
+  weight?: number;       // 重量（kg）
+  tempLayer?: string;    // 温层：常温 | 冷藏 | 冷冻
 
   remark?: string;
 
